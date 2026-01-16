@@ -33,7 +33,7 @@ export async function updateSession(request: NextRequest) {
       },
     }
   )
-
-  await supabase.auth.getUser() // Triggers the refresh logic
+  
+  //await supabase.auth.getUser() // Triggers the refresh logic
   return response
 }
