@@ -2,17 +2,18 @@
 import { useState } from "react"
 import Link from "next/link"
 import { Wallet, Eye, EyeOff } from "lucide-react"
+import { useActionState } from 'react';
+import { login  } from '@/lib/action';
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [errorMessage, formAction, isPending] = useActionState(
+      login,
+      undefined,
+    );
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    // Handle login logic here
-    console.log("Login attempt:", { email, password })
-  }
 
   const handleWalletConnect = () => {
     // Handle MetaMask connection
@@ -27,13 +28,14 @@ export default function LoginPage() {
           <p className="text-gray-600">Sign in to your FundXprout account</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form action={formAction} className="space-y-6">
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
               Email Address
             </label>
             <input
               type="email"
+              name="email"
               id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -51,6 +53,7 @@ export default function LoginPage() {
               <input
                 type={showPassword ? "text" : "password"}
                 id="password"
+                name='password'
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f6851b] focus:border-transparent"
@@ -97,7 +100,7 @@ export default function LoginPage() {
         <div className="mt-6 text-center">
           <p className="text-gray-600">
             Don't have an account?{" "}
-            <Link href="/register" className="text-[#f6851b] hover:text-[#e57a1a] font-medium">
+            <Link href="/sign-up" className="text-[#f6851b] hover:text-[#e57a1a] font-medium">
               Sign up
             </Link>
           </p>

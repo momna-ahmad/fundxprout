@@ -21,9 +21,6 @@ export default function Navbar() {
           <Link href="/create-campaign" className="text-sm font-medium text-gray-900 hover:opacity-70">
             Create
           </Link>
-          <Link href="/dashboard" className="text-sm font-medium text-gray-900 hover:opacity-70">
-            Dashboard
-          </Link>
         </div>
 
         {/* Right Side */}
