@@ -2,9 +2,20 @@
   "name": "fundxprout-monorepo",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["frontend", "backend"],
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "frontend": "npm run dev --workspace=frontend",
+    "backend": "npm start --workspace=backend",
+    "dev": "concurrently -n \"WEB,API\" -c \"cyan,magenta\" \"npm run frontend\" \"npm run backend\""
+  },
   "dependencies": {
     "react": "19.2.3",
     "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }
