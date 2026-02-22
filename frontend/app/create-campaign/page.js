@@ -1,57 +1,85 @@
-"use client"
-import { useState } from "react"
-import { Upload, Target, Calendar, DollarSign } from "lucide-react"
+"use client";
+import { useState } from "react";
+import { useActionState } from "react"; // Next.js 15+ hook
+import { launchBusinessCampaign } from "@/lib/launchCampaign"; // Path to your action
+import { Upload, Target, Calendar, DollarSign } from "lucide-react";
 
 export default function CreateCampaignPage() {
+  const [state, formAction, isPending] = useActionState(
+    launchBusinessCampaign,
+    null,
+  );
+
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     goal: "",
     duration: "",
     category: "",
-    image: null
-  })
+    image: null,
+  });
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target
-    setFormData(prev => ({
+    const { name, value } = e.target;
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
-    }))
-  }
+      [name]: value,
+    }));
+  };
 
   const handleImageUpload = (e) => {
-    const file = e.target.files[0]
-    setFormData(prev => ({
+    const file = e.target.files[0];
+    setFormData((prev) => ({
       ...prev,
-      image: file
-    }))
-  }
+      image: file,
+    }));
+  };
 
   const handleSubmit = (e) => {
-    e.preventDefault()
+    e.preventDefault();
     // Handle campaign creation logic
-    console.log("Creating campaign:", formData)
-  }
+    console.log("Creating campaign:", formData);
+  };
 
   const categories = [
-    "Technology", "Art", "Music", "Film", "Games",
-    "Food", "Fashion", "Education", "Environment", "Health"
-  ]
+    "Technology",
+    "Art",
+    "Music",
+    "Film",
+    "Games",
+    "Food",
+    "Fashion",
+    "Education",
+    "Environment",
+    "Health",
+  ];
 
   return (
     <div className="min-h-screen bg-[#FFEEE0] py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-white rounded-2xl shadow-lg p-8">
+          {/* Display Error Message if the action fails */}
+          {state?.error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-600 rounded-lg">
+              {state.error}
+            </div>
+          )}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Create Your Campaign</h1>
-            <p className="text-gray-600">Launch your fundraising campaign and bring your project to life</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              Create Your Campaign
+            </h1>
+            <p className="text-gray-600">
+              Launch your fundraising campaign and bring your project to life
+            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-8">
+          <form action={formAction} className="space-y-8">
             {/* Campaign Title */}
             <div>
-              <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="title"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Campaign Title *
               </label>
               <input
@@ -68,7 +96,10 @@ export default function CreateCampaignPage() {
 
             {/* Description */}
             <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="description"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Campaign Description *
               </label>
               <textarea
@@ -86,7 +117,10 @@ export default function CreateCampaignPage() {
             {/* Goal and Duration */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label htmlFor="goal" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="goal"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Funding Goal (ETH) *
                 </label>
                 <div className="relative">
@@ -107,7 +141,10 @@ export default function CreateCampaignPage() {
               </div>
 
               <div>
-                <label htmlFor="duration" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="duration"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Campaign Duration (days) *
                 </label>
                 <div className="relative">
@@ -130,7 +167,10 @@ export default function CreateCampaignPage() {
 
             {/* Category */}
             <div>
-              <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="category"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Category *
               </label>
               <select
@@ -159,7 +199,9 @@ export default function CreateCampaignPage() {
                 <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <div className="text-gray-600">
                   <label htmlFor="image-upload" className="cursor-pointer">
-                    <span className="text-[#f6851b] hover:text-[#e57a1a] font-medium">Click to upload</span>
+                    <span className="text-[#f6851b] hover:text-[#e57a1a] font-medium">
+                      Click to upload
+                    </span>
                     <span className="text-gray-500"> or drag and drop</span>
                   </label>
                   <input
@@ -169,7 +211,7 @@ export default function CreateCampaignPage() {
                     className="hidden"
                     accept="image/*"
                     onChange={handleImageUpload}
-                    required
+                    //required
                   />
                 </div>
                 <p className="text-sm text-gray-500 mt-2">
@@ -203,11 +245,20 @@ export default function CreateCampaignPage() {
 
           {/* Tips Section */}
           <div className="mt-12 bg-[#f2f4f6] rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Campaign Creation Tips</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Campaign Creation Tips
+            </h3>
             <ul className="space-y-2 text-sm text-gray-700">
-              <li>• Write a compelling story that explains your project's purpose and impact</li>
-              <li>• Set a realistic funding goal based on your project needs</li>
-              <li>• Choose an eye-catching image that represents your campaign</li>
+              <li>
+                • Write a compelling story that explains your project's purpose
+                and impact
+              </li>
+              <li>
+                • Set a realistic funding goal based on your project needs
+              </li>
+              <li>
+                • Choose an eye-catching image that represents your campaign
+              </li>
               <li>• Be transparent about how funds will be used</li>
               <li>• Engage with your supporters throughout the campaign</li>
             </ul>
@@ -215,5 +266,5 @@ export default function CreateCampaignPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

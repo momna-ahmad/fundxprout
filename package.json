@@ -12,6 +12,7 @@
     "dev": "concurrently -n \"WEB,API\" -c \"cyan,magenta\" \"npm run frontend\" \"npm run backend\""
   },
   "dependencies": {
+    "ethers": "^6.16.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
