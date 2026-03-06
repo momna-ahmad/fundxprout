@@ -16,6 +16,7 @@ export async function launchBusinessCampaign(
   const goal = formData.get("goal") as string; // in ETH
   const duration = parseInt(formData.get("duration") as string);
   const category = formData.get("category") as string;
+  const imageUrl = (formData.get("image_url") as string) ?? "";
 
   // 2. Logic: Price per token is Goal / 1000
   const goalNum = parseFloat(goal);
@@ -73,6 +74,7 @@ export async function launchBusinessCampaign(
       category,
       txHash: receipt.hash,
       pricePerToken: pricePerTokenNum.toString(),
+      imageUrl,
     });
 
     if (dbResult.error) return { error: dbResult.error };

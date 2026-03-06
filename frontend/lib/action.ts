@@ -114,6 +114,7 @@ export async function saveCampaignToDb(formData: any) {
       owner: user.id, // The UUID from auth
       transaction_hash: formData.txHash,
       price_per_token: formData.pricePerToken,
+      image_url: formData.imageUrl ?? null,
     },
   ]);
 

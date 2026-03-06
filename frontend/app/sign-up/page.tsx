@@ -2,84 +2,85 @@
 
 import Link from 'next/link';
 import { useActionState } from 'react';
-import { signup  } from '@/lib/action';
-import { redirect } from 'next/navigation';
+import { signup } from '@/lib/action';
 import GoogleSignIn from "@/components/google-signIn";
 
-// Helper to display errors
-const initialState = {
-  error: '',
-}
+const initialState = { error: '' };
 
 export default function Page() {
-
-  const [state, formAction] = useActionState(
-    signup,
-    initialState,
-  );
-
+  const [state, formAction] = useActionState(signup, initialState);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-      <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-sm">
-        <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Sign In</h2>
-        
-        <form action={formAction} className="space-y-4">
+    <div className="min-h-screen bg-[#181A2A] flex items-center justify-center px-4">
+      <div className="bg-[#1a2030] border border-white/5 rounded-3xl p-8 w-full max-w-md shadow-xl">
+
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-black text-white mb-2">Create Account</h1>
+          <p className="text-gray-400 text-sm">Join FundXprout and start fundraising</p>
+        </div>
+
+        <form action={formAction} className="space-y-5">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email
+            <label htmlFor="email" className="block text-xs font-semibold text-gray-300 mb-2 uppercase tracking-wider">
+              Email Address
             </label>
             <input
-              name='email'
+              name="email"
               type="email"
               id="email"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 bg-[#0d1117] border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#6f42c1] focus:border-transparent transition text-sm"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="password" className="block text-xs font-semibold text-gray-300 mb-2 uppercase tracking-wider">
               Password
             </label>
             <input
-              name='password'
+              name="password"
               type="password"
               id="password"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 bg-[#0d1117] border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#6f42c1] focus:border-transparent transition text-sm"
               placeholder="••••••••"
             />
           </div>
 
-          
-          
-          <button
-            type="submit"
-            className="btn btn-outline w-full"
-            
-          >
-            Sign Up
-          </button>
-
-          {initialState.error && (
-            <p className="text-red-500 text-sm mt-2 text-center">
-              {initialState.error}
+          {/* Fix: use state?.error from useActionState, not static initialState.error */}
+          {state?.error && (
+            <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2">
+              {state.error}
             </p>
           )}
 
-
-          <p className="text-sm text-gray-600 text-center mt-4">
-            or
-          </p>
-
-          <Link href={"/sign-up"} >
-          <button className=" text-center w-full block border border-blue-600 text-blue-600 px-4 py-2 rounded-lg hover:border-transparent hover:bg-blue-600 hover:text-white active:bg-blue-700 transition ">
-                    Sign In
-            </button>
-          </Link>
-
+          <button
+            type="submit"
+            className="w-full bg-[#6f42c1] hover:bg-[#5a3599] text-white font-bold py-3 px-4 rounded-full transition duration-200 text-sm"
+          >
+            Sign Up
+          </button>
         </form>
+
+        <div className="my-6 relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-white/10" />
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="px-3 bg-[#1a2030] text-gray-500">Or continue with</span>
+          </div>
+        </div>
+
         <GoogleSignIn />
+
+        <div className="mt-6 text-center">
+          <p className="text-gray-400 text-sm">
+            Already have an account?{" "}
+            <Link href="/login" className="text-[#a78bfa] hover:text-white font-semibold transition-colors">
+              Sign in
+            </Link>
+          </p>
+        </div>
+
       </div>
     </div>
   );

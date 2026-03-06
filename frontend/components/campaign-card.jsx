@@ -1,56 +1,36 @@
-import CampaignCard from "./campaign-card"
+import Image from "next/image"
+import { Bookmark } from "lucide-react"
 
-const recommendedCampaigns = [
-  {
-    id: 1,
-    title: "A Dragon's Gift",
-    creator: "Jason Tagmire",
-    image: "/1.jfif",
-    daysLeft: 5,
-    funded: 2467,
-    verified: true,
-    badge: "PLAYERS 1",
-  },
-  {
-    id: 2,
-    title: "Jill Sobule: \"She's Gonna Sing! You're...",
-    creator: "Tom Ropelewski",
-    image: "/1.jfif",
-    daysLeft: 6,
-    funded: 143,
-    verified: true,
-  },
-  {
-    id: 3,
-    title: "Chaos Warriors: The Card Game",
-    creator: "Studio Games",
-    image: "/1.jfif",
-    daysLeft: 12,
-    funded: 89,
-    verified: true,
-  },
-  {
-    id: 4,
-    title: "Own The Dark",
-    creator: "Night Vision Studios",
-    image: "/.jfif",
-    daysLeft: 8,
-    funded: 234,
-    verified: true,
-  },
-]
-
-export default function CampaignList() {
-  return (
-    <section className="bg-[#FFEEE0] py-12 px-4">
-      <div className="max-w-7xl mx-auto">
-        <h2 className="text-xs font-semibold tracking-wider text-gray-500 uppercase mb-6">Recommended For You</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {recommendedCampaigns.map((campaign) => (
-            <CampaignCard key={campaign.id} campaign={campaign} />
-          ))}
-        </div>
-      </div>
-    </section>
-  )
+export default function CampaignCard({ campaign }) {
+	return (
+		<div className="bg-[#1e2530] rounded-2xl overflow-hidden flex flex-col border border-white/5 hover:border-[#6f42c1]/40 transition-all duration-200 group">
+			<div className="relative aspect-[16/10]">
+				<Image
+					src={campaign.image}
+					alt={campaign.title}
+					fill
+					className="object-cover group-hover:scale-105 transition-transform duration-300"
+				/>
+				{campaign.badge && (
+					<span className="absolute top-3 left-3 bg-[#6f42c1] text-white text-xs font-semibold px-3 py-1 rounded-full">
+						{campaign.badge}
+					</span>
+				)}
+				<button className="absolute top-3 right-3 text-white/60 hover:text-[#a78bfa] transition-colors">
+					<Bookmark className="h-4 w-4" />
+				</button>
+			</div>
+			<div className="p-4 flex-1 flex flex-col">
+				<h3 className="font-bold text-white text-sm mb-1 line-clamp-2 leading-snug">{campaign.title}</h3>
+				<p className="text-xs text-gray-500 mb-3">by {campaign.creator}</p>
+				<div className="mt-auto flex items-center justify-between">
+					<div className="flex items-center gap-1.5">
+						{campaign.verified && <span className="w-1.5 h-1.5 rounded-full bg-[#28a745]" />}
+						<span className="text-xs text-gray-400">{campaign.daysLeft} days left</span>
+					</div>
+					<span className="text-sm font-bold text-[#a78bfa]">{campaign.funded} ETH</span>
+				</div>
+			</div>
+		</div>
+	)
 }

@@ -42,12 +42,12 @@ const recommendedCampaigns = [
 
 export default function CampaignList() {
   return (
-    <section className="bg-[#FFEEE0] py-12 px-4">
+    <section className="bg-[#181A2A] py-12 px-4">
       <div className="max-w-7xl mx-auto">
-        <h2 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase mb-6">
+        <p className="text-xs font-semibold tracking-widest text-gray-400 uppercase mb-6">
           Recommended For You
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {recommendedCampaigns.map((campaign) => (
             <CampaignCard key={campaign.id} campaign={campaign} />
           ))}
