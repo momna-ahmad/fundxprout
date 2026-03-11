@@ -17,13 +17,17 @@ export async function launchBusinessCampaign(
   const duration = parseInt(formData.get("duration") as string);
   const category = formData.get("category") as string;
   const imageUrl = (formData.get("image_url") as string) ?? "";
-
+  const pitchDeckCid = formData.get("pitch_deck_cid") as string ?? "";
+  const businessPlanCid = formData.get("business_plan_cid") as string ?? "";
+  const financialsCid = formData.get("financials_cid") as string ?? "";
+  const useOfFundsCid = formData.get("use_of_funds_cid") as string ?? "";
+  const productDemoCid = formData.get("product_demo_cid") as string ?? "";
   // 2. Logic: Price per token is Goal / 1000
   const goalNum = parseFloat(goal);
   const pricePerTokenNum = goalNum / 1000;
 
   // Convert to Wei for Smart Contract
-  const goalInWei = ethers.parseEther(goal);
+  const goalInWei = ethers.parseEther(goal);//wei is the smallest unit of ether
   const priceInWei = ethers.parseEther(pricePerTokenNum.toString());
 
   if (typeof window === "undefined" || !window.ethereum) {
@@ -75,6 +79,11 @@ export async function launchBusinessCampaign(
       txHash: receipt.hash,
       pricePerToken: pricePerTokenNum.toString(),
       imageUrl,
+      pitchDeckCid,
+      businessPlanCid,
+      financialsCid,
+      useOfFundsCid,
+      productDemoCid,
     });
 
     if (dbResult.error) return { error: dbResult.error };
