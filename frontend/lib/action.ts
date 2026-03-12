@@ -135,3 +135,64 @@ export async function saveCampaignToDb(formData: any) {
   console.log("[saveCampaignToDb] Saved campaign id:", data?.id);
   return { success: true, campaignId: data?.id };
 }
+
+// shafqaat — Save/update creator profile (KYC + KYB + basic info)
+// Uses UPSERT so it works for both first-time create and subsequent updates
+export async function saveCreatorProfile(profileData: any) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  // shafqaat — Helper to convert CID to full Pinata gateway URL
+  const cidToUrl = (cid: string | null | undefined) =>
+    cid ? `https://gateway.pinata.cloud/ipfs/${cid}` : null;
+
+  const row = {
+    user_id: user.id,
+    // Basic info
+    full_name: profileData.full_name ?? null,
+    display_name: profileData.display_name ?? null,
+    bio: profileData.bio ?? null,
+    phone: profileData.phone ?? null,
+    country: profileData.country ?? null,
+    city: profileData.city ?? null,
+    website_url: profileData.website_url ?? null,
+    linkedin_url: profileData.linkedin_url ?? null,
+    // KYC — raw CIDs + gateway URLs
+    national_id_cid: profileData.national_id_cid ?? null,
+    national_id_url: cidToUrl(profileData.national_id_cid),
+    passport_cid: profileData.passport_cid ?? null,
+    passport_url: cidToUrl(profileData.passport_cid),
+    selfie_cid: profileData.selfie_cid ?? null,
+    selfie_url: cidToUrl(profileData.selfie_cid),
+    proof_of_address_cid: profileData.proof_of_address_cid ?? null,
+    proof_of_address_url: cidToUrl(profileData.proof_of_address_cid),
+    // KYB
+    business_reg_cid: profileData.business_reg_cid ?? null,
+    business_reg_url: cidToUrl(profileData.business_reg_cid),
+    tax_cert_cid: profileData.tax_cert_cid ?? null,
+    tax_cert_url: cidToUrl(profileData.tax_cert_cid),
+    bank_statement_cid: profileData.bank_statement_cid ?? null,
+    bank_statement_url: cidToUrl(profileData.bank_statement_cid),
+    business_logo_url: profileData.business_logo_url ?? null,
+    // shafqaat — Mark profile complete if core KYC fields are filled
+    profile_complete: !!(
+      profileData.full_name &&
+      profileData.national_id_cid &&
+      profileData.selfie_cid
+    ),
+    updated_at: new Date().toISOString(),
+  };
+
+  // shafqaat — Upsert into the existing 'profiles' table (not creator_profiles)
+  const { error } = await supabase
+    .from("profiles")
+    .upsert([row], { onConflict: "user_id" });
+
+  if (error) {
+    console.error("[saveCreatorProfile] Supabase error:", error.message);
+    return { error: error.message };
+  }
+
+  return { success: true };
+}

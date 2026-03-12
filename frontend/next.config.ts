@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
         hostname: "res.cloudinary.com",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "gateway.pinata.cloud", // shafqaat — IPFS document thumbnails
+      },
     ],
   },
 };
