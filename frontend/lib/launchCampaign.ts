@@ -1,3 +1,4 @@
+// frontend/lib/launchCampaign.ts
 import { ethers } from "ethers";
 import { saveCampaignToDb } from "./action"; // Import the server action
 import CampaignFactoryJSON from "@/abis/CampaignFactory.json";

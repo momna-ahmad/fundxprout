@@ -15,7 +15,7 @@ export default function Navbar() {
           <Link href="/homepage" className="text-sm font-medium text-gray-900 hover:opacity-70">
             Home
           </Link>
-          <Link href="#" className="text-sm font-medium text-gray-900 hover:opacity-70">
+          <Link href="/get-campaigns" className="text-sm font-medium text-gray-900 hover:opacity-70">
             Campaigns
           </Link>
           <Link href="/create-campaign" className="text-sm font-medium text-gray-900 hover:opacity-70">
