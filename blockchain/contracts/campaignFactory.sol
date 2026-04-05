@@ -6,6 +6,9 @@ import "./businessCampaign.sol";
 contract CampaignFactory {
     BusinessCampaign[] public deployedCampaigns;
 
+    // ✅ Add this event
+    event CampaignCreated(address campaignAddress, address owner);
+
     function createCampaign(
         string memory _name,
         uint256 _fundingGoal,
@@ -19,5 +22,8 @@ contract CampaignFactory {
             _pricePerToken
         );
         deployedCampaigns.push(newCampaign);
+
+        // ✅ Emit so the frontend can read the deployed address (hafsa)
+        emit CampaignCreated(address(newCampaign), msg.sender);
     }
 }

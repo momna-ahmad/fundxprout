@@ -3,8 +3,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* MetaMask theme colors */
-  --background: #fcd9b8;
+  /* FundXProut / MetaMask theme colors */
+  --background: #ffffff;
   --foreground: #24272a;
   --card: #ffffff;
   --card-foreground: #24272a;
@@ -40,39 +40,38 @@
 }
 
 .dark {
-  /* Dark mode with MetaMask tones */
-  --background: #24272a;
+  --background: #0d1221;
   --foreground: #ffffff;
-  --card: #2c2f33;
+  --card: #1a2030;
   --card-foreground: #ffffff;
-  --popover: #2c2f33;
+  --popover: #1a2030;
   --popover-foreground: #ffffff;
   --primary: #f6851b;
   --primary-foreground: #ffffff;
-  --secondary: #3b3f45;
+  --secondary: #1e2a3a;
   --secondary-foreground: #ffffff;
-  --muted: #3b3f45;
+  --muted: #1e2a3a;
   --muted-foreground: #9fa6ad;
   --accent: #037dd6;
   --accent-foreground: #ffffff;
   --destructive: #d73a49;
   --destructive-foreground: #ffffff;
-  --border: #3b3f45;
-  --input: #3b3f45;
-  --ring: #f6851b;
-  --sidebar: #2c2f33;
+  --border: #1e2a3a;
+  --input: #1e2a3a;
+  --ring: #6f42c1;
+  --sidebar: #1a2030;
   --sidebar-foreground: #ffffff;
   --sidebar-primary: #f6851b;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #3b3f45;
+  --sidebar-accent: #1e2a3a;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #3b3f45;
-  --sidebar-ring: #f6851b;
+  --sidebar-border: #1e2a3a;
+  --sidebar-ring: #6f42c1;
 }
 
 @theme inline {
-  --font-sans: "Geist", "Geist Fallback";
-  --font-mono: "Geist Mono", "Geist Mono Fallback";
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -117,30 +116,6 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   }
-}
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }

@@ -1,28 +1,34 @@
 // frontend/lib/launchCampaign.ts
 import { ethers } from "ethers";
-import { saveCampaignToDb } from "./action"; // Import the server action
+import { saveCampaignToDb } from "./action";
 import CampaignFactoryJSON from "@/abis/CampaignFactory.json";
 
-// The address you just got from your Hardhat deployment
-const CONTRACT_ADDRESS = "0xf8545D3957d84506AA713f3B760570fB1E6D19F6";
+// ⚠️ Hafsa has Updated this after redeploying CampaignFactory with the new event
+const CONTRACT_ADDRESS = "0x2FCA6AF6d0C9FF4a129fEF46bD4bc4eA2A0B25d0";
 
 export async function launchBusinessCampaign(
-  prevState: any, // Needed for useActionState
+  prevState: any,
   formData: FormData,
 ) {
-  console.log("launch cmapign function");
+  console.log("launch campaign function");
+
   // 1. Extract Data from FormData
   const title = formData.get("title") as string;
   const description = formData.get("description") as string;
-  const goal = formData.get("goal") as string; // in ETH
+  const goal = formData.get("goal") as string;
   const duration = parseInt(formData.get("duration") as string);
   const category = formData.get("category") as string;
+  const imageUrl = (formData.get("image_url") as string) ?? "";
+  const pitchDeckCid = (formData.get("pitch_deck_cid") as string) ?? "";
+  const businessPlanCid = (formData.get("business_plan_cid") as string) ?? "";
+  const financialsCid = (formData.get("financials_cid") as string) ?? "";
+  const useOfFundsCid = (formData.get("use_of_funds_cid") as string) ?? "";
+  const productDemoCid = (formData.get("product_demo_cid") as string) ?? "";
 
-  // 2. Logic: Price per token is Goal / 1000
+  // 2. Price per token = Goal / 1000
   const goalNum = parseFloat(goal);
   const pricePerTokenNum = goalNum / 1000;
 
-  // Convert to Wei for Smart Contract
   const goalInWei = ethers.parseEther(goal);
   const priceInWei = ethers.parseEther(pricePerTokenNum.toString());
 
@@ -39,7 +45,6 @@ export async function launchBusinessCampaign(
     const network = await provider.getNetwork();
     console.log("Connected to Chain ID:", network.chainId);
 
-    // If you expect Sepolia, Chain ID should be 11155111
     if (network.chainId !== BigInt(11155111)) {
       alert("Please switch MetaMask to the Sepolia Testnet!");
       return;
@@ -56,16 +61,35 @@ export async function launchBusinessCampaign(
       goalInWei,
       duration,
       priceInWei,
-      {
-        // Adding a manual gas limit bypasses the "0 ETH" estimation bug
-        gasLimit: 3000000,
-      },
+      { gasLimit: 3000000 },
     );
 
     const receipt = await transaction.wait();
     console.log("Blockchain Success:", receipt.hash);
 
-    // 4. Save to Supabase via Server Action
+    // ✅ NEW: Parse the CampaignCreated event to get the deployed contract address
+    let campaignContractAddress: string | null = null;
+    const iface = new ethers.Interface(CampaignFactoryJSON.abi);
+
+    for (const log of receipt.logs) {
+      try {
+        const parsed = iface.parseLog(log);
+        if (parsed && parsed.name === "CampaignCreated") {
+          campaignContractAddress = parsed.args.campaignAddress;
+          console.log("Deployed campaign contract address:", campaignContractAddress);
+          break;
+        }
+      } catch {
+        // This log didn't match the ABI, skip it
+      }
+    }
+
+    if (!campaignContractAddress) {
+      console.error("CampaignCreated event not found in logs:", receipt.logs);
+      return { error: "Campaign deployed on blockchain but contract address could not be extracted. Contact support with tx hash: " + receipt.hash };
+    }
+
+    // 4. Save to Supabase — now includes contractAddress
     const dbResult = await saveCampaignToDb({
       title,
       description,
@@ -73,12 +97,20 @@ export async function launchBusinessCampaign(
       duration,
       category,
       txHash: receipt.hash,
+      contractAddress: campaignContractAddress, // ✅ NEW
       pricePerToken: pricePerTokenNum.toString(),
+      imageUrl,
+      pitchDeckCid,
+      businessPlanCid,
+      financialsCid,
+      useOfFundsCid,
+      productDemoCid,
     });
 
     if (dbResult.error) return { error: dbResult.error };
 
     return { success: true };
+
   } catch (error: any) {
     return { error: error.message || "Transaction failed" };
   }

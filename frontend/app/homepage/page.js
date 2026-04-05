@@ -1,28 +1,27 @@
-"use client"
-import Navbar from "@/components/navbar"
-import HeroSection from "@/components/hero-section"
-import CategoriesNav from "@/components/categories-nav"
-import FeaturedCampaign from "@/components/featured-campaign"
-import CampaignList from "@/components/campaign-list"
-
+"use client";
+// shafqaat — Homepage wires CategoriesNav → CampaignList via shared state
+import { useState } from "react";
+import HeroSection from "@/components/hero-section";
+import CategoriesNav from "@/components/categories-nav";
+import FeaturedCampaign from "@/components/featured-campaign";
+import CampaignList from "@/components/campaign-list";
+import Navbar from "@/components/navbar";
+import Footer from "@/components/footer";
+import MarketAnalytics from "@/components/market-analytics";
 
 export default function HomePage() {
+  // shafqaat — activeCategory is shared between CategoriesNav and CampaignList
+  const [activeCategory, setActiveCategory] = useState("all");
+
   return (
-    <main className="min-h-screen bg-[#FFEEE0]">
+    <main className="min-h-screen bg-[#181A2A]">
       <Navbar />
-
-      <div className="pt-24">
-        <HeroSection />
-
-        <CategoriesNav />
-
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <FeaturedCampaign />
-            {/*<CampaignList />*/}
-          </div>
-        </section>
-      </div>
+      <HeroSection />
+      <CategoriesNav onCategoryChange={setActiveCategory} />
+      <FeaturedCampaign />
+      <CampaignList filterCategory={activeCategory} />
+      <MarketAnalytics />
+      <Footer />
     </main>
-  )
+  );
 }

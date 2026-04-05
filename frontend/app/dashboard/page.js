@@ -1,162 +1,230 @@
 "use client";
-import { useState } from "react";
+// shafqaat — Creator Dashboard: fully dynamic, reads real data from Supabase
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
-  TrendingUp,
-  Users,
-  DollarSign,
-  Target,
-  Plus,
-  Eye,
-  Edit,
-  BarChart3,
+  TrendingUp, Users, DollarSign, Target, Plus, Eye,
+  BarChart3, Search, ChevronLeft, ChevronRight,
+  UserCircle, Clock, CheckCircle, AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
-import supabase from "@/lib/supabase-client";
+import { getMyCampaigns } from "@/utils/supabase/getCampaigns";
+import { getMyProfile, calcProfileCompletion, getUserRole } from "@/utils/supabase/getProfile";
+
+const ITEMS_PER_PAGE = 6; // shafqaat — campaigns per page in My Campaigns tab
+
+// shafqaat — Calculate days left from created_at + duration
+function calcDaysLeft(createdAt, durationDays) {
+  const deadline = new Date(
+    new Date(createdAt).getTime() + (durationDays ?? 30) * 24 * 60 * 60 * 1000
+  );
+  const diff = Math.ceil((deadline - new Date()) / (1000 * 60 * 60 * 24));
+  return diff > 0 ? diff : 0;
+}
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const [userRole, setUserRole] = useState(null);
+  const [redirecting, setRedirecting] = useState(false);
+
+  // shafqaat — Active tab state
   const [activeTab, setActiveTab] = useState("overview");
 
-  // Mock data
+  // shafqaat — Real data from Supabase
+  const [user, setUser] = useState(null);
+  const [campaigns, setCampaigns] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // shafqaat — My Campaigns tab: search + pagination state
+  const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Check user role and redirect if needed
+  useEffect(() => {
+    async function checkRole() {
+      const role = await getUserRole();
+      setUserRole(role);
+
+      // Redirect investors to investor dashboard
+      if (role === 'investor' && !redirecting) {
+        setRedirecting(true);
+        router.push('/investor-dashboard');
+        return;
+      }
+    }
+    checkRole();
+  }, [router, redirecting]);
+
+  // shafqaat — Fetch user, campaigns and profile in parallel on mount
+  useEffect(() => {
+    async function loadAll() {
+      const supabase = createClient();
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      setUser(authUser);
+
+      const [camps, prof] = await Promise.all([
+        getMyCampaigns(),
+        getMyProfile(),
+      ]);
+      setCampaigns(camps);
+      setProfile(prof);
+      setLoading(false);
+    }
+    loadAll();
+  }, []);
+
+  // shafqaat — Compute real stats from the fetched campaigns
   const stats = {
-    totalRaised: 12500,
-    totalBackers: 234,
-    activeCampaigns: 3,
-    completedCampaigns: 7,
+    totalGoal: campaigns.reduce((s, c) => s + parseFloat(c.funding_goal ?? "0"), 0),
+    activeCampaigns: campaigns.filter(c => calcDaysLeft(c.created_at, c.duration) > 0).length,
+    totalCampaigns: campaigns.length,
+    profileCompletion: calcProfileCompletion(profile),
   };
 
-  const campaigns = [
-    {
-      id: 1,
-      title: "Sustainable Energy Project",
-      goal: 10000,
-      raised: 7500,
-      backers: 89,
-      daysLeft: 15,
-      status: "active",
-    },
-    {
-      id: 2,
-      title: "Community Garden Initiative",
-      goal: 5000,
-      raised: 3200,
-      backers: 45,
-      daysLeft: 8,
-      status: "active",
-    },
-    {
-      id: 3,
-      title: "Educational Tech Startup",
-      goal: 25000,
-      raised: 18000,
-      backers: 156,
-      daysLeft: 22,
-      status: "active",
-    },
-  ];
+  // shafqaat — Filtered + paginated campaigns for My Campaigns tab
+  const filtered = campaigns.filter((c) =>
+    !search || c.title?.toLowerCase().includes(search.toLowerCase()) ||
+    c.category?.toLowerCase().includes(search.toLowerCase())
+  );
+  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+  const paginated = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   const tabs = [
     { id: "overview", label: "Overview", icon: BarChart3 },
     { id: "campaigns", label: "My Campaigns", icon: Target },
     { id: "analytics", label: "Analytics", icon: TrendingUp },
+    { id: "profile", label: "Profile", icon: UserCircle },
   ];
 
+  const displayName =
+    profile?.display_name ||
+    profile?.full_name ||
+    user?.user_metadata?.full_name ||
+    user?.email?.split("@")[0] ||
+    "Creator";
+
   return (
-    <div className="min-h-screen bg-[#FFEEE0]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
+    <div className="min-h-screen bg-[#181A2A]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-24">
+
+        {/* shafqaat — Dashboard header with real user name */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              Creator Dashboard
+            <h1 className="text-3xl font-black text-white">
+              {loading ? "Dashboard" : `Welcome, ${displayName}`}
             </h1>
-            <p className="text-gray-600 mt-1">
+            <p className="text-gray-400 mt-1 text-sm">
               Manage your campaigns and track your progress
             </p>
           </div>
+
+          <div className="flex items-center space-x-4">
+            <div className="bg-[#1a2030] border border-white/5 rounded-xl px-4 py-2">
+              <div className="flex items-center space-x-2">
+                <Target className="w-4 h-4 text-[#6f42c1]" />
+                <span className="text-white text-sm font-medium">Business Owner</span>
+              </div>
+            </div>
+          </div>
+        </div>
           <Link
             href="/create-campaign"
-            className="bg-[#f6851b] hover:bg-[#e57a1a] text-white px-6 py-3 rounded-lg font-medium transition duration-200 flex items-center gap-2"
+            className="bg-[#6f42c1] hover:bg-[#5a3599] text-white px-6 py-3 rounded-full font-semibold transition duration-200 flex items-center gap-2 text-sm"
           >
-            <Plus className="h-5 w-5" />
+            <Plus className="h-4 w-4" />
             New Campaign
           </Link>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl p-6 shadow-md">
+        {/* shafqaat — Profile completion banner (only if incomplete) */}
+        {!loading && stats.profileCompletion < 100 && (
+          <div className="mb-6 bg-[#6f42c1]/10 border border-[#6f42c1]/30 rounded-2xl p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-[#6f42c1] rounded-lg">
-                <DollarSign className="h-6 w-6 text-white" />
-              </div>
+              <AlertCircle className="h-5 w-5 text-[#a78bfa] shrink-0" />
               <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  ${stats.totalRaised.toLocaleString()}
+                <p className="text-sm font-semibold text-white">
+                  Profile {stats.profileCompletion}% complete
                 </p>
-                <p className="text-sm text-gray-600">Total Raised</p>
+                <p className="text-xs text-gray-400">
+                  Complete your KYC/KYB to unlock campaign publishing trust badges
+                </p>
               </div>
             </div>
+            <Link
+              href="/profile"
+              className="shrink-0 text-xs font-semibold text-white bg-[#6f42c1] hover:bg-[#5a3599] px-4 py-2 rounded-full transition"
+            >
+              Complete Profile →
+            </Link>
           </div>
-          <div className="bg-white rounded-xl p-6 shadow-md">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-[#f6851b] rounded-lg">
-                <Users className="h-6 w-6 text-white" />
+        )}
+
+        {/* shafqaat — Stats cards: real data computed from Supabase */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {[
+            {
+              label: "Total Goal (ETH)",
+              value: loading ? "…" : `${stats.totalGoal.toFixed(3)} ETH`,
+              icon: DollarSign, color: "#6f42c1",
+            },
+            {
+              label: "My Campaigns",
+              value: loading ? "…" : stats.totalCampaigns,
+              icon: Target, color: "#037dd6",
+            },
+            {
+              label: "Active Campaigns",
+              value: loading ? "…" : stats.activeCampaigns,
+              icon: TrendingUp, color: "#28a745",
+            },
+            {
+              label: "Profile Complete",
+              value: loading ? "…" : `${stats.profileCompletion}%`,
+              icon: UserCircle, color: "#f6851b",
+            },
+          ].map((stat) => {
+            const Icon = stat.icon;
+            return (
+              <div key={stat.label} className="bg-[#1a2030] rounded-2xl p-5 border border-white/5">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl" style={{ backgroundColor: stat.color + "22" }}>
+                    <Icon className="h-5 w-5" style={{ color: stat.color }} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-white">{stat.value}</p>
+                    <p className="text-xs text-gray-400">{stat.label}</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.totalBackers}
-                </p>
-                <p className="text-sm text-gray-600">Total Backers</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl p-6 shadow-md">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-[#037dd6] rounded-lg">
-                <Target className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.activeCampaigns}
-                </p>
-                <p className="text-sm text-gray-600">Active Campaigns</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl p-6 shadow-md">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-[#28a745] rounded-lg">
-                <TrendingUp className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.completedCampaigns}
-                </p>
-                <p className="text-sm text-gray-600">Completed</p>
-              </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
 
-        {/* Tabs */}
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-          <div className="border-b border-gray-200">
-            <nav className="flex">
+        {/* shafqaat — Tabs + Content */}
+        <div className="bg-[#1a2030] rounded-3xl border border-white/5 overflow-hidden">
+
+          {/* Tab Nav */}
+          <div className="border-b border-white/10 px-6">
+            <nav className="flex gap-1 pt-4 overflow-x-auto">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition duration-200 ${
-                      activeTab === tab.id
-                        ? "border-[#f6851b] text-[#f6851b]"
-                        : "border-transparent text-gray-500 hover:text-gray-700"
-                    }`}
+                    className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold rounded-t-xl border-b-2 transition duration-200 whitespace-nowrap ${activeTab === tab.id
+                        ? "border-[#6f42c1] text-[#a78bfa] bg-[#6f42c1]/10"
+                        : "border-transparent text-gray-400 hover:text-gray-200"
+                      }`}
                   >
                     <Icon className="h-4 w-4" />
                     {tab.label}
+                    {/* shafqaat — Profile tab shows incomplete badge */}
+                    {tab.id === "profile" && stats.profileCompletion < 100 && (
+                      <span className="ml-1 w-2 h-2 rounded-full bg-[#f6851b] inline-block" />
+                    )}
                   </button>
                 );
               })}
@@ -164,191 +232,354 @@ export default function DashboardPage() {
           </div>
 
           <div className="p-8">
+
+            {/* ── Overview Tab ─────────────────────────────────── */}
             {activeTab === "overview" && (
               <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                  Campaign Overview
-                </h2>
-                <div className="space-y-6">
-                  {campaigns.map((campaign) => (
-                    <div
-                      key={campaign.id}
-                      className="border border-gray-200 rounded-lg p-6"
-                    >
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {campaign.title}
-                        </h3>
-                        <span
-                          className={`px-3 py-1 rounded-full text-sm font-medium ${
-                            campaign.status === "active"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-gray-100 text-gray-800"
-                          }`}
-                        >
-                          {campaign.status}
-                        </span>
-                      </div>
+                <h2 className="text-xl font-bold text-white mb-6">Campaign Overview</h2>
 
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                        <div>
-                          <p className="text-sm text-gray-600">Goal</p>
-                          <p className="font-semibold">
-                            ${campaign.goal.toLocaleString()}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Raised</p>
-                          <p className="font-semibold text-[#f6851b]">
-                            ${campaign.raised.toLocaleString()}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Backers</p>
-                          <p className="font-semibold">{campaign.backers}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Days Left</p>
-                          <p className="font-semibold">{campaign.daysLeft}</p>
-                        </div>
-                      </div>
+                {/* shafqaat — Loading state */}
+                {loading && (
+                  <div className="text-center py-12 text-gray-400 text-sm">Loading…</div>
+                )}
 
-                      <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
-                        <div
-                          className="bg-[#f6851b] h-2 rounded-full"
-                          style={{
-                            width: `${(campaign.raised / campaign.goal) * 100}%`,
-                          }}
-                        ></div>
-                      </div>
+                {/* shafqaat — Empty state */}
+                {!loading && campaigns.length === 0 && (
+                  <div className="text-center py-16">
+                    <Target className="h-10 w-10 text-[#6f42c1]/30 mx-auto mb-3" />
+                    <p className="text-gray-400 text-sm">You haven't created any campaigns yet.</p>
+                    <Link href="/create-campaign" className="mt-3 inline-block text-[#a78bfa] text-sm hover:underline">
+                      Create your first campaign →
+                    </Link>
+                  </div>
+                )}
 
-                      <div className="flex gap-3">
-                        <button className="flex items-center gap-2 text-[#6f42c1] hover:text-[#5a3599] font-medium">
-                          <Eye className="h-4 w-4" />
-                          View
-                        </button>
-                        <button className="flex items-center gap-2 text-gray-600 hover:text-gray-800 font-medium">
-                          <Edit className="h-4 w-4" />
-                          Edit
-                        </button>
+                {/* shafqaat — Real campaign cards */}
+                <div className="space-y-4">
+                  {!loading && campaigns.map((campaign) => {
+                    const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration);
+                    const goal = parseFloat(campaign.funding_goal ?? "0");
+                    const isActive = daysLeft > 0;
+
+                    return (
+                      <div key={campaign.id} className="bg-[#0d1117] rounded-2xl p-6 border border-white/5">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-base font-bold text-white">{campaign.title}</h3>
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${isActive
+                              ? "bg-[#28a745]/20 text-[#28a745]"
+                              : "bg-white/10 text-gray-400"
+                            }`}>
+                            {isActive ? "Active" : "Ended"}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                          {[
+                            { label: "Goal", value: `${goal.toFixed(3)} ETH`, accent: false },
+                            { label: "Category", value: campaign.category ?? "—", accent: false },
+                            { label: "Days Left", value: daysLeft > 0 ? daysLeft : "Ended", accent: false },
+                            { label: "Price/Token", value: `${parseFloat(campaign.price_per_token ?? "0").toFixed(6)} ETH`, accent: true },
+                          ].map((item) => (
+                            <div key={item.label}>
+                              <p className="text-xs text-gray-400 mb-1">{item.label}</p>
+                              <p className={`font-bold text-sm capitalize ${item.accent ? "text-[#a78bfa]" : "text-white"}`}>
+                                {item.value}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* shafqaat — Progress bar: placeholder at 0% until blockchain funding is wired */}
+                        <div className="w-full bg-white/10 rounded-full h-1.5 mb-4">
+                          <div className="bg-[#6f42c1] h-1.5 rounded-full" style={{ width: "0%" }} />
+                        </div>
+
+                        <div className="flex gap-4">
+                          <Link
+                            href={`/campaigns/${campaign.id}`}
+                            className="flex items-center gap-1.5 text-[#a78bfa] hover:text-white text-xs font-medium transition-colors"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            View Public Page
+                          </Link>
+                          {campaign.transaction_hash && (
+                            <a
+                              href={`https://sepolia.etherscan.io/tx/${campaign.transaction_hash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 text-gray-400 hover:text-white text-xs font-medium transition-colors"
+                            >
+                              View on Etherscan
+                            </a>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
 
+            {/* ── My Campaigns Tab (with search + pagination) ── */}
             {activeTab === "campaigns" && (
               <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                  All Campaigns
-                </h2>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-200">
-                        <th className="text-left py-3 px-4 font-medium text-gray-700">
-                          Campaign
-                        </th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-700">
-                          Goal
-                        </th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-700">
-                          Raised
-                        </th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-700">
-                          Backers
-                        </th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-700">
-                          Status
-                        </th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-700">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {campaigns.map((campaign) => (
-                        <tr
-                          key={campaign.id}
-                          className="border-b border-gray-100"
-                        >
-                          <td className="py-4 px-4 font-medium">
-                            {campaign.title}
-                          </td>
-                          <td className="py-4 px-4">
-                            ${campaign.goal.toLocaleString()}
-                          </td>
-                          <td className="py-4 px-4 text-[#f6851b] font-medium">
-                            ${campaign.raised.toLocaleString()}
-                          </td>
-                          <td className="py-4 px-4">{campaign.backers}</td>
-                          <td className="py-4 px-4">
-                            <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
-                              {campaign.status}
-                            </span>
-                          </td>
-                          <td className="py-4 px-4">
-                            <div className="flex gap-2">
-                              <button className="text-[#6f42c1] hover:text-[#5a3599] font-medium text-sm">
-                                View
-                              </button>
-                              <button className="text-gray-600 hover:text-gray-800 font-medium text-sm">
-                                Edit
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                {/* shafqaat — Header + search bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                  <h2 className="text-xl font-bold text-white">
+                    My Campaigns {!loading && `(${campaigns.length})`}
+                  </h2>
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                    <input
+                      type="text"
+                      placeholder="Search my campaigns…"
+                      value={search}
+                      onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+                      className="w-full pl-9 pr-4 py-2 bg-[#0d1117] border border-white/10 rounded-full text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#6f42c1] transition"
+                    />
+                  </div>
                 </div>
+
+                {/* shafqaat — Loading / empty states */}
+                {loading && <div className="text-center py-12 text-gray-400 text-sm">Loading…</div>}
+                {!loading && filtered.length === 0 && (
+                  <div className="text-center py-12 text-gray-400 text-sm">
+                    {campaigns.length === 0
+                      ? "No campaigns yet."
+                      : `No campaigns matching "${search}"`}
+                  </div>
+                )}
+
+                {/* shafqaat — Campaign table */}
+                {!loading && paginated.length > 0 && (
+                  <div className="overflow-x-auto mb-6">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-white/10">
+                          {["Campaign", "Goal (ETH)", "Category", "Days Left", "Status", "Actions"].map((h) => (
+                            <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginated.map((campaign) => {
+                          const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration);
+                          return (
+                            <tr key={campaign.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                              <td className="py-4 px-4 font-medium text-white max-w-[200px] truncate">
+                                {campaign.title}
+                              </td>
+                              <td className="py-4 px-4 text-gray-300">
+                                {parseFloat(campaign.funding_goal ?? "0").toFixed(3)}
+                              </td>
+                              <td className="py-4 px-4 text-gray-300 capitalize">
+                                {campaign.category ?? "—"}
+                              </td>
+                              <td className="py-4 px-4 text-gray-300">
+                                {daysLeft > 0 ? `${daysLeft}d` : "Ended"}
+                              </td>
+                              <td className="py-4 px-4">
+                                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${daysLeft > 0
+                                    ? "bg-[#28a745]/20 text-[#28a745]"
+                                    : "bg-white/10 text-gray-400"
+                                  }`}>
+                                  {daysLeft > 0 ? "Active" : "Ended"}
+                                </span>
+                              </td>
+                              <td className="py-4 px-4">
+                                <Link
+                                  href={`/campaigns/${campaign.id}`}
+                                  className="text-[#a78bfa] hover:text-white text-xs font-medium transition-colors"
+                                >
+                                  View
+                                </Link>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* shafqaat — Pagination controls */}
+                {!loading && totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-3">
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-full bg-white/5 text-gray-400 hover:bg-[#6f42c1]/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`w-8 h-8 rounded-full text-xs font-bold transition ${currentPage === page
+                            ? "bg-[#6f42c1] text-white"
+                            : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                          }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-full bg-white/5 text-gray-400 hover:bg-[#6f42c1]/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                    <span className="text-xs text-gray-500">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
+            {/* ── Analytics Tab ──────────────────────────────── */}
             {activeTab === "analytics" && (
               <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                  Analytics
-                </h2>
+                <h2 className="text-xl font-bold text-white mb-6">Analytics</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-gray-50 rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                      Monthly Performance
-                    </h3>
-                    <div className="text-center py-8">
-                      <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-500">
-                        Analytics data will appear here
-                      </p>
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                      Top Campaigns
-                    </h3>
+                  {/* shafqaat — Summary stats from real campaigns */}
+                  <div className="bg-[#0d1117] rounded-2xl p-6 border border-white/5">
+                    <h3 className="text-sm font-bold text-white mb-4">Campaign Summary</h3>
                     <div className="space-y-3">
-                      {campaigns.slice(0, 3).map((campaign, index) => (
-                        <div
-                          key={campaign.id}
-                          className="flex items-center justify-between"
-                        >
-                          <span className="text-sm font-medium">
-                            {campaign.title}
-                          </span>
-                          <span className="text-sm text-[#f6851b] font-medium">
-                            ${campaign.raised.toLocaleString()}
-                          </span>
+                      {[
+                        { label: "Total Campaigns", value: campaigns.length },
+                        { label: "Active Now", value: stats.activeCampaigns },
+                        { label: "Ended", value: campaigns.length - stats.activeCampaigns },
+                        { label: "Total Goal (ETH)", value: stats.totalGoal.toFixed(4) },
+                      ].map((item) => (
+                        <div key={item.label} className="flex items-center justify-between">
+                          <span className="text-sm text-gray-400">{item.label}</span>
+                          <span className="text-sm font-bold text-[#a78bfa]">{item.value}</span>
                         </div>
                       ))}
                     </div>
                   </div>
+                  {/* shafqaat — Top campaigns by goal */}
+                  <div className="bg-[#0d1117] rounded-2xl p-6 border border-white/5">
+                    <h3 className="text-sm font-bold text-white mb-4">Largest Campaigns</h3>
+                    {campaigns.length === 0 ? (
+                      <p className="text-gray-500 text-sm text-center py-4">No campaigns yet</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {[...campaigns]
+                          .sort((a, b) => parseFloat(b.funding_goal ?? "0") - parseFloat(a.funding_goal ?? "0"))
+                          .slice(0, 5)
+                          .map((c) => (
+                            <div key={c.id} className="flex items-center justify-between">
+                              <span className="text-sm text-gray-300 truncate mr-3">{c.title}</span>
+                              <span className="text-sm text-[#a78bfa] font-semibold whitespace-nowrap">
+                                {parseFloat(c.funding_goal ?? "0").toFixed(3)} ETH
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
+
+            {/* ── Profile Tab ────────────────────────────────── */}
+            {activeTab === "profile" && (
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-white">Creator Profile</h2>
+                  <Link
+                    href="/profile"
+                    className="bg-[#6f42c1] hover:bg-[#5a3599] text-white text-sm font-semibold px-5 py-2.5 rounded-full transition"
+                  >
+                    {profile ? "Edit Profile" : "Create Profile"}
+                  </Link>
+                </div>
+
+                {/* shafqaat — Profile completion bar */}
+                <div className="bg-[#0d1117] rounded-2xl p-6 border border-white/5 mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-white">Profile Completion</span>
+                    <span className="text-sm font-bold text-[#a78bfa]">{stats.profileCompletion}%</span>
+                  </div>
+                  <div className="w-full bg-white/10 rounded-full h-2">
+                    <div
+                      className="bg-[#6f42c1] h-2 rounded-full transition-all duration-700"
+                      style={{ width: `${stats.profileCompletion}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Complete your profile to earn trust badges visible to investors
+                  </p>
+                </div>
+
+                {/* shafqaat — Profile summary if it exists */}
+                {profile ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                      { label: "Full Name", value: profile.full_name },
+                      { label: "Display Name", value: profile.display_name },
+                      { label: "Country", value: profile.country },
+                      { label: "City", value: profile.city },
+                      { label: "Phone", value: profile.phone },
+                      { label: "Website", value: profile.website_url },
+                    ].map(({ label, value }) =>
+                      value ? (
+                        <div key={label} className="bg-[#0d1117] rounded-xl p-4 border border-white/5">
+                          <p className="text-xs text-gray-500 mb-1">{label}</p>
+                          <p className="text-sm text-white font-medium">{value}</p>
+                        </div>
+                      ) : null
+                    )}
+                    {/* shafqaat — KYC/KYB doc status indicators */}
+                    <div className="md:col-span-2 bg-[#0d1117] rounded-xl p-4 border border-white/5">
+                      <p className="text-xs text-gray-500 mb-3">Document Verification Status</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                          { label: "National ID", done: !!profile.national_id_cid },
+                          { label: "Selfie", done: !!profile.selfie_cid },
+                          { label: "Proof of Address", done: !!profile.proof_of_address_cid },
+                          { label: "Business Reg.", done: !!profile.business_reg_cid },
+                          { label: "Tax Cert.", done: !!profile.tax_cert_cid },
+                          { label: "Bank Statement", done: !!profile.bank_statement_cid },
+                        ].map(({ label, done }) => (
+                          <div key={label} className="flex items-center gap-2">
+                            {done
+                              ? <CheckCircle className="h-4 w-4 text-[#28a745] shrink-0" />
+                              : <AlertCircle className="h-4 w-4 text-gray-600 shrink-0" />
+                            }
+                            <span className={`text-xs ${done ? "text-gray-300" : "text-gray-600"}`}>
+                              {label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <UserCircle className="h-12 w-12 text-[#6f42c1]/30 mx-auto mb-3" />
+                    <p className="text-gray-400 text-sm mb-4">
+                      You haven't set up your creator profile yet.
+                    </p>
+                    <Link
+                      href="/profile"
+                      className="inline-block bg-[#6f42c1] hover:bg-[#5a3599] text-white text-sm font-semibold px-6 py-3 rounded-full transition"
+                    >
+                      Set Up Profile →
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
         </div>
       </div>
-    </div>
   );
 }
