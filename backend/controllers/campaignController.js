@@ -73,7 +73,7 @@ exports.createDraft = async (req, res) => {
 // 2. LINK BLOCKCHAIN ADDRESS
 exports.linkContract = async (req, res) => {
     const { id, contractAddress } = req.body;
-    
+
     const { data, error } = await supabase
         .from('campaigns')
         .update({ contract_address: contractAddress, status: 'deployed' })

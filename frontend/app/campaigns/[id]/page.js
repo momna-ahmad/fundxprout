@@ -293,7 +293,7 @@ export default function CampaignDetailPage() {
         return (
             <div className="min-h-screen bg-[#181A2A] flex flex-col items-center justify-center gap-4">
                 <p className="text-white text-xl font-bold">Campaign not found</p>
-                <Link href="/homepage" className="text-[#a78bfa] text-sm hover:underline">
+                <Link href="/" className="text-[#a78bfa] text-sm hover:underline">
                     ← Back to all campaigns
                 </Link>
             </div>
@@ -318,7 +318,7 @@ export default function CampaignDetailPage() {
 
                 {/* shafqaat — Back button */}
                 <Link
-                    href="/homepage"
+                    href="/"
                     className="inline-flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-6 transition-colors"
                 >
                     <ArrowLeft className="h-4 w-4" />

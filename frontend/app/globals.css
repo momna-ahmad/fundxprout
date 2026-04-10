@@ -119,3 +119,296 @@
     font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   }
 }
+
+/* ================================================================
+   LIGHT THEME — Global color overrides
+   These automatically remap all hardcoded dark colors used across
+   components to their light equivalents when [data-theme="light"]
+   ================================================================ */
+
+/* ── Background colors ────────────────────────────────────────── */
+
+/* Main page background: #181A2A → light warm gray */
+html[data-theme="light"] .bg-\[\#181A2A\],
+html[data-theme="light"] .bg-\[\#181A2A\]\/95 {
+  background-color: #f5f6fa !important;
+}
+
+/* Card background: #1a2030 → white */
+html[data-theme="light"] .bg-\[\#1a2030\] {
+  background-color: #ffffff !important;
+}
+
+/* Deep background: #0d1117 → very light gray */
+html[data-theme="light"] .bg-\[\#0d1117\] {
+  background-color: #f0f2f5 !important;
+}
+
+/* Stat card / chart bg: #1e2530 → white */
+html[data-theme="light"] .bg-\[\#1e2530\] {
+  background-color: #ffffff !important;
+}
+
+/* Body level override */
+html[data-theme="light"] body {
+  background-color: #f5f6fa !important;
+  color: #1a1a2e !important;
+}
+
+/* White bg elements in dark (e.g. hero card) — keep as-is since they're already white */
+
+/* Semi-transparent white BGs → light gray equivalents */
+html[data-theme="light"] .bg-white\/5 {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+html[data-theme="light"] .bg-white\/10 {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Black overlays — lighter in light mode */
+html[data-theme="light"] .bg-black\/80 {
+  background-color: rgba(0, 0, 0, 0.7) !important;
+}
+html[data-theme="light"] .bg-black\/70 {
+  background-color: rgba(0, 0, 0, 0.5) !important;
+}
+
+/* ── Text colors ──────────────────────────────────────────────── */
+
+/* White text → dark text */
+html[data-theme="light"] .text-white {
+  color: #1a1a2e !important;
+}
+
+/* Gray-300 → darker gray */
+html[data-theme="light"] .text-gray-300 {
+  color: #4b5563 !important;
+}
+
+/* Gray-400 → medium gray */
+html[data-theme="light"] .text-gray-400 {
+  color: #6b7280 !important;
+}
+
+/* Gray-500 → slightly darker */
+html[data-theme="light"] .text-gray-500 {
+  color: #9ca3af !important;
+}
+
+/* Gray-600 → keep readable */
+html[data-theme="light"] .text-gray-600 {
+  color: #6b7280 !important;
+}
+
+/* White with opacity */
+html[data-theme="light"] .text-white\/80 {
+  color: rgba(26, 26, 46, 0.8) !important;
+}
+html[data-theme="light"] .text-white\/50 {
+  color: rgba(26, 26, 46, 0.5) !important;
+}
+
+/* Dark text on hero card — keep dark */
+html[data-theme="light"] .text-\[\#181A2A\] {
+  color: #1a1a2e !important;
+}
+
+/* ── Border colors ────────────────────────────────────────────── */
+
+html[data-theme="light"] .border-white\/5 {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+html[data-theme="light"] .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+html[data-theme="light"] .border-white\/20 {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+/* ── Placeholder colors ───────────────────────────────────────── */
+
+html[data-theme="light"] .placeholder-gray-500::placeholder,
+html[data-theme="light"] .placeholder-gray-600::placeholder {
+  color: #9ca3af !important;
+}
+
+/* ── Fill colors (SVG inside Recharts etc.) ────────────────────── */
+
+html[data-theme="light"] .fill-white {
+  fill: #1a1a2e !important;
+}
+
+/* ── Shadow overrides ─────────────────────────────────────────── */
+
+html[data-theme="light"] .shadow-xl {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ── Gradient overrides ───────────────────────────────────────── */
+
+/* Purple accent gradient bg */
+html[data-theme="light"] .from-\[\#6f42c1\]\/10 {
+  --tw-gradient-from: rgba(111, 66, 193, 0.06) !important;
+}
+html[data-theme="light"] .from-\[\#6f42c1\]\/20 {
+  --tw-gradient-from: rgba(111, 66, 193, 0.08) !important;
+}
+
+/* ── Specific component overrides ─────────────────────────────── */
+
+/* Navbar backdrop */
+html[data-theme="light"] nav.sticky {
+  background-color: rgba(245, 246, 250, 0.95) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Footer */
+html[data-theme="light"] footer.bg-\[\#0d1117\],
+html[data-theme="light"] footer {
+  background-color: #1a1a2e !important;
+}
+/* Keep footer text white since bg is still dark */
+html[data-theme="light"] footer .text-white,
+html[data-theme="light"] footer .text-white\/80,
+html[data-theme="light"] footer .text-white\/50 {
+  color: inherit !important;
+}
+
+/* Footer purple card — keep as-is */
+html[data-theme="light"] .bg-\[\#6f42c1\] {
+  /* Keep purple bg unchanged */
+}
+html[data-theme="light"] .bg-\[\#6f42c1\] .text-white {
+  color: #ffffff !important;
+}
+
+/* ── Accent colors — keep purple consistent ───────────────────── */
+/* These should NOT change between themes */
+html[data-theme="light"] .text-\[\#a78bfa\] {
+  color: #7c3aed !important; /* slightly darker purple for light bg legibility */
+}
+html[data-theme="light"] .text-\[\#6f42c1\] {
+  color: #6f42c1 !important;
+}
+
+/* ── Focus rings ──────────────────────────────────────────────── */
+html[data-theme="light"] .focus\:ring-\[\#6f42c1\]:focus {
+  --tw-ring-color: #6f42c1 !important;
+}
+
+/* ── Input fields in light mode ───────────────────────────────── */
+html[data-theme="light"] input.bg-\[\#0d1117\],
+html[data-theme="light"] textarea.bg-\[\#0d1117\] {
+  background-color: #f0f2f5 !important;
+  color: #1a1a2e !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+
+/* ── Scrollbar (Webkit) ───────────────────────────────────────── */
+html[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #f5f6fa;
+}
+html[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #c4c8d4;
+}
+
+/* ── Campaign card images — add subtle shadow ─────────────────── */
+html[data-theme="light"] .rounded-2xl {
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* ── Dashboard sidebar ────────────────────────────────────────── */
+html[data-theme="light"] aside {
+  background-color: #ffffff !important;
+  border-right-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ── Login/Signup pages ───────────────────────────────────────── */
+html[data-theme="light"] .min-h-screen.bg-\[\#181A2A\] {
+  background-color: #f5f6fa !important;
+}
+
+/* ── Hover states ─────────────────────────────────────────────── */
+html[data-theme="light"] .hover\:bg-white\/10:hover {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+html[data-theme="light"] .hover\:bg-\[\#6f42c1\]\/20:hover {
+  background-color: rgba(111, 66, 193, 0.12) !important;
+}
+html[data-theme="light"] .hover\:text-white:hover {
+  color: #1a1a2e !important;
+}
+
+/* ── Transition for smooth theme switch ───────────────────────── */
+html[data-theme="light"] *,
+html[data-theme="dark"] * {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Re-override active buttons/pills to keep white text on purple BG */
+html[data-theme="light"] .bg-\[\#6f42c1\] .text-white,
+html[data-theme="light"] .bg-\[\#6f42c1\].text-white,
+html[data-theme="light"] button.bg-\[\#6f42c1\],
+html[data-theme="light"] a.bg-\[\#6f42c1\],
+html[data-theme="light"] .bg-\[\#a78bfa\].text-white,
+html[data-theme="light"] a.bg-\[\#a78bfa\] {
+  color: #ffffff !important;
+}
+
+/* Hero section inner white card — add border in light mode */
+html[data-theme="light"] .bg-white.shadow-xl {
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Recharts tooltip — override in light mode */
+html[data-theme="light"] .recharts-tooltip-wrapper div {
+  background-color: #ffffff !important;
+  border-color: rgba(111, 66, 193, 0.2) !important;
+  color: #1a1a2e !important;
+}
+
+/* ── Select/Option elements ───────────────────────────────────── */
+html[data-theme="light"] select {
+  background-color: #f0f2f5 !important;
+  color: #1a1a2e !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+html[data-theme="light"] select option {
+  background-color: #ffffff !important;
+  color: #1a1a2e !important;
+}
+
+/* ── Table row borders ────────────────────────────────────────── */
+html[data-theme="light"] .border-b.border-white\/10,
+html[data-theme="light"] .border-b.border-white\/5 {
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
+html[data-theme="light"] .border-t.border-white\/10 {
+  border-top-color: rgba(0, 0, 0, 0.08) !important;
+}
+html[data-theme="light"] tr:hover.hover\:bg-white\/5:hover {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+}
+
+/* ── Gradient text — keep consistent ──────────────────────────── */
+html[data-theme="light"] .bg-clip-text.text-transparent {
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* ── "Or continue with" divider text bg ───────────────────────── */
+html[data-theme="light"] span.bg-\[\#1a2030\] {
+  background-color: #ffffff !important;
+}
+
+/* ── Progress bars ────────────────────────────────────────────── */
+html[data-theme="light"] .bg-white\/10.rounded-full {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ── Body override (fallback) ─────────────────────────────────── */
+html[data-theme="light"],
+html.light {
+  background-color: #f5f6fa !important;
+  color-scheme: light;
+}

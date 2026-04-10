@@ -23,7 +23,7 @@ export default function Footer() {
 						{/* Nav Links */}
 						<div className="flex gap-12 mt-2">
 							<div>
-								<Link href="/homepage" className="text-sm text-white/80 hover:text-white transition-colors">
+								<Link href="/" className="text-sm text-white/80 hover:text-white transition-colors">
 									Campaigns
 								</Link>
 							</div>
