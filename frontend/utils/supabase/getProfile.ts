@@ -1,13 +1,29 @@
 // shafqaat — Profile utilities: reads/writes to the existing 'profiles' table in Supabase
 import { createClient } from "@/utils/supabase/client";
 
+const normalizeRole = (role?: string | null) => {
+    const value = (role || "").trim().toLowerCase();
+    if (value === "owner" || value === "business_owner") return "owner";
+    if (value === "investor") return "investor";
+    return null;
+};
+
 // shafqaat — Get user role from auth metadata
 export async function getUserRole() {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    return user.user_metadata?.user_role || 'investor'; // Default to investor
+    const metadataRole = normalizeRole(user.user_metadata?.user_role);
+    if (metadataRole) return metadataRole;
+
+    const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("user_id", user.id)
+        .single();
+
+    return normalizeRole(profile?.role) || 'investor';
 }
 
 // shafqaat — Fetch the profile row for the currently logged-in user
