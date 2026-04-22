@@ -9,6 +9,29 @@ import { createClient } from "@/utils/supabase/server";
 const cidToUrl = (cid: string | null | undefined) =>
   cid ? `https://gateway.pinata.cloud/ipfs/${cid}` : null;
 
+type AppRole = "owner" | "investor";
+
+const normalizeRole = (role: string | null | undefined): AppRole | null => {
+  const value = (role || "").trim().toLowerCase();
+  if (value === "owner" || value === "business_owner") return "owner";
+  if (value === "investor") return "investor";
+  return null;
+};
+
+const getRoleRedirect = (role: AppRole) =>
+  role === "owner" ? "/dashboard" : "/investor-dashboard";
+
+const deriveFullName = (user: any) => {
+  const fromMetadata =
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    `${user?.user_metadata?.first_name || ""} ${user?.user_metadata?.last_name || ""}`.trim();
+
+  if (fromMetadata && fromMetadata.trim()) return fromMetadata.trim();
+  if (user?.email) return user.email.split("@")[0];
+  return "User";
+};
+
 // 1. Google Login Action
 export async function signInWithGoogle() {
   const supabase = await createClient();
@@ -23,6 +46,94 @@ export async function signInWithGoogle() {
   if (data.url) {
     redirect(data.url); // Send user to Google
   }
+}
+
+export async function completeOAuthSignIn() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    return { ok: false, error: "Unable to resolve signed-in user" };
+  }
+
+  if (!user.id) {
+    return { ok: false, error: "Unable to resolve signed-in user" };
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", user.id)
+    .single();
+
+  if (profileError?.code === "PGRST116") {
+    return { ok: true, redirectTo: "/auth/select-role" };
+  }
+
+  if (profileError) {
+    return { ok: false, error: "Unable to read user profile" };
+  }
+
+  const roleFromProfile = normalizeRole(profile?.role);
+  if (!roleFromProfile) {
+    return { ok: true, redirectTo: "/auth/select-role" };
+  }
+
+  return {
+    ok: true,
+    redirectTo: getRoleRedirect(roleFromProfile),
+  };
+}
+
+export async function saveRoleFromProfileForm(
+  prevState: { error?: string },
+  formData: FormData,
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    return { error: "You must be signed in to continue." };
+  }
+
+  const role = normalizeRole(formData.get("role") as string);
+  if (!role) {
+    return { error: "Please choose Owner or Investor." };
+  }
+
+  const fullName =
+    ((formData.get("fullName") as string) || "").trim() || deriveFullName(user);
+
+  const { error: profileError } = await supabase.from("profiles").upsert(
+    [
+      {
+        user_id: user.id,
+        role,
+        full_name: fullName,
+      },
+    ],
+    { onConflict: "user_id" },
+  );
+
+  if (profileError) {
+    return { error: "Failed to save role. Please try again." };
+  }
+
+  await supabase.auth.updateUser({
+    data: {
+      ...(user.user_metadata || {}),
+      user_role: role,
+      full_name: fullName,
+    },
+  });
+
+  redirect(getRoleRedirect(role));
 }
 
 // 2. Email Login Action
@@ -43,11 +154,34 @@ export async function login(prevState: string | undefined, formData: FormData) {
     return "Invalid credentials"; // Return error to frontend
   }
 
-  // Get user role and redirect accordingly
-  const { data: { user } } = await supabase.auth.getUser();
-  const userRole = user?.user_metadata?.user_role || 'investor';
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  redirect(userRole === 'business_owner' ? "/dashboard" : "/investor-dashboard");
+  if (!user?.id) {
+    return "Unable to load user session";
+  }
+
+  const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("user_id", user.id)
+      .single();
+
+  if (profileError?.code === "PGRST116") {
+    redirect("/auth/select-role");
+  }
+
+  if (profileError) {
+    return "Unable to load profile";
+  }
+
+  const roleFromProfile = normalizeRole(profile?.role);
+  if (!roleFromProfile) {
+    redirect("/auth/select-role");
+  }
+
+  redirect(getRoleRedirect(roleFromProfile));
 }
 
 export async function signup(
@@ -63,7 +197,8 @@ export async function signup(
   const userRole = formData.get("userRole") as string;
 
   // 2. Validate role
-  if (!userRole || !['investor', 'business_owner'].includes(userRole)) {
+  const normalizedRole = normalizeRole(userRole);
+  if (!normalizedRole) {
     return { error: "Please select a valid account type" };
   }
 
@@ -72,7 +207,7 @@ export async function signup(
   const origin = (await headers()).get("origin");
 
   // 4. Call Supabase Sign Up
-  const { error } = await supabase.auth.signUp({
+  const { data: authData, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -80,7 +215,7 @@ export async function signup(
       emailRedirectTo: `${origin}/auth/callback`,
       data: {
         full_name: fullName,
-        user_role: userRole, // Store role in auth metadata
+        user_role: normalizedRole, // Store role in auth metadata
       },
     },
   });
@@ -90,8 +225,24 @@ export async function signup(
     return { error: error.message };
   }
 
-  // 5. Redirect based on role
-  redirect(userRole === 'business_owner' ? "/dashboard" : "/investor-dashboard");
+  // 5. Insert user profile row with user_id, full_name, and role
+  if (authData?.user?.id) {
+    const { error: profileError } = await supabase.from("profiles").insert([
+      {
+        user_id: authData.user.id,
+        full_name: fullName,
+        role: normalizedRole,
+      },
+    ]);
+
+    if (profileError) {
+      console.error("[signup] Profile insert error:", profileError.message);
+      // Don't fail signup if profile insert fails, just log it
+    }
+  }
+
+  // 6. Redirect based on role
+  redirect(getRoleRedirect(normalizedRole));
 }
 
 export async function logOut() {
@@ -129,7 +280,9 @@ async function ensureUserProfileExists(supabase: any, userId: string) {
 
 export async function saveCampaignToDb(formData: any) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
   await ensureUserProfileExists(supabase, user.id);
@@ -160,14 +313,24 @@ export async function saveCampaignToDb(formData: any) {
     product_demo_url: cidToUrl(formData.productDemoCid),
   };
 
-  console.log("[saveCampaignToDb] Inserting row:", JSON.stringify(row, null, 2));
+  console.log(
+    "[saveCampaignToDb] Inserting row:",
+    JSON.stringify(row, null, 2),
+  );
 
-  const { data, error } = await supabase.from("campaigns").insert([row]).select().single();
+  const { data, error } = await supabase
+    .from("campaigns")
+    .insert([row])
+    .select()
+    .single();
 
   if (error) {
     console.error("[saveCampaignToDb] Supabase error:", error.message);
     if (error.message?.includes("campaigns_owner_fkey")) {
-      return { error: "Unable to save campaign: your Supabase profile record is missing. Please complete your creator profile first." };
+      return {
+        error:
+          "Unable to save campaign: your Supabase profile record is missing. Please complete your creator profile first.",
+      };
     }
     return { error: error.message };
   }
@@ -180,11 +343,13 @@ export async function saveCampaignToDb(formData: any) {
 // Uses UPSERT so it works for both first-time create and subsequent updates
 export async function saveCreatorProfile(profileData: any) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
   // Get user role from auth metadata
-  const userRole = user.user_metadata?.user_role || 'investor';
+  const userRole = normalizeRole(user.user_metadata?.user_role) || "investor";
 
   // shafqaat — Helper to convert CID to full Pinata gateway URL
   const cidToUrl = (cid: string | null | undefined) =>
@@ -192,7 +357,7 @@ export async function saveCreatorProfile(profileData: any) {
 
   const row = {
     user_id: user.id,
-    user_role: userRole, // Add role to profile
+    role: userRole,
     // Basic info
     full_name: profileData.full_name ?? null,
     display_name: profileData.display_name ?? null,

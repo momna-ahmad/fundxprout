@@ -46,35 +46,6 @@ export default function Page() {
             />
           </div>
 
-          <div>
-            <label htmlFor="fullName" className="block text-xs font-semibold text-gray-300 mb-2 uppercase tracking-wider">
-              Full Name
-            </label>
-            <input
-              name="fullName"
-              type="text"
-              id="fullName"
-              className="w-full px-4 py-3 bg-[#0d1117] border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#6f42c1] focus:border-transparent transition text-sm"
-              placeholder="John Doe"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="userRole" className="block text-xs font-semibold text-gray-300 mb-2 uppercase tracking-wider">
-              Account Type
-            </label>
-            <select
-              name="userRole"
-              id="userRole"
-              className="w-full px-4 py-3 bg-[#0d1117] border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#6f42c1] focus:border-transparent transition text-sm"
-              required
-            >
-              <option value="" disabled selected>Select your account type</option>
-              <option value="investor">Investor - Browse and fund campaigns</option>
-              <option value="business_owner">Business Owner - Create and manage campaigns</option>
-            </select>
-          </div>
-
           {/* Fix: use state?.error from useActionState, not static initialState.error */}
           {state?.error && (
             <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2">
