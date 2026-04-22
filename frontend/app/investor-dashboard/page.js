@@ -1,11 +1,12 @@
 "use client";
 // Investor Dashboard: Browse campaigns, track investments, view portfolio
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   TrendingUp, Users, DollarSign, Target, Plus, Eye,
   BarChart3, Search, ChevronLeft, ChevronRight,
   UserCircle, Clock, CheckCircle, AlertCircle, Wallet,
-  PieChart, TrendingDown, Star,
+  PieChart, TrendingDown, Star, LogOut,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
@@ -13,6 +14,8 @@ import { getAllCampaigns } from "@/utils/supabase/getCampaigns";
 import { getMyProfile, calcProfileCompletion } from "@/utils/supabase/getProfile";
 import { ethers } from "ethers";
 import BusinessCampaignABI from "@/abis/BusinessCampaign.json";
+
+import MarketAnalytics from "@/components/market-analytics";
 import {
   checkNetwork,
   switchToSepolia,
@@ -33,6 +36,7 @@ function calcDaysLeft(createdAt, durationDays) {
 }
 
 export default function InvestorDashboardPage() {
+  const router = useRouter();
   // Active tab state
   const [activeTab, setActiveTab] = useState("browse");
 
@@ -142,6 +146,26 @@ export default function InvestorDashboardPage() {
 
   // Get unique categories
   const categories = ["all", ...new Set(campaigns.map(c => c.category).filter(Boolean))];
+
+  // Display name for greeting
+  const displayName =
+    profile?.display_name ||
+    profile?.full_name ||
+    user?.user_metadata?.full_name ||
+    user?.email?.split("@")[0] ||
+    "Investor";
+
+  // Handle logout
+  const handleLogout = async () => {
+    const supabase = createClient();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Logout error:", error);
+      alert("Failed to logout. Please try again.");
+      return;
+    }
+    router.push("/");
+  };
 
   // Check network on mount and when wallet changes
   useEffect(() => {
@@ -355,13 +379,6 @@ export default function InvestorDashboardPage() {
     { id: "profile", label: "Profile", icon: UserCircle },
   ];
 
-  const displayName =
-    profile?.display_name ||
-    profile?.full_name ||
-    user?.user_metadata?.full_name ||
-    user?.email?.split("@")[0] ||
-    "Investor";
-
   return (
     <div className="min-h-screen bg-[#181A2A]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-24">
@@ -377,7 +394,7 @@ export default function InvestorDashboardPage() {
             </p>
           </div>
 
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-4 items-end">
             {/* Network Status */}
             <div className="bg-[#1a2030] border border-white/5 rounded-xl px-4 py-2">
               <div className="flex items-center space-x-2">
@@ -414,6 +431,14 @@ export default function InvestorDashboardPage() {
                 )}
               </div>
             </div>
+            <button
+              onClick={handleLogout}
+              className="bg-[#6f42c1] hover:bg-[#5a3599] text-white px-4 py-2 rounded-xl font-semibold transition duration-200 flex items-center gap-2 text-sm border border-[#6f42c1] hover:border-[#5a3599]"
+              title="Logout"
+            >
+              <LogOut className="h-4 w-4" />
+              Logout
+            </button>
           </div>
         </div>
 
@@ -724,8 +749,8 @@ export default function InvestorDashboardPage() {
               <TrendingUp className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-xl font-bold text-white mb-2">Market Analytics</h3>
               <p className="text-gray-400 mb-6">Market trends, sector performance, and investment insights</p>
-              <p className="text-sm text-gray-500">Coming soon - Market analysis and investment trends</p>
-            </div>
+<MarketAnalytics></MarketAnalytics>    
+        </div>
           </div>
         )}
 

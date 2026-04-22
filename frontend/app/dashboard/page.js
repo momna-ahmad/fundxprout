@@ -1,5 +1,5 @@
 "use client";
-// shafqaat — Creator Dashboard: fully dynamic, reads real data from Supabase
+// shafqaat — business dashboard Dashboard: fully dynamic, reads real data from Supabase
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -11,6 +11,7 @@ import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import { getMyCampaigns } from "@/utils/supabase/getCampaigns";
 import { getMyProfile, calcProfileCompletion, getUserRole } from "@/utils/supabase/getProfile";
+import MarketAnalytics from "@/components/market-analytics";
 
 const ITEMS_PER_PAGE = 6; // shafqaat — campaigns per page in My Campaigns tab
 
@@ -106,8 +107,8 @@ export default function DashboardPage() {
     "Creator";
 
   return (
-    <div className="min-h-screen bg-[#181A2A]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-24">
+    <div className="min-h-screen bg-[#181A2A] ">
+      <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-24 m-6 ">
 
         {/* shafqaat — Dashboard header with real user name */}
         <div className="flex items-center justify-between mb-8">
@@ -484,7 +485,10 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
+                  
                 </div>
+                                  <MarketAnalytics></MarketAnalytics>    
+
               </div>
             )}
 
