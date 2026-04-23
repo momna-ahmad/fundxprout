@@ -414,7 +414,7 @@ export default function InvestorDashboardPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-black text-white">
-              {loading ? "Dashboard" : `Welcome, ${displayName}`}
+              {loading ? "Dashboard" : `Welcome, ${user.full_name}!`}
             </h1>
             <p className="text-gray-400 mt-1 text-sm">
               Discover opportunities and track your investments
@@ -477,11 +477,11 @@ export default function InvestorDashboardPage() {
               </div>
             </div>
             <button
-              onClick={handleLogout}
+              //onClick={handleLogout}
               className="bg-[#6f42c1] hover:bg-[#5a3599] text-white px-4 py-2 rounded-xl font-semibold transition duration-200 flex items-center gap-2 text-sm border border-[#6f42c1] hover:border-[#5a3599]"
               title="Logout"
             >
-              <LogOut className="h-4 w-4" />
+
               Logout
             </button>
           </div>
@@ -679,6 +679,20 @@ export default function InvestorDashboardPage() {
                           {parseFloat(
                             campaign.funding_goal || 0,
                           ).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Amount Pledged</span>
+                        <span className="text-white font-medium">
+                          {parseFloat(
+                            campaign.amount_pledged || 0,
+                          ).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Investors</span>
+                        <span className="text-white font-medium">
+                          {Number(campaign.investor_count || 0)}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">

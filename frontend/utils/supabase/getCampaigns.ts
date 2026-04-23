@@ -22,7 +22,51 @@ function normalizeCampaign(raw: any) {
         financials_url: raw.financials_url,
         use_of_funds_url: raw.use_of_funds_url,
         product_demo_url: raw.product_demo_url,
+        amount_pledged: raw.amount_pledged ?? "0",
+        investor_count: raw.investor_count ?? 0,
     };
+}
+
+// Attach live aggregate stats from investments table.
+async function attachCampaignStats(campaigns: any[]) {
+    if (!campaigns || campaigns.length === 0) return campaigns;
+
+    const supabase = createClient();
+    const campaignIds = campaigns.map((c) => c.id);
+
+    const { data, error } = await supabase
+        .from("investments")
+        .select("campaign_id, investor_id, amount")
+        .in("campaign_id", campaignIds)
+        .eq("status", "completed");
+
+    if (error) {
+        console.error("[attachCampaignStats] Supabase error:", error);
+        return campaigns;
+    }
+
+    const statsMap = new Map<string, { amount_pledged: number; investors: Set<string> }>();
+
+    for (const inv of data ?? []) {
+        const key = String(inv.campaign_id);
+        if (!statsMap.has(key)) {
+            statsMap.set(key, { amount_pledged: 0, investors: new Set() });
+        }
+        const entry = statsMap.get(key)!;
+        entry.amount_pledged += parseFloat(inv.amount ?? "0") || 0;
+        if (inv.investor_id) {
+            entry.investors.add(String(inv.investor_id));
+        }
+    }
+
+    return campaigns.map((campaign) => {
+        const stat = statsMap.get(String(campaign.id));
+        return {
+            ...campaign,
+            amount_pledged: stat ? String(stat.amount_pledged) : String(campaign.amount_pledged ?? "0"),
+            investor_count: stat ? stat.investors.size : Number(campaign.investor_count ?? 0),
+        };
+    });
 }
 
 
@@ -51,7 +95,7 @@ export async function getAllCampaigns() {
         
         // Normalize campaign data to ensure consistent field names
         const normalized = (data ?? []).map(normalizeCampaign);
-        return normalized;
+        return await attachCampaignStats(normalized);
     } catch (err) {
         console.error("[getAllCampaigns] Exception:", err);
         return [];
@@ -75,7 +119,9 @@ export async function getCampaignById(id: string) {
         }
 
         // Normalize the campaign data
-        return data ? normalizeCampaign(data) : null;
+        if (!data) return null;
+        const [campaignWithStats] = await attachCampaignStats([normalizeCampaign(data)]);
+        return campaignWithStats;
     } catch (err) {
         console.error("[getCampaignById] Exception:", err);
         return null;
@@ -98,7 +144,8 @@ export async function getCampaignsByCategory(category: string) {
             return [];
         }
 
-        return (data ?? []).map(normalizeCampaign);
+        const normalized = (data ?? []).map(normalizeCampaign);
+        return await attachCampaignStats(normalized);
     } catch (err) {
         console.error("[getCampaignsByCategory] Exception:", err);
         return [];
@@ -120,7 +167,7 @@ export async function getRecommendedCampaigns(limit: number = 2) {
         if (error || !data) return [];
 
         // Normalize campaigns
-        const normalized = data.map(normalizeCampaign);
+        const normalized = await attachCampaignStats(data.map(normalizeCampaign));
 
         // shafqaat — Scoring algorithm:
         // Score = recency bonus + goal size bonus
@@ -161,7 +208,8 @@ export async function getFeaturedCampaigns(limit: number = 4) {
 
         if (error || !data) return [];
         
-        return data.map(normalizeCampaign);
+        const normalized = data.map(normalizeCampaign);
+        return await attachCampaignStats(normalized);
     } catch (err) {
         console.error("[getFeaturedCampaigns] Exception:", err);
         return [];
@@ -189,7 +237,8 @@ export async function getMyCampaigns() {
             return [];
         }
 
-        return (data ?? []).map(normalizeCampaign);
+        const normalized = (data ?? []).map(normalizeCampaign);
+        return await attachCampaignStats(normalized);
     } catch (err) {
         console.error("[getMyCampaigns] Exception:", err);
         return [];

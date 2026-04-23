@@ -302,6 +302,8 @@ export default function CampaignDetailPage() {
 
     const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration ?? 30);
     const goal = parseFloat(campaign.funding_goal ?? 0).toFixed(4);
+    const pledgedAmount = parseFloat(campaign.amount_pledged ?? raisedAmount ?? 0);
+    const totalInvestors = Number(campaign.investor_count ?? investorCount ?? 0);
 
     // shafqaat — List of all IPFS documents to display as download links
     const documents = [
@@ -344,7 +346,7 @@ export default function CampaignDetailPage() {
                     <div className="lg:col-span-2 space-y-6">
 
                         <div>
-                            <span className="text-xs font-semibold text-[#a78bfa] uppercase tracking-widest capitalize">
+                            <span className="text-xs font-semibold text-[#a78bfa] uppercase tracking-widest">
                                 {campaign.category}
                             </span>
                             <h1 className="text-3xl font-black text-white mt-1 mb-3">
@@ -439,12 +441,18 @@ export default function CampaignDetailPage() {
                                     </p>
                                 </div>
 
-                                {/* shafqaat — Total invested so far */}
+                                {/* shafqaat — Campaign funding stats */}
                                 <div>
-                                    <p className="text-xs text-gray-400 mb-1">Amount Invested</p>
+                                    <p className="text-xs text-gray-400 mb-1">Amount Pledged</p>
                                     <p className="text-sm font-semibold text-white">
-                                        {raisedAmount.toFixed(4)} ETH
-                                        {investorCount > 0 && ` · ${investorCount} investor${investorCount === 1 ? "" : "s"}`}
+                                        {pledgedAmount.toFixed(4)} ETH
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <p className="text-xs text-gray-400 mb-1">Investor Count</p>
+                                    <p className="text-sm font-semibold text-white">
+                                        {totalInvestors}
                                     </p>
                                 </div>
                             </div>
