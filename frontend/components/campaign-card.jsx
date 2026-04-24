@@ -18,6 +18,8 @@ export default function CampaignCard({ campaign }) {
 	const image = campaign.image_url || "/placeholder-campaign.jpg";
 	const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration ?? 30);
 	const goal = parseFloat(campaign.funding_goal ?? 0).toFixed(2);
+	const pledged = parseFloat(campaign.amount_pledged ?? 0).toFixed(2);
+	const investorCount = Number(campaign.investor_count ?? 0);
 	const category = campaign.category ?? "General";
 
 	return (
@@ -55,6 +57,17 @@ export default function CampaignCard({ campaign }) {
 					<p className="text-xs text-gray-500 mb-3 line-clamp-2">
 						{campaign.description}
 					</p>
+
+					<div className="grid grid-cols-2 gap-2 mb-3 text-xs">
+						<div className="bg-white/5 rounded-lg px-2 py-1.5">
+							<p className="text-gray-500">Pledged</p>
+							<p className="text-white font-semibold">{pledged} ETH</p>
+						</div>
+						<div className="bg-white/5 rounded-lg px-2 py-1.5 text-right">
+							<p className="text-gray-500">Investors</p>
+							<p className="text-white font-semibold">{investorCount}</p>
+						</div>
+					</div>
 
 					{/* shafqaat — Bottom row: days left + goal */}
 					<div className="mt-auto flex items-center justify-between">

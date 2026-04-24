@@ -28,6 +28,8 @@ function getInitials(title = "") {
 function RecommendedCard({ campaign }) {
 	const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration);
 	const goal = parseFloat(campaign.funding_goal ?? 0).toFixed(2);
+	const pledged = parseFloat(campaign.amount_pledged ?? 0).toFixed(2);
+	const investorCount = Number(campaign.investor_count ?? 0);
 	const image = campaign.image_url;
 
 	return (
@@ -78,6 +80,10 @@ function RecommendedCard({ campaign }) {
 						</span>
 						<span className="text-sm font-bold text-[#a78bfa]">{goal} ETH</span>
 					</div>
+					<div className="mt-2 text-xs text-gray-400 flex items-center justify-between">
+						<span>Pledged: <span className="text-white">{pledged} ETH</span></span>
+						<span>Investors: <span className="text-white">{investorCount}</span></span>
+					</div>
 				</div>
 			</div>
 		</Link>
@@ -88,6 +94,8 @@ function RecommendedCard({ campaign }) {
 function SmallCampaignCard({ campaign }) {
 	const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration);
 	const goal = parseFloat(campaign.funding_goal ?? 0).toFixed(2);
+	const pledged = parseFloat(campaign.amount_pledged ?? 0).toFixed(2);
+	const investorCount = Number(campaign.investor_count ?? 0);
 	const image = campaign.image_url;
 
 	return (
@@ -108,6 +116,7 @@ function SmallCampaignCard({ campaign }) {
 				</div>
 				<div className="p-3 flex-1 flex flex-col">
 					<p className="font-semibold text-white text-xs line-clamp-2 mb-1">{campaign.title}</p>
+					<p className="text-[10px] text-gray-500 mb-1">{pledged} ETH pledged • {investorCount} investors</p>
 					<div className="flex items-center justify-between mt-auto">
 						<span className="text-[10px] text-gray-500">{daysLeft > 0 ? `${daysLeft}d left` : "Ended"}</span>
 						<span className="text-xs font-bold text-[#a78bfa]">{goal} ETH</span>

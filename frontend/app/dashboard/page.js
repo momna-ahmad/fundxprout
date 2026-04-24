@@ -23,6 +23,7 @@ import { createClient } from "@/utils/supabase/client";
 import { getMyCampaigns } from "@/utils/supabase/getCampaigns";
 import { getMyProfile, calcProfileCompletion, getUserRole } from "@/utils/supabase/getProfile";
 import MarketAnalytics from "@/components/market-analytics";
+import Navbar from "@/components/navbar";
 
 const ITEMS_PER_PAGE = 6; // shafqaat — campaigns per page in My Campaigns tab
 
@@ -124,8 +125,8 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-[#181A2A] ">
+      <Navbar />
       <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-24 m-6 ">
-
         {/* shafqaat — Dashboard header with real user name */}
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -329,6 +330,16 @@ export default function DashboardPage() {
                               value: `${goal.toFixed(3)} ETH`,
                               accent: false,
                             },
+                              {
+                                label: "Amount Pledged",
+                                value: `${parseFloat(campaign.amount_pledged ?? "0").toFixed(3)} ETH`,
+                                accent: false,
+                              },
+                              {
+                                label: "Investors",
+                                value: Number(campaign.investor_count ?? 0),
+                                accent: false,
+                              },
                             {
                               label: "Category",
                               value: campaign.category ?? "—",
@@ -362,7 +373,16 @@ export default function DashboardPage() {
                         <div className="w-full bg-white/10 rounded-full h-1.5 mb-4">
                           <div
                             className="bg-[#6f42c1] h-1.5 rounded-full"
-                            style={{ width: "0%" }}
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                (parseFloat(campaign.funding_goal ?? "0") > 0
+                                  ? (parseFloat(campaign.amount_pledged ?? "0") /
+                                      parseFloat(campaign.funding_goal ?? "0")) *
+                                    100
+                                  : 0),
+                              )}%`,
+                            }}
                           />
                         </div>
 
@@ -438,6 +458,8 @@ export default function DashboardPage() {
                         {[
                           "Campaign",
                           "Goal (ETH)",
+                          "Pledged (ETH)",
+                          "Investors",
                           "Category",
                           "Days Left",
                           "Status",
@@ -470,6 +492,14 @@ export default function DashboardPage() {
                               {parseFloat(campaign.funding_goal ?? "0").toFixed(
                                 3,
                               )}
+                            </td>
+                            <td className="py-4 px-4 text-gray-300">
+                              {parseFloat(campaign.amount_pledged ?? "0").toFixed(
+                                3,
+                              )}
+                            </td>
+                            <td className="py-4 px-4 text-gray-300">
+                              {Number(campaign.investor_count ?? 0)}
                             </td>
                             <td className="py-4 px-4 text-gray-300 capitalize">
                               {campaign.category ?? "—"}
