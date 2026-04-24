@@ -41,6 +41,7 @@ import {
   getTotalInvestedAmount,
 } from "@/utils/investmentUtils";
 import Navbar from "@/components/navbar";
+import RiskBadge from "@/components/RiskBadge";
 
 const ITEMS_PER_PAGE = 9; // campaigns per page in Browse Campaigns tab
 
@@ -264,6 +265,15 @@ export default function InvestorDashboardPage() {
     } finally {
       setIsConnecting(false);
     }
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    setUser(null);
+    setWalletAddress(null);
+    router.push("/");
   };
 
   // Validate investment prerequisites
@@ -640,6 +650,9 @@ export default function InvestorDashboardPage() {
                         className="w-full h-full object-cover"
                       />
                     )}
+                    <div className="absolute top-3 left-3">
+                      <RiskBadge score={campaign.risk_score} />
+                    </div>
                     <div className="absolute top-3 right-3">
                       <span
                         className={`px-2 py-1 rounded-full text-xs font-medium ${

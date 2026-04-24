@@ -1,0 +1,7 @@
+google-genai
+groq
+supabase
+pandas
+scikit-learn
+joblib
+python-dotenv

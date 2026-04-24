@@ -22,6 +22,18 @@ function normalizeCampaign(raw: any) {
         financials_url: raw.financials_url,
         use_of_funds_url: raw.use_of_funds_url,
         product_demo_url: raw.product_demo_url,
+
+        // AI Risk Assessment Fields
+        risk_score: raw.risk_score ?? null,
+        ai_prep_time_days: raw.ai_prep_time_days ?? null,
+        problem_statement: raw.problem_statement ?? null,
+        proof_of_capability: raw.proof_of_capability ?? null,
+        idea_clarity: raw.idea_clarity ?? null,
+        differentiation: raw.differentiation ?? null,
+        gtm_strategy: raw.gtm_strategy ?? null,
+        business_model: raw.business_model ?? null,
+        vagueness: raw.vagueness ?? null,
+        credibility: raw.credibility ?? null,
     };
 }
 

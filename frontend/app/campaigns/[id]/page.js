@@ -19,6 +19,7 @@ import {
     recordInvestment,
     getInvestmentsByCampaign,
 } from "@/utils/investmentUtils";
+import RiskAssessmentPanel from "@/components/RiskAssessmentPanel";
 
 // shafqaat — Helper: calculate days left from created_at + duration
 function calcDaysLeft(createdAt, durationDays) {
@@ -387,6 +388,9 @@ export default function CampaignDetailPage() {
                                 </div>
                             </div>
                         )}
+
+                        {/* AI Risk Assessment Panel */}
+                        <RiskAssessmentPanel campaign={campaign} />
 
                         {/* shafqaat — Blockchain transaction verification link */}
                         {campaign.transaction_hash && (
