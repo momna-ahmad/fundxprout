@@ -21,6 +21,7 @@ import {
   PieChart,
   TrendingDown,
   Star,
+  LogOut,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
@@ -415,6 +416,9 @@ export default function InvestorDashboardPage() {
     { id: "analytics", label: "Market Analytics", icon: TrendingUp },
     { id: "profile", label: "Profile", icon: UserCircle },
   ];
+
+  // Derive display name from user or profile
+  const displayName = profile?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Investor';
 
   return (
     <div className="min-h-screen bg-[#181A2A]">
