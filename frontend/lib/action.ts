@@ -341,6 +341,88 @@ export async function saveCampaignToDb(formData: any) {
 
 // shafqaat — Save/update creator profile (KYC + KYB + basic info)
 // Uses UPSERT so it works for both first-time create and subsequent updates
+// Save Draft Campaign (without blockchain deployment)
+export async function saveDraftCampaign(draftData: any) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  await ensureUserProfileExists(supabase, user.id);
+
+  // Build the row for draft campaign
+  const row = {
+    title: draftData.title,
+    description: draftData.description,
+    funding_goal: draftData.goal,
+    duration: draftData.duration,
+    category: draftData.category,
+    owner: user.id,
+    image_url: draftData.imageUrl ?? null,
+    status: "draft", // Mark as draft
+    // ── IPFS CIDs (optional for drafts) ─────────────
+    // pitch_deck_cid: draftData.pitchDeckCid ?? null,
+    // business_plan_cid: draftData.businessPlanCid ?? null,
+    // financials_cid: draftData.financialsCid ?? null,
+    // use_of_funds_cid: draftData.useOfFundsCid ?? null,
+    // product_demo_cid: draftData.productDemoCid ?? null,
+    // ── IPFS gateway URLs ─────────────────────────
+    // pitch_deck_url: cidToUrl(draftData.pitchDeckCid),
+    // business_plan_url: cidToUrl(draftData.businessPlanCid),
+    // financials_url: cidToUrl(draftData.financialsCid),
+    // use_of_funds_url: cidToUrl(draftData.useOfFundsCid),
+    // product_demo_url: cidToUrl(draftData.productDemoCid),
+  };
+
+  // When editing an existing draft, update that row instead of inserting a new one
+  if (draftData.campaignId) {
+    console.log(
+      "[saveDraftCampaign] Updating draft row:",
+      JSON.stringify(row, null, 2),
+    );
+
+    const { error } = await supabase
+      .from("campaigns")
+      .update(row)
+      .eq("id", draftData.campaignId)
+      .eq("owner", user.id);
+
+    if (error) {
+      console.error("[saveDraftCampaign] Supabase update error:", error.message);
+      return { error: error.message };
+    }
+
+    console.log("[saveDraftCampaign] Updated draft campaign id:", draftData.campaignId);
+    return { success: true, campaignId: draftData.campaignId };
+  }
+
+  console.log(
+    "[saveDraftCampaign] Inserting draft row:",
+    JSON.stringify(row, null, 2),
+  );
+
+  const { data, error } = await supabase
+    .from("campaigns")
+    .insert([row])
+    .select()
+    .single();
+
+  if (error) {
+    console.error("[saveDraftCampaign] Supabase error:", error.message);
+    if (error.message?.includes("campaigns_owner_fkey")) {
+      return {
+        error:
+          "Unable to save draft: your Supabase profile record is missing. Please complete your creator profile first.",
+      };
+    }
+    return { error: error.message };
+  }
+
+  console.log("[saveDraftCampaign] Saved draft campaign id:", data?.id);
+  return { success: true, campaignId: data?.id };
+}
+
 export async function saveCreatorProfile(profileData: any) {
   const supabase = await createClient();
   const {

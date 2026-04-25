@@ -17,6 +17,7 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
+  Edit2,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
@@ -34,6 +35,33 @@ function calcDaysLeft(createdAt, durationDays) {
   );
   const diff = Math.ceil((deadline - new Date()) / (1000 * 60 * 60 * 24));
   return diff > 0 ? diff : 0;
+}
+
+// shafqaat — Get status styling based on campaign status
+function getStatusStyle(status) {
+  const statusMap = {
+    draft: { bg: "bg-yellow-500/20", text: "text-yellow-400", label: "Draft" },
+    launched: { bg: "bg-[#28a745]/20", text: "text-[#28a745]", label: "Launched" },
+    ended: { bg: "bg-gray-500/20", text: "text-gray-400", label: "Ended" },
+    // completed: { bg: "bg-blue-500/20", text: "text-blue-400", label: "Completed" },
+    // cancelled: { bg: "bg-red-500/20", text: "text-red-400", label: "Cancelled" },
+  };
+  return statusMap[status?.toLowerCase()] || { bg: "bg-white/10", text: "text-gray-400", label: status || "Unknown" };
+}
+
+function buildDraftEditHref(campaign) {
+  const params = new URLSearchParams({
+    idedit: "true",
+    campaignId: String(campaign.id ?? ""),
+    title: String(campaign.title ?? ""),
+    description: String(campaign.description ?? ""),
+    goal: String(campaign.funding_goal ?? ""),
+    duration: String(campaign.duration ?? ""),
+    category: String(campaign.category ?? ""),
+    image_url: String(campaign.image_url ?? ""),
+  });
+
+  return `/create-campaign?${params.toString()}`;
 }
 
 export default function DashboardPage() {
@@ -301,7 +329,7 @@ export default function DashboardPage() {
                       campaign.duration,
                     );
                     const goal = parseFloat(campaign.funding_goal ?? "0");
-                    const isActive = daysLeft > 0;
+                    const statusStyle = getStatusStyle(campaign.status);
 
                     return (
                       <div
@@ -314,12 +342,10 @@ export default function DashboardPage() {
                           </h3>
                           <span
                             className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              isActive
-                                ? "bg-[#28a745]/20 text-[#28a745]"
-                                : "bg-white/10 text-gray-400"
-                            }`}
+                              statusStyle.bg
+                            } ${statusStyle.text}`}
                           >
-                            {isActive ? "Active" : "Ended"}
+                            {statusStyle.label}
                           </span>
                         </div>
 
@@ -387,6 +413,15 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="flex gap-4">
+                          {campaign.status?.toLowerCase() === "draft" && (
+                            <Link
+                              href={buildDraftEditHref(campaign)}
+                              className="flex items-center gap-1.5 text-yellow-400 hover:text-yellow-300 text-xs font-medium transition-colors"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                              Edit Draft
+                            </Link>
+                          )}
                           <Link
                             href={`/campaigns/${campaign.id}`}
                             className="flex items-center gap-1.5 text-[#a78bfa] hover:text-white text-xs font-medium transition-colors"
@@ -480,6 +515,7 @@ export default function DashboardPage() {
                           campaign.created_at,
                           campaign.duration,
                         );
+                        const statusStyle = getStatusStyle(campaign.status);
                         return (
                           <tr
                             key={campaign.id}
@@ -510,21 +546,29 @@ export default function DashboardPage() {
                             <td className="py-4 px-4">
                               <span
                                 className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                  daysLeft > 0
-                                    ? "bg-[#28a745]/20 text-[#28a745]"
-                                    : "bg-white/10 text-gray-400"
-                                }`}
+                                  statusStyle.bg
+                                } ${statusStyle.text}`}
                               >
-                                {daysLeft > 0 ? "Active" : "Ended"}
+                                {statusStyle.label}
                               </span>
                             </td>
                             <td className="py-4 px-4">
-                              <Link
-                                href={`/campaigns/${campaign.id}`}
-                                className="text-[#a78bfa] hover:text-white text-xs font-medium transition-colors"
-                              >
-                                View
-                              </Link>
+                              <div className="flex gap-2">
+                                {campaign.status?.toLowerCase() === "draft" && (
+                                  <Link
+                                    href={buildDraftEditHref(campaign)}
+                                    className="text-yellow-400 hover:text-yellow-300 text-xs font-medium transition-colors"
+                                  >
+                                    Edit
+                                  </Link>
+                                )}
+                                <Link
+                                  href={`/campaigns/${campaign.id}`}
+                                  className="text-[#a78bfa] hover:text-white text-xs font-medium transition-colors"
+                                >
+                                  View
+                                </Link>
+                              </div>
                             </td>
                           </tr>
                         );

@@ -80,6 +80,7 @@ export async function getAllCampaigns() {
         const { data, error } = await supabase
             .from("campaigns")
             .select(`*`)
+            .eq("status", "launched")
             .order("created_at", { ascending: false }); // newest first
 
         if (error) {
@@ -137,6 +138,7 @@ export async function getCampaignsByCategory(category: string) {
             .from("campaigns")
             .select(`*`)
             .eq("category", category.toLowerCase())
+            .eq("status", "launched")
             .order("created_at", { ascending: false });
 
         if (error) {
@@ -161,6 +163,7 @@ export async function getRecommendedCampaigns(limit: number = 2) {
         const { data, error } = await supabase
             .from("campaigns")
             .select("*")
+            .eq("status", "launched")
             .order("created_at", { ascending: false })
             .limit(20); // fetch 20, score them, return top `limit`
 
@@ -201,6 +204,7 @@ export async function getFeaturedCampaigns(limit: number = 4) {
         const { data, error } = await supabase
             .from("campaigns")
             .select("*")
+            .eq("status", "launched")
             .not("image_url", "is", null)       // shafqaat — exclude NULL image_url
             .neq("image_url", "")               // shafqaat — also exclude empty string
             .order("created_at", { ascending: false })
