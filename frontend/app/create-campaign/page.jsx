@@ -1,8 +1,8 @@
 // frontend/app/create-campaign/page.js
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useActionState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { launchBusinessCampaign } from "@/lib/launchCampaign";
 import { saveDraftCampaign } from "@/lib/action";
 import {
@@ -133,6 +133,7 @@ export function DocUpload({ docKey, label, hint, accept, required, onUploaded })
         )}
 
         <input
+          data-testid="file-input"
           id={`doc-${docKey}`}
           type="file"
           accept={accept}
@@ -153,11 +154,31 @@ export function DocUpload({ docKey, label, hint, accept, required, onUploaded })
   );
 }
 
-export function CreateCampaignForm({ draftCampaign = null }) {
+export function CreateCampaignForm() {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(
     launchBusinessCampaign,
     null
   );
+
+  const searchParams = useSearchParams();
+
+  const draftCampaign = useMemo(() => {
+  const isEditMode = searchParams.get("idedit") === "true";
+  const campaignId = searchParams.get("campaignId");
+
+  if (!isEditMode || !campaignId) return null;
+
+  return {
+    id: campaignId,
+    title: searchParams.get("title") ?? "",
+    description: searchParams.get("description") ?? "",
+    funding_goal: searchParams.get("goal") ?? "",
+    duration: searchParams.get("duration") ?? "",
+    category: searchParams.get("category") ?? "",
+    image_url: searchParams.get("image_url") ?? "",
+  };
+}, [searchParams]);
 
   const [formData, setFormData] = useState(() =>
     getInitialFormState(draftCampaign),
@@ -183,6 +204,18 @@ export function CreateCampaignForm({ draftCampaign = null }) {
     setFormData(getInitialFormState(draftCampaign));
     setImageUrl(draftCampaign?.image_url ?? "");
   }, [draftCampaign]);
+
+  useEffect(() => {
+    if (state?.success) {
+      router.push("/dashboard");
+    }
+  }, [state, router]);
+
+  useEffect(() => {
+    if (state?.error) {
+      alert(state.error);
+    }
+  }, [state]);
 
   const handleDocUploaded = (key, cid) =>
     setDocCids((prev) => ({ ...prev, [key]: cid }));
@@ -246,21 +279,8 @@ export function CreateCampaignForm({ draftCampaign = null }) {
         throw new Error(result.error);
       }
 
-      setDraftMessage({ type: "success", text: `Draft saved successfully! Campaign ID: ${result.campaignId}` });
-      
-      // Reset form after successful save
-      setTimeout(() => {
-        setFormData(getInitialFormState(draftCampaign));
-        setImageUrl(draftCampaign?.image_url ?? "");
-        setDocCids({
-          pitch_deck_cid: "",
-          business_plan_cid: "",
-          financials_cid: "",
-          use_of_funds_cid: "",
-          product_demo_cid: "",
-        });
-        setDraftMessage("");
-      }, 2000);
+      router.push("/dashboard");
+      return;
     } catch (err) {
       setDraftMessage({ type: "error", text: err.message });
     } finally {
@@ -285,12 +305,6 @@ export function CreateCampaignForm({ draftCampaign = null }) {
     <div className="min-h-screen bg-[#181A2A] py-8 pt-24">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-[#1a2030] rounded-3xl border border-white/5 p-8 space-y-8">
-
-          {state?.error && (
-            <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-sm">
-              {state.error}
-            </div>
-          )}
 
           {draftMessage && (
             <div className={`p-4 rounded-xl text-sm ${
@@ -478,22 +492,14 @@ export function CreateCampaignForm({ draftCampaign = null }) {
 
 // Default route page render (create flow)
 export default function CreateCampaignPage() {
-  const searchParams = useSearchParams();
 
-  const isEditMode = searchParams.get("idedit") === "true";
-  const campaignId = searchParams.get("campaignId");
-
-  const draftCampaign = isEditMode && campaignId
-    ? {
-        id: campaignId,
-        title: searchParams.get("title") ?? "",
-        description: searchParams.get("description") ?? "",
-        funding_goal: searchParams.get("goal") ?? "",
-        duration: searchParams.get("duration") ?? "",
-        category: searchParams.get("category") ?? "",
-        image_url: searchParams.get("image_url") ?? "",
-      }
-    : null;
-
-  return <CreateCampaignForm draftCampaign={draftCampaign} />;
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#181A2A] flex items-center justify-center text-white">
+        Loading Form...
+      </div>
+    }>
+      <CreateCampaignForm />
+    </Suspense>
+  );
 }
