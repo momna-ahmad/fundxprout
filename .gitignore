@@ -1,1 +1,18 @@
 node_modules
+
+# Environment files — never commit secrets
+.env
+.env.local
+.env*.local
+ai/.env
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Next.js
+.next/
+out/

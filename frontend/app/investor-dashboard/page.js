@@ -21,6 +21,7 @@ import {
   PieChart,
   TrendingDown,
   Star,
+  LogOut,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
@@ -41,6 +42,7 @@ import {
   getTotalInvestedAmount,
 } from "@/utils/investmentUtils";
 import Navbar from "@/components/navbar";
+import RiskBadge from "@/components/RiskBadge";
 
 const ITEMS_PER_PAGE = 9; // campaigns per page in Browse Campaigns tab
 
@@ -266,6 +268,15 @@ export default function InvestorDashboardPage() {
     }
   };
 
+  // Handle logout
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    setUser(null);
+    setWalletAddress(null);
+    router.push("/");
+  };
+
   // Validate investment prerequisites
   const validateInvestmentPrerequisites = () => {
     setInvestmentError(null);
@@ -405,6 +416,9 @@ export default function InvestorDashboardPage() {
     { id: "analytics", label: "Market Analytics", icon: TrendingUp },
     { id: "profile", label: "Profile", icon: UserCircle },
   ];
+
+  // Derive display name from user or profile
+  const displayName = profile?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Investor';
 
   return (
     <div className="min-h-screen bg-[#181A2A]">
@@ -640,6 +654,9 @@ export default function InvestorDashboardPage() {
                         className="w-full h-full object-cover"
                       />
                     )}
+                    <div className="absolute top-3 left-3">
+                      <RiskBadge score={campaign.risk_score} />
+                    </div>
                     <div className="absolute top-3 right-3">
                       <span
                         className={`px-2 py-1 rounded-full text-xs font-medium ${
