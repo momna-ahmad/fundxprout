@@ -1,13 +1,29 @@
 // frontend/app/create-campaign/page.js
 "use client";
-import { useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useActionState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { launchBusinessCampaign } from "@/lib/launchCampaign";
+import { saveDraftCampaign } from "@/lib/action";
 import {
   Upload, Target, Calendar, DollarSign,
   Loader2, CheckCircle, FileText, AlertCircle,
 } from "lucide-react";
 import Image from "next/image";
+
+function getInitialFormState(draftCampaign) {
+  return {
+    title: draftCampaign?.title ?? "",
+    description: draftCampaign?.description ?? "",
+    goal:
+      draftCampaign?.goal ??
+      draftCampaign?.funding_goal ??
+      "",
+    duration: draftCampaign?.duration ?? "",
+    category: draftCampaign?.category ?? "",
+    image: "null",
+  };
+}
 
 // ── Document upload field config (international standard) ──────────────────
 const CAMPAIGN_DOCS = [
@@ -49,7 +65,7 @@ const CAMPAIGN_DOCS = [
 ];
 
 // ── Single document upload widget ──────────────────────────────────────────
-function DocUpload({ docKey, label, hint, accept, required, onUploaded }) {
+export function DocUpload({ docKey, label, hint, accept, required, onUploaded }) {
   const [cid, setCid] = useState("");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -117,6 +133,7 @@ function DocUpload({ docKey, label, hint, accept, required, onUploaded }) {
         )}
 
         <input
+          data-testid="file-input"
           id={`doc-${docKey}`}
           type="file"
           accept={accept}
@@ -137,16 +154,35 @@ function DocUpload({ docKey, label, hint, accept, required, onUploaded }) {
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────
-export default function CreateCampaignPage() {
+export function CreateCampaignForm() {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(
     launchBusinessCampaign,
     null
   );
 
-  const [formData, setFormData] = useState({
-    title: "", description: "", goal: "", duration: "", category: "",image:"null"
-  });
+  const searchParams = useSearchParams();
+
+  const draftCampaign = useMemo(() => {
+  const isEditMode = searchParams.get("idedit") === "true";
+  const campaignId = searchParams.get("campaignId");
+
+  if (!isEditMode || !campaignId) return null;
+
+  return {
+    id: campaignId,
+    title: searchParams.get("title") ?? "",
+    description: searchParams.get("description") ?? "",
+    funding_goal: searchParams.get("goal") ?? "",
+    duration: searchParams.get("duration") ?? "",
+    category: searchParams.get("category") ?? "",
+    image_url: searchParams.get("image_url") ?? "",
+  };
+}, [searchParams]);
+
+  const [formData, setFormData] = useState(() =>
+    getInitialFormState(draftCampaign),
+  );
 
   // Track CIDs from each doc widget
   const [docCids, setDocCids] = useState({
@@ -158,9 +194,28 @@ export default function CreateCampaignPage() {
   });
 
   // Campaign cover image (Cloudinary — unchanged from before)
-  const [imageUrl, setImageUrl] = useState("");
+  const [imageUrl, setImageUrl] = useState(draftCampaign?.image_url ?? "");
   const [imageUploading, setImageUploading] = useState(false);
   const [imageUploadError, setImageUploadError] = useState("");
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftMessage, setDraftMessage] = useState("");
+
+  useEffect(() => {
+    setFormData(getInitialFormState(draftCampaign));
+    setImageUrl(draftCampaign?.image_url ?? "");
+  }, [draftCampaign]);
+
+  useEffect(() => {
+    if (state?.success) {
+      router.push("/dashboard");
+    }
+  }, [state, router]);
+
+  useEffect(() => {
+    if (state?.error) {
+      alert(state.error);
+    }
+  }, [state]);
 
   const handleDocUploaded = (key, cid) =>
     setDocCids((prev) => ({ ...prev, [key]: cid }));
@@ -190,6 +245,49 @@ export default function CreateCampaignPage() {
     }
   };
 
+  const handleSaveDraft = async (e) => {
+    e.preventDefault();
+    setDraftSaving(true);
+    setDraftMessage("");
+
+    try {
+      // Validate required fields
+      if (!formData.title.trim()) throw new Error("Campaign title is required");
+      if (!formData.description.trim()) throw new Error("Campaign description is required");
+      if (!formData.goal) throw new Error("Funding goal is required");
+      if (!formData.duration) throw new Error("Campaign duration is required");
+      if (!formData.category) throw new Error("Category is required");
+      if (!imageUrl) throw new Error("Campaign cover image is required");
+
+      // Call server action to save draft
+      const result = await saveDraftCampaign({
+        campaignId: draftCampaign?.id,
+        title: formData.title,
+        description: formData.description,
+        goal: formData.goal,
+        duration: formData.duration,
+        category: formData.category,
+        imageUrl: imageUrl,
+        pitchDeckCid: docCids.pitch_deck_cid,
+        businessPlanCid: docCids.business_plan_cid,
+        financialsCid: docCids.financials_cid,
+        useOfFundsCid: docCids.use_of_funds_cid,
+        productDemoCid: docCids.product_demo_cid,
+      });
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      router.push("/dashboard");
+      return;
+    } catch (err) {
+      setDraftMessage({ type: "error", text: err.message });
+    } finally {
+      setDraftSaving(false);
+    }
+  };
+
   // Check all required docs are uploaded before allowing submit
   const requiredDocsMissing = CAMPAIGN_DOCS.filter(
     (d) => d.required && !docCids[d.key]
@@ -208,9 +306,13 @@ export default function CreateCampaignPage() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-[#1a2030] rounded-3xl border border-white/5 p-8 space-y-8">
 
-          {state?.error && (
-            <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-sm">
-              {state.error}
+          {draftMessage && (
+            <div className={`p-4 rounded-xl text-sm ${
+              draftMessage.type === "success"
+                ? "bg-green-500/10 border border-green-500/20 text-green-400"
+                : "bg-red-500/10 border border-red-500/20 text-red-400"
+            }`}>
+              {draftMessage.text}
             </div>
           )}
 
@@ -222,6 +324,9 @@ export default function CreateCampaignPage() {
           </div>
 
           <form action={formAction} className="space-y-6">
+            {draftCampaign?.id && (
+              <input type="hidden" name="campaign_id" value={draftCampaign.id} />
+            )}
 
             {/* ── Basic Info ─────────────────────────────────── */}
             <div>
@@ -364,15 +469,37 @@ export default function CreateCampaignPage() {
               </button>
               <button
                 type="button"
-                disabled={isPending}
-                className="px-6 py-3 border border-white/10 text-gray-300 hover:text-white disabled:opacity-50 rounded-full transition text-sm font-semibold"
+                onClick={handleSaveDraft}
+                disabled={draftSaving || imageUploading}
+                className="px-6 py-3 border border-white/10 text-gray-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition text-sm font-semibold flex items-center gap-2"
               >
-                Save as Draft
+                {draftSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving Draft…
+                  </>
+                ) : (
+                  "Save as Draft"
+                )}
               </button>
             </div>
           </form>
         </div>
       </div>
     </div>
+  );
+}
+
+// Default route page render (create flow)
+export default function CreateCampaignPage() {
+
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#181A2A] flex items-center justify-center text-white">
+        Loading Form...
+      </div>
+    }>
+      <CreateCampaignForm />
+    </Suspense>
   );
 }

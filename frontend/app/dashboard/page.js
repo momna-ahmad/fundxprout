@@ -17,12 +17,12 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
+  Edit2,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import { getMyCampaigns } from "@/utils/supabase/getCampaigns";
 import { getMyProfile, calcProfileCompletion, getUserRole } from "@/utils/supabase/getProfile";
-import MarketAnalytics from "@/components/market-analytics";
 import Navbar from "@/components/navbar";
 
 const ITEMS_PER_PAGE = 6; // shafqaat — campaigns per page in My Campaigns tab
@@ -34,6 +34,33 @@ function calcDaysLeft(createdAt, durationDays) {
   );
   const diff = Math.ceil((deadline - new Date()) / (1000 * 60 * 60 * 24));
   return diff > 0 ? diff : 0;
+}
+
+// shafqaat — Get status styling based on campaign status
+function getStatusStyle(status) {
+  const statusMap = {
+    draft: { bg: "bg-yellow-500/20", text: "text-yellow-400", label: "Draft" },
+    launched: { bg: "bg-[#28a745]/20", text: "text-[#28a745]", label: "Launched" },
+    ended: { bg: "bg-gray-500/20", text: "text-gray-400", label: "Ended" },
+    // completed: { bg: "bg-blue-500/20", text: "text-blue-400", label: "Completed" },
+    // cancelled: { bg: "bg-red-500/20", text: "text-red-400", label: "Cancelled" },
+  };
+  return statusMap[status?.toLowerCase()] || { bg: "bg-white/10", text: "text-gray-400", label: status || "Unknown" };
+}
+
+function buildDraftEditHref(campaign) {
+  const params = new URLSearchParams({
+    idedit: "true",
+    campaignId: String(campaign.id ?? ""),
+    title: String(campaign.title ?? ""),
+    description: String(campaign.description ?? ""),
+    goal: String(campaign.funding_goal ?? ""),
+    duration: String(campaign.duration ?? ""),
+    category: String(campaign.category ?? ""),
+    image_url: String(campaign.image_url ?? ""),
+  });
+
+  return `/create-campaign?${params.toString()}`;
 }
 
 export default function DashboardPage() {
@@ -85,12 +112,12 @@ export default function DashboardPage() {
 
   // shafqaat — Compute real stats from the fetched campaigns
   const stats = {
-    totalGoal: campaigns.reduce(
-      (s, c) => s + parseFloat(c.funding_goal ?? "0"),
+    totalReceived: campaigns.reduce(
+      (s, c) => s + parseFloat(c.amount_pledged ?? "0"),
       0,
     ),
     activeCampaigns: campaigns.filter(
-      (c) => calcDaysLeft(c.created_at, c.duration) > 0,
+      (c) => c.status?.toLowerCase() === "launched",
     ).length,
     totalCampaigns: campaigns.length,
     profileCompletion: calcProfileCompletion(profile),
@@ -126,7 +153,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#181A2A] ">
       <Navbar />
-      <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-24 m-6 ">
+      <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pt-20">
         {/* shafqaat — Dashboard header with real user name */}
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -149,44 +176,45 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-        <Link
-          href="/create-campaign"
-          className="bg-[#6f42c1] hover:bg-[#5a3599] text-white px-6 py-3 rounded-full font-semibold transition duration-200 flex items-center gap-2 text-sm"
-        >
-          <Plus className="h-4 w-4" />
-          New Campaign
-        </Link>
-      </div>
-
-      {/* shafqaat — Profile completion banner (only if incomplete) */}
-      {!loading && stats.profileCompletion < 100 && (
-        <div className="mb-6 bg-[#6f42c1]/10 border border-[#6f42c1]/30 rounded-2xl p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-[#a78bfa] shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-white">
-                Profile {stats.profileCompletion}% complete
-              </p>
-              <p className="text-xs text-gray-400">
-                Complete your KYC/KYB to unlock campaign publishing trust badges
-              </p>
-            </div>
-          </div>
+        <div className="mb-6 grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-4 items-stretch">
           <Link
-            href="/profile"
-            className="shrink-0 text-xs font-semibold text-white bg-[#6f42c1] hover:bg-[#5a3599] px-4 py-2 rounded-full transition"
+            href="/create-campaign"
+            className="w-full sm:w-fit bg-[#6f42c1] hover:bg-[#5a3599] text-white px-4 py-2.5 rounded-full font-semibold transition duration-200 inline-flex items-center justify-center gap-2 text-sm"
           >
-            Complete Profile →
+            <Plus className="h-4 w-4" />
+            New Campaign
           </Link>
+
+          {/* shafqaat — Profile completion banner (only if incomplete) */}
+          {!loading && stats.profileCompletion < 100 && (
+            <div className="bg-[#6f42c1]/10 border border-[#6f42c1]/30 rounded-2xl p-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="h-5 w-5 text-[#a78bfa] shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-white">
+                    Profile {stats.profileCompletion}% complete
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    Complete your KYC/KYB to unlock campaign publishing trust badges
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/profile"
+                className="shrink-0 text-xs font-semibold text-white bg-[#6f42c1] hover:bg-[#5a3599] px-4 py-2 rounded-full transition"
+              >
+                Complete Profile →
+              </Link>
+            </div>
+          )}
         </div>
-      )}
 
       {/* shafqaat — Stats cards: real data computed from Supabase */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
           {
-            label: "Total Goal (ETH)",
-            value: loading ? "…" : `${stats.totalGoal.toFixed(3)} ETH`,
+            label: "Total Received (ETH)",
+            value: loading ? "…" : `${stats.totalReceived.toFixed(3)} ETH`,
             icon: DollarSign,
             color: "#6f42c1",
           },
@@ -301,7 +329,7 @@ export default function DashboardPage() {
                       campaign.duration,
                     );
                     const goal = parseFloat(campaign.funding_goal ?? "0");
-                    const isActive = daysLeft > 0;
+                    const statusStyle = getStatusStyle(campaign.status);
 
                     return (
                       <div
@@ -314,12 +342,10 @@ export default function DashboardPage() {
                           </h3>
                           <span
                             className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              isActive
-                                ? "bg-[#28a745]/20 text-[#28a745]"
-                                : "bg-white/10 text-gray-400"
-                            }`}
+                              statusStyle.bg
+                            } ${statusStyle.text}`}
                           >
-                            {isActive ? "Active" : "Ended"}
+                            {statusStyle.label}
                           </span>
                         </div>
 
@@ -387,6 +413,15 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="flex gap-4">
+                          {campaign.status?.toLowerCase() === "draft" && (
+                            <Link
+                              href={buildDraftEditHref(campaign)}
+                              className="flex items-center gap-1.5 text-yellow-400 hover:text-yellow-300 text-xs font-medium transition-colors"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                              Edit Draft
+                            </Link>
+                          )}
                           <Link
                             href={`/campaigns/${campaign.id}`}
                             className="flex items-center gap-1.5 text-[#a78bfa] hover:text-white text-xs font-medium transition-colors"
@@ -480,12 +515,13 @@ export default function DashboardPage() {
                           campaign.created_at,
                           campaign.duration,
                         );
+                        const statusStyle = getStatusStyle(campaign.status);
                         return (
                           <tr
                             key={campaign.id}
                             className="border-b border-white/5 hover:bg-white/5 transition-colors"
                           >
-                            <td className="py-4 px-4 font-medium text-white max-w-[200px] truncate">
+                            <td className="py-4 px-4 font-medium text-white max-w-50 truncate">
                               {campaign.title}
                             </td>
                             <td className="py-4 px-4 text-gray-300">
@@ -510,21 +546,29 @@ export default function DashboardPage() {
                             <td className="py-4 px-4">
                               <span
                                 className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                  daysLeft > 0
-                                    ? "bg-[#28a745]/20 text-[#28a745]"
-                                    : "bg-white/10 text-gray-400"
-                                }`}
+                                  statusStyle.bg
+                                } ${statusStyle.text}`}
                               >
-                                {daysLeft > 0 ? "Active" : "Ended"}
+                                {statusStyle.label}
                               </span>
                             </td>
                             <td className="py-4 px-4">
-                              <Link
-                                href={`/campaigns/${campaign.id}`}
-                                className="text-[#a78bfa] hover:text-white text-xs font-medium transition-colors"
-                              >
-                                View
-                              </Link>
+                              <div className="flex gap-2">
+                                {campaign.status?.toLowerCase() === "draft" && (
+                                  <Link
+                                    href={buildDraftEditHref(campaign)}
+                                    className="text-yellow-400 hover:text-yellow-300 text-xs font-medium transition-colors"
+                                  >
+                                    Edit
+                                  </Link>
+                                )}
+                                <Link
+                                  href={`/campaigns/${campaign.id}`}
+                                  className="text-[#a78bfa] hover:text-white text-xs font-medium transition-colors"
+                                >
+                                  View
+                                </Link>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -579,17 +623,32 @@ export default function DashboardPage() {
             {/* ── Analytics Tab ──────────────────────────────── */}
             {activeTab === "analytics" && (
               <div>
-                <h2 className="text-xl font-bold text-white mb-6">Analytics</h2>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Analytics</h2>
+                    <p className="text-sm text-gray-400 mt-1">
+                      Campaign performance for your own projects only.
+                    </p>
+                  </div>
+                  <Link
+                    href="/dashboard/analytics"
+                    className="inline-flex items-center justify-center bg-[#6f42c1] hover:bg-[#5a3599] text-white text-sm font-semibold px-5 py-2.5 rounded-full transition"
+                  >
+                    Open full analytics
+                  </Link>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* shafqaat — Summary stats from real campaigns */}
                   <div className="bg-[#0d1117] rounded-2xl p-6 border border-white/5">
-                    <h3 className="text-sm font-bold text-white mb-4">Campaign Summary</h3>
+                    <h3 className="text-sm font-bold text-white mb-4">
+                      Campaign Summary
+                    </h3>
                     <div className="space-y-3">
                       {[
                         { label: "Total Campaigns", value: campaigns.length },
                         { label: "Active Now", value: stats.activeCampaigns },
                         { label: "Ended", value: campaigns.length - stats.activeCampaigns },
-                        { label: "Total Goal (ETH)", value: stats.totalGoal.toFixed(4) },
+                        { label: "Total Received (ETH)", value: stats.totalReceived.toFixed(4) },
                       ].map((item) => (
                         <div key={item.label} className="flex items-center justify-between">
                           <span className="text-sm text-gray-400">{item.label}</span>
@@ -598,19 +657,25 @@ export default function DashboardPage() {
                       ))}
                     </div>
                   </div>
-                  {/* shafqaat — Top campaigns by goal */}
+
                   <div className="bg-[#0d1117] rounded-2xl p-6 border border-white/5">
-                    <h3 className="text-sm font-bold text-white mb-4">Largest Campaigns</h3>
+                    <h3 className="text-sm font-bold text-white mb-4">
+                      Largest Campaigns
+                    </h3>
                     {campaigns.length === 0 ? (
-                      <p className="text-gray-500 text-sm text-center py-4">No campaigns yet</p>
+                      <p className="text-gray-500 text-sm text-center py-4">
+                        No campaigns yet
+                      </p>
                     ) : (
                       <div className="space-y-3">
                         {[...campaigns]
                           .sort((a, b) => parseFloat(b.funding_goal ?? "0") - parseFloat(a.funding_goal ?? "0"))
                           .slice(0, 5)
                           .map((c) => (
-                            <div key={c.id} className="flex items-center justify-between">
-                              <span className="text-sm text-gray-300 truncate mr-3">{c.title}</span>
+                            <div key={c.id} className="flex items-center justify-between gap-3">
+                              <span className="text-sm text-gray-300 truncate">
+                                {c.title}
+                              </span>
                               <span className="text-sm text-[#a78bfa] font-semibold whitespace-nowrap">
                                 {parseFloat(c.funding_goal ?? "0").toFixed(3)} ETH
                               </span>
@@ -619,10 +684,24 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
-                  
                 </div>
-                                  <MarketAnalytics></MarketAnalytics>    
 
+                <div className="mt-6 bg-[#0d1117] rounded-2xl p-6 border border-white/5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      Need deeper campaign performance insights?
+                    </p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      View the owner analytics page for status breakdowns, growth trends, and category performance.
+                    </p>
+                  </div>
+                  <Link
+                    href="/dashboard/analytics"
+                    className="inline-flex items-center justify-center bg-white/5 hover:bg-white/10 text-white text-sm font-semibold px-5 py-2.5 rounded-full transition"
+                  >
+                    View owner analytics
+                  </Link>
+                </div>
               </div>
             )}
 
@@ -746,6 +825,7 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+    </div>
     </div>
   );
 }
