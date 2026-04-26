@@ -200,9 +200,10 @@ def build_feature_vector(campaign: dict, llm_scores: dict, all_feature_cols: lis
     # goal: use funding_goal (stored as string ETH on your platform, but the
     # model was trained on Kickstarter USD goals. We'll treat ETH as-is; the
     # model still learns relative magnitudes).
-    row["goal"]                     = float(campaign.get("funding_goal") or 0)
-    row["backers_count"]            = 0   # new campaigns have no backers yet
-    row["converted_pledged_amount"] = 0   # no pledges yet
+    goal_in_eth = float(campaign.get("funding_goal") or 0)
+    row["goal"]                     = goal_in_eth * 3500
+    # row["backers_count"]            = 0   # REMOVED: Target Leakage
+    # row["converted_pledged_amount"] = 0   # REMOVED: Target Leakage
 
     # --- LLM sub-scores ---
     for key in LLM_FEATURES:
@@ -232,11 +233,11 @@ def build_feature_vector(campaign: dict, llm_scores: dict, all_feature_cols: lis
     # --- Category one-hot encoding ---
     # Map platform category to the Kickstarter naming convention the model knows
     campaign_category = (campaign.get("category") or "Other").strip()
-    cat_col = f"clean_category_{campaign_category}"
+    cat_col = f"industry_category_{campaign_category}"
 
     # Set all category columns to 0 first
     for col in all_feature_cols:
-        if col.startswith("clean_category_"):
+        if col.startswith("industry_category_"):
             row[col] = 0
 
     # Set the matching category column to 1 (if the model knows this category)
@@ -358,12 +359,21 @@ def main():
             print(f"  [DATA] Risk Score: {risk_score:.2f}/10  "
                   f"({'Low' if risk_score < 4 else 'Medium' if risk_score < 7 else 'High'} Risk)")
 
+            # Calculate prep_time_days for the database tracking
+            created_at_str = campaign.get("created_at")
+            prep_days = 7.0
+            if created_at_str:
+                try:
+                    from datetime import datetime, timezone
+                    created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                    prep_days = max(0.0, (datetime.now(timezone.utc) - created_at).total_seconds() / 86400)
+                except Exception:
+                    pass
+
             # Step D: Write back to Supabase
             update_payload = {
                 "risk_score":       risk_score,
-                # ai_prep_time_days is the only engineered feature with no
-                # existing equivalent column in the table
-                "ai_prep_time_days": float(X["prep_time_days"].iloc[0]),
+                "ai_prep_time_days": float(prep_days),
             }
 
             # If base LLM columns were null (edge function didn't run),
