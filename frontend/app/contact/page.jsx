@@ -1,3 +1,4 @@
+// frontend/app/contact/page.jsx
 "use client"
 
 import Navbar from "@/components/navbar"

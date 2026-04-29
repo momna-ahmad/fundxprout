@@ -19,7 +19,7 @@ const normalizeRole = (role: string | null | undefined): AppRole | null => {
 };
 
 const getRoleRedirect = (role: AppRole) =>
-  role === "owner" ? "/dashboard" : "/investor-dashboard";
+  role === "owner" ? "/dashboard" : "/investor-dashboard/overview";
 
 const deriveFullName = (user: any) => {
   const fromMetadata =

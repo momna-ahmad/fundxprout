@@ -1,4 +1,4 @@
-// frontend/__tests__/DocUpload.test.js
+
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { DocUpload } from "../app/create-campaign/page";

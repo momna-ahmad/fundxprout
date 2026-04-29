@@ -51,6 +51,51 @@ export async function getMyProfile() {
     return data;
 }
 
+// ── Update investor profile in Supabase ─────────────────────────────
+export async function updateProfile(fields: {
+    full_name?: string;
+    display_name?: string;
+    bio?: string;
+    phone?: string;
+    country?: string;
+    website_url?: string;
+    wallet_address?: string;
+}) {
+    const supabase = createClient();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: 'Not authenticated' };
+
+    // Upsert so it works for first-time profiles too
+    const { error } = await supabase
+        .from('profiles')
+        .upsert({ user_id: user.id, ...fields }, { onConflict: 'user_id' });
+
+    if (error) {
+        console.error('[updateProfile] Supabase error:', error.message);
+        return { error: error.message };
+    }
+    return { success: true };
+}
+
+// ── Change notification preferences (stored in profile row) ─────────
+export async function updateNotificationPrefs(prefs: Record<string, boolean>) {
+    const supabase = createClient();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: 'Not authenticated' };
+
+    const { error } = await supabase
+        .from('profiles')
+        .upsert({ user_id: user.id, notification_prefs: prefs }, { onConflict: 'user_id' });
+
+    if (error) {
+        console.error('[updateNotificationPrefs] Supabase error:', error.message);
+        return { error: error.message };
+    }
+    return { success: true };
+}
+
 // shafqaat — Calculate profile completion % based on filled fields
 // Returns 0-100 based on how many key fields are non-empty
 export function calcProfileCompletion(profile: Record<string, any> | null): number {

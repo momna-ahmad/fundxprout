@@ -1,3 +1,4 @@
+//frontend/app/homepage/page.js
 "use client";
 // shafqaat — Homepage wires CategoriesNav → CampaignList via shared state
 import { useState } from "react";

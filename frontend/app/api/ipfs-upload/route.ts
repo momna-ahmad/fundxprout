@@ -1,3 +1,5 @@
+//frontend/app/api/ipfs-upload/route.ts
+//purpose of this file is to handle the POST request to upload a file to IPFS using Pinata's API. It receives a file and an optional name from the request, uploads the file to Pinata, and returns the CID and URL of the uploaded file. If any errors occur during the process, it returns an appropriate error message.
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {

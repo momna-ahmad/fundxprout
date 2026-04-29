@@ -1,3 +1,4 @@
+//frontend/app/campaigns/[id]/page.js
 "use client";
 // shafqaat — Campaign detail page for investor view
 // Route: /campaigns/[id]  — id is the Supabase campaign UUID

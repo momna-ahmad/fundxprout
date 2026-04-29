@@ -1,3 +1,5 @@
+//frontend/app/api/upload/route.ts
+//purpose: handle image uploads to Cloudinary from the frontend campaign form. Returns the uploaded image URL and public ID for database storage.
 import { v2 as cloudinary } from "cloudinary";
 import { NextRequest, NextResponse } from "next/server";
 

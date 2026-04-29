@@ -1,3 +1,4 @@
+//frontend/app/dashboard/page.js
 "use client";
 // shafqaat — business dashboard Dashboard: fully dynamic, reads real data from Supabase
 import { useEffect, useState } from "react";

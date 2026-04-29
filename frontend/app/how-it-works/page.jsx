@@ -1,3 +1,4 @@
+//frontend/app/how-it-works/page.jsx
 import Navbar from "@/components/navbar"
 import Footer from "@/components/footer"
 import { Search, FileText, Rocket, Coins, ShieldCheck, BarChart3 } from "lucide-react"

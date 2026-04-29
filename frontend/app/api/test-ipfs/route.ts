@@ -1,3 +1,5 @@
+//frontend/app/api/test-ipfs/route.ts
+//purpose: test Pinata IPFS upload and Supabase connection in one route. For development only. Delete before production.
 /**
  * TEST ROUTE — for development only.
  * Verifies the full chain: Pinata IPFS upload → Supabase save

@@ -1,27 +1,19 @@
+//frontend/app/investor-dashboard/campaigns/page.js
 "use client";
 // Investor Dashboard: Browse campaigns, track investments, view portfolio
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   TrendingUp,
-  Users,
   DollarSign,
   Target,
-  Plus,
-  Eye,
-  BarChart3,
   Search,
   ChevronLeft,
   ChevronRight,
   UserCircle,
   Clock,
-  CheckCircle,
-  AlertCircle,
   Wallet,
   PieChart,
-  TrendingDown,
-  Star,
-  LogOut,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
@@ -33,7 +25,6 @@ import {
 import { ethers } from "ethers";
 import BusinessCampaignABI from "@/abis/BusinessCampaign.json";
 
-import MarketAnalytics from "@/components/market-analytics";
 import {
   checkNetwork,
   switchToSepolia,
@@ -102,7 +93,7 @@ export default function InvestorDashboardPage() {
           error: authError,
         } = await supabase.auth.getUser();
         if (authError) {
-          console.warn("No authenticated user:", authError);
+          // No authenticated user — continue as guest
         }
         setUser(authUser);
         setDebugInfo((prev) => ({
@@ -110,14 +101,8 @@ export default function InvestorDashboardPage() {
           authUser: authUser?.email || "Not authenticated",
         }));
 
-        console.log("Fetching campaigns from Supabase...");
         const camps = await getAllCampaigns();
-        console.log("First campaign keys:", Object.keys(camps[0] || {}));
-        console.log("contract_address value:", camps[0]?.contract_address);
-        console.log("getAllCampaigns returned:", camps);
-
         const prof = await getMyProfile();
-        console.log("getMyProfile returned:", prof);
 
         setCampaigns(camps || []);
         setProfile(prof);
@@ -170,18 +155,6 @@ export default function InvestorDashboardPage() {
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE,
   );
-
-  // Debug logging
-  useEffect(() => {
-    console.log("Dashboard state:", {
-      loading,
-      campaignsCount: campaigns.length,
-      filteredCount: filtered.length,
-      paginatedCount: paginated.length,
-      totalPages,
-      currentPage,
-    });
-  }, [campaigns, filtered, paginated, loading, totalPages, currentPage]);
 
   // Get unique categories
   const categories = [
@@ -266,15 +239,6 @@ export default function InvestorDashboardPage() {
     } finally {
       setIsConnecting(false);
     }
-  };
-
-  // Handle logout
-  const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    setUser(null);
-    setWalletAddress(null);
-    router.push("/");
   };
 
   // Validate investment prerequisites
@@ -428,7 +392,7 @@ export default function InvestorDashboardPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-black text-white">
-              {loading ? "Dashboard" : `Welcome, ${user.full_name}!`}
+              {loading ? "Dashboard" : `Welcome, ${displayName}!`}
             </h1>
             <p className="text-gray-400 mt-1 text-sm">
               Discover opportunities and track your investments
@@ -491,11 +455,16 @@ export default function InvestorDashboardPage() {
               </div>
             </div>
             <button
-              //onClick={handleLogout}
+              onClick={async () => {
+                const supabase = createClient();
+                await supabase.auth.signOut();
+                setUser(null);
+                setWalletAddress(null);
+                router.push("/");
+              }}
               className="bg-[#6f42c1] hover:bg-[#5a3599] text-white px-4 py-2 rounded-xl font-semibold transition duration-200 flex items-center gap-2 text-sm border border-[#6f42c1] hover:border-[#5a3599]"
               title="Logout"
             >
-
               Logout
             </button>
           </div>
@@ -814,56 +783,115 @@ export default function InvestorDashboardPage() {
               </div>
             </div>
 
-            {/* Investment History */}
+            {/* Invested Campaigns */}
             {investmentHistory.length > 0 ? (
-              <div className="bg-[#1a2030] border border-white/5 rounded-xl p-6">
-                <h3 className="text-lg font-bold text-white mb-4">
-                  Investment History
-                </h3>
-                <div className="space-y-4">
-                  {investmentHistory.map((inv, idx) => (
-                    <div
-                      key={inv.id || idx}
-                      className="border border-white/5 rounded-lg p-4"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-white font-medium">
-                          Campaign ID: {inv.campaign_id}
-                        </p>
-                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">
-                          {inv.status}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 text-sm text-gray-400">
-                        <div>
-                          <p className="text-gray-500">Amount</p>
-                          <p className="text-white font-medium">
-                            ${parseFloat(inv.amount).toFixed(2)}
-                          </p>
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold text-white">Invested Campaigns</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {investmentHistory.map((inv, idx) => {
+                    const camp = campaigns.find((c) => c.id === inv.campaign_id);
+                    const daysLeft = camp ? calcDaysLeft(camp.created_at, camp.duration) : 0;
+                    const goal = camp ? parseFloat(camp.funding_goal ?? '0') : 0;
+                    const raised = camp ? parseFloat(camp.amount_raised ?? camp.raised ?? '0') : 0;
+                    const progress = goal > 0 ? Math.min(100, (raised / goal) * 100) : 0;
+                    return (
+                      <div
+                        key={inv.id || idx}
+                        className="bg-[#1a2030] border border-white/5 rounded-xl overflow-hidden hover:border-[#6f42c1]/30 transition-colors"
+                      >
+                        {/* Campaign header */}
+                        <div className="p-5">
+                          <div className="flex items-start justify-between gap-3 mb-3">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="text-white font-bold text-[15px] leading-tight truncate">
+                                {camp?.title ?? `Campaign #${inv.campaign_id}`}
+                              </h4>
+                              {camp?.category && (
+                                <span className="inline-block mt-1 text-[11px] font-semibold bg-[#6f42c1]/15 text-[#a78bfa] border border-[#6f42c1]/25 px-2 py-0.5 rounded-full">
+                                  {camp.category}
+                                </span>
+                              )}
+                            </div>
+                            <span
+                              className={`flex-shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                                inv.status === 'confirmed' || inv.status === 'Confirmed'
+                                  ? 'bg-green-500/15 text-green-400 border-green-500/25'
+                                  : inv.status === 'pending' || inv.status === 'Pending'
+                                  ? 'bg-yellow-500/15 text-yellow-400 border-yellow-500/25'
+                                  : 'bg-red-500/15 text-red-400 border-red-500/25'
+                              }`}
+                            >
+                              {inv.status}
+                            </span>
+                          </div>
+
+                          {camp?.description && (
+                            <p className="text-gray-400 text-xs leading-relaxed line-clamp-2 mb-3">
+                              {camp.description}
+                            </p>
+                          )}
+
+                          {/* Progress bar */}
+                          {camp && (
+                            <div className="mb-3">
+                              <div className="flex justify-between text-xs text-gray-400 mb-1.5">
+                                <span>${raised.toLocaleString()} raised</span>
+                                <span>{progress.toFixed(0)}% of ${goal.toLocaleString()}</span>
+                              </div>
+                              <div className="w-full h-1.5 bg-white/8 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-[#6f42c1]"
+                                  style={{ width: `${progress}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Stats row */}
+                          <div className="grid grid-cols-3 gap-3 text-center">
+                            <div className="bg-black/20 rounded-lg px-2 py-2">
+                              <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Invested</p>
+                              <p className="text-white text-sm font-bold">${parseFloat(inv.amount).toFixed(2)}</p>
+                            </div>
+                            <div className="bg-black/20 rounded-lg px-2 py-2">
+                              <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Date</p>
+                              <p className="text-white text-sm font-bold">
+                                {new Date(inv.invested_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                              </p>
+                            </div>
+                            <div className="bg-black/20 rounded-lg px-2 py-2">
+                              <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Days Left</p>
+                              <p className={`text-sm font-bold ${daysLeft > 0 ? 'text-white' : 'text-gray-500'}`}>
+                                {daysLeft > 0 ? daysLeft : 'Ended'}
+                              </p>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-gray-500">Date</p>
-                          <p className="text-white font-medium">
-                            {new Date(inv.invested_at).toLocaleDateString()}
-                          </p>
+
+                        {/* Transaction footer */}
+                        <div className="px-5 py-3 bg-black/20 border-t border-white/5 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-gray-500 mb-0.5">Transaction</p>
+                            <p className="font-mono text-[11px] text-[#a78bfa] truncate">
+                              {inv.transaction_hash
+                                ? `${inv.transaction_hash.slice(0, 10)}...${inv.transaction_hash.slice(-8)}`
+                                : '—'}
+                            </p>
+                          </div>
+                          {inv.transaction_hash && (
+                            <a
+                              href={`https://sepolia.etherscan.io/tx/${inv.transaction_hash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-shrink-0 text-[11px] text-[#6f42c1] hover:text-[#a78bfa] transition-colors flex items-center gap-1 font-medium"
+                            >
+                              Etherscan ↗
+                            </a>
+                          )}
                         </div>
                       </div>
-                      <div className="mt-3">
-                        <p className="text-gray-500 text-xs mb-1">
-                          Transaction Hash
-                        </p>
-                        <a
-                          href={`https://sepolia.etherscan.io/tx/${inv.transaction_hash}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[#6f42c1] text-xs hover:underline break-all"
-                        >
-                          {inv.transaction_hash.slice(0, 20)}...
-                          {inv.transaction_hash.slice(-20)}
-                        </a>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : (

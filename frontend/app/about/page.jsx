@@ -1,3 +1,4 @@
+//frontend/app/about/page.jsx
 import Navbar from "@/components/navbar"
 import Footer from "@/components/footer"
 import { Shield, Globe, Users, Zap } from "lucide-react"
