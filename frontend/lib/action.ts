@@ -295,6 +295,7 @@ export async function saveCampaignToDb(formData: any) {
     duration: formData.duration,
     category: formData.category,
     owner: user.id,
+    status: "launched",
     transaction_hash: formData.txHash,
     contract_address: formData.contractAddress ?? null, // ✅ add this
     price_per_token: formData.pricePerToken,

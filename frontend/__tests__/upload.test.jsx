@@ -26,7 +26,7 @@ test("uploads file to IPFS and shows CID", async () => {
 
   // 2. Simulate file selection
   const file = new File(["hello"], "hello.pdf", { type: "application/pdf" });
-  const input = screen.getByLabelText(/Click to upload/i);
+  const input = screen.getByTestId("file-input");
   
   fireEvent.change(input, { target: { files: [file] } });
 
