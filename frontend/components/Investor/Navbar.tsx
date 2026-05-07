@@ -1,8 +1,9 @@
 // components/Investor/Navbar.tsx
 'use client';
 import { usePathname } from 'next/navigation';
-import { Bell, Fuel, ChevronRight, Copy, Sun, Moon } from 'lucide-react';
+import { Bell, Fuel, ChevronRight, Copy, Sun, Moon, Home } from 'lucide-react';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useTheme } from '@/components/theme-provider';
 import { useWallet } from '@/context/WalletContext';
 
@@ -65,6 +66,15 @@ export default function Navbar() {
 
       {/* ── Right controls ── */}
       <div className="flex items-center gap-2">
+
+        {/* Home link */}
+        <Link
+          href="/homepage"
+          title="Go to Homepage"
+          className="flex items-center justify-center w-9 h-9 rounded-xl bg-muted border border-border text-muted-foreground hover:bg-card hover:text-foreground hover:border-ring transition-all duration-200"
+        >
+          <Home size={15} />
+        </Link>
 
         {/* Network badge — shown only when wallet connected */}
         {net && (
