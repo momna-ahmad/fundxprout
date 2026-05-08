@@ -120,7 +120,12 @@ export default function TokensPage() {
                   <div className="text-[22px] font-black tracking-tight bg-gradient-to-r from-[#6f42c1] to-[#a78bfa] bg-clip-text text-transparent">
                     {formatCurrency(token.value, 0)}
                   </div>
-                  <div className="text-xs text-muted-foreground">@ {formatCurrency(token.price, 2)}/token</div>
+                  <div className="text-xs text-muted-foreground">
+                    ≈ {(token.value / (token.ethPrice ?? 3000)).toFixed(4)} ETH
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                    @ {formatCurrency(token.price, 2)} ({(token.priceEth ?? 0).toFixed(6)} ETH)/token
+                  </div>
                 </div>
               </div>
 

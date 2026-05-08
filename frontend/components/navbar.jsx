@@ -1,5 +1,5 @@
 "use client";
-import { Wallet, Menu, X, Sun, Moon, LayoutDashboard } from "lucide-react";
+import { UserCircle, Menu, X, Sun, Moon, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useState, useEffect } from "react";
@@ -85,12 +85,15 @@ export default function Navbar() {
           )}
         </button>
 
-        <Link
-          href="/profile"
-          className="text-gray-300 hover:text-[#a78bfa] transition-colors"
-        >
-          <Wallet className="h-5 w-5" />
-        </Link>
+        {isLoggedIn && userRole === "owner" && (
+          <Link
+            href="/profile"
+            title="My Profile"
+            className="text-gray-300 hover:text-[#a78bfa] transition-colors"
+          >
+            <UserCircle className="h-5 w-5" />
+          </Link>
+        )}
 
         {isLoggedIn && userRole && (
           <Link

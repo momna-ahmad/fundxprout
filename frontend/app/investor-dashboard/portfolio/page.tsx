@@ -75,11 +75,27 @@ export default function PortfolioPage() {
     );
   }
 
-  const totalValue = tokenHoldings.reduce((s, t) => s + t.value, 0) || portfolioData.portfolioValue;
-  const monthlyReturns = timeSeries.length > 0 ? timeSeries : [
-    { month: 'Mar', returns: 2800 }, { month: 'Apr', returns: 3200 }, { month: 'May', returns: -800 },
-    { month: 'Jun', returns: 5100 }, { month: 'Jul', returns: 4300 }, { month: 'Aug', returns: 6200 },
-  ];
+  // Derive live ETH→USD rate from portfolio data (same approach as overview page)
+  const ethPrice: number =
+    (portfolioData.totalInvestedEth ?? 0) > 0
+      ? (portfolioData.totalInvested ?? 0) / (portfolioData.totalInvestedEth ?? 1)
+      : 3000;
+
+  // totalValue: token holdings are already in USD (price = pricePerTokenEth × ethPrice)
+  const totalValue = tokenHoldings.reduce((s: number, t: any) => s + t.value, 0) || portfolioData.portfolioValue;
+
+  // timeSeries has { month, value } where value is raw ETH — convert to USD and rename to "returns"
+  const monthlyReturns: { month: string; returns: number }[] =
+    timeSeries.length > 0
+      ? timeSeries.map((p: any) => ({ month: p.month, returns: (p.value ?? 0) * ethPrice }))
+      : [
+          { month: 'Mar', returns: 2800 * ethPrice / 3000 },
+          { month: 'Apr', returns: 3200 * ethPrice / 3000 },
+          { month: 'May', returns: -800 * ethPrice / 3000 },
+          { month: 'Jun', returns: 5100 * ethPrice / 3000 },
+          { month: 'Jul', returns: 4300 * ethPrice / 3000 },
+          { month: 'Aug', returns: 6200 * ethPrice / 3000 },
+        ];
 
   return (
     <div className="flex flex-col gap-5">
@@ -96,6 +112,9 @@ export default function PortfolioPage() {
             </div>
             <div className="text-[40px] font-bold tracking-tight text-foreground">
               {formatCurrency(totalValue)}
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              ≈ {(totalValue / ethPrice).toFixed(4)} ETH
             </div>
             <div className="flex items-center gap-2.5 mt-2">
               <Badge variant="green">
@@ -154,8 +173,14 @@ export default function PortfolioPage() {
                       <div className="text-foreground font-semibold">{formatNumber(token.balance)}</div>
                       <div className="text-[11px] text-muted-foreground">{token.symbol}</div>
                     </td>
-                    <td className="px-4 py-3 text-foreground font-semibold">{formatCurrency(token.price, 2)}</td>
-                    <td className="px-4 py-3 text-foreground font-bold text-sm">{formatCurrency(token.value)}</td>
+                    <td className="px-4 py-3">
+                      <div className="text-foreground font-semibold">{formatCurrency(token.price, 2)}</div>
+                      <div className="text-[11px] text-muted-foreground">{(token.priceEth ?? token.price / ethPrice).toFixed(6)} ETH</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-foreground font-bold text-sm">{formatCurrency(token.value)}</div>
+                      <div className="text-[11px] text-muted-foreground">{(token.value / ethPrice).toFixed(4)} ETH</div>
+                    </td>
                     <td className="px-4 py-3">
                       <Badge variant={token.change24h >= 0 ? 'green' : 'red'}>
                         {token.change24h >= 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
@@ -262,7 +287,7 @@ export default function PortfolioPage() {
                 tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
-                tickFormatter={(value) => `$${(value / 1000).toFixed(1)}k`}
+                tickFormatter={(value: number) => Math.abs(value) >= 1000 ? `$${(value / 1000).toFixed(1)}k` : `$${value.toFixed(0)}`}
               />
               <Tooltip
                 formatter={(value: any) => formatCurrency(value)}

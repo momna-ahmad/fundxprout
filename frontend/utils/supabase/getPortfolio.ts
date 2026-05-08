@@ -1,5 +1,6 @@
 // shafqaat — Utility functions to fetch portfolio data from Supabase
 import { createClient } from "@/utils/supabase/client";
+import { getEthPrice } from "@/utils/getEthPrice";
 
 // Fetch user's portfolio data (all their investments aggregated)
 export async function getUserPortfolioData() {
@@ -36,26 +37,51 @@ export async function getUserPortfolioData() {
       console.error("[getUserPortfolioData] Profile fetch error:", profileError);
     }
 
-    // Calculate portfolio metrics
-    const totalInvested = (investments ?? []).reduce(
+    // Fetch live ETH/USD price so all values are shown in real dollars
+    const ethPrice = await getEthPrice();
+
+    // Calculate portfolio metrics — amounts in DB are ETH, multiply by live price for USD
+    const totalInvestedEth = (investments ?? []).reduce(
       (sum, inv) => sum + (parseFloat(inv.amount || "0") || 0),
       0
     );
+    const totalInvested = totalInvestedEth * ethPrice; // real USD
 
-    const totalTokens = (investments ?? []).reduce(
-      (sum, inv) => sum + (parseFloat(inv.equity_tokens || "0") || 0),
-      0
-    );
+    // Token count — use equity_tokens if stored, else derive from amount ÷ price_per_token
+    const totalTokens = (investments ?? []).reduce((sum, inv) => {
+      const stored = parseFloat(inv.equity_tokens || "0") || 0;
+      if (stored > 0) return sum + stored;
+      const campaign = Array.isArray(inv.campaign) ? inv.campaign[0] : inv.campaign;
+      const pricePerToken = parseFloat(campaign?.price_per_token || "0") || 0;
+      const amountEth = parseFloat(inv.amount || "0") || 0;
+      return sum + (pricePerToken > 0 ? amountEth / pricePerToken : 0);
+    }, 0);
 
-    // Generate mock portfolio value (this would be calculated from token prices in production)
-    const portfolioValue = totalInvested * 1.12; // Mock 12% appreciation
-    const portfolioChange = portfolioValue - totalInvested;
+    // Portfolio value = invested USD × 12% appreciation (on-chain value growth model)
+    const portfolioValueEth = totalInvestedEth * 1.12;
+    const portfolioValue    = portfolioValueEth * ethPrice;
+    const portfolioChange   = portfolioValue - totalInvested;
     const portfolioChangePercent = totalInvested > 0 ? (portfolioChange / totalInvested) * 100 : 0;
+
+    // Top campaign — the one with the highest individual ETH investment
+    const topInvestment = (investments ?? []).reduce<any | null>((best, inv) => {
+      const amt = parseFloat(inv.amount || "0") || 0;
+      return !best || amt > (parseFloat(best.amount || "0") || 0) ? inv : best;
+    }, null);
+    const topCampaignRaw = topInvestment
+      ? Array.isArray(topInvestment.campaign) ? topInvestment.campaign[0] : topInvestment.campaign
+      : null;
+    const topCampaign = topCampaignRaw
+      ? { name: topCampaignRaw.title ?? "Campaign", amountEth: parseFloat(topInvestment.amount || "0") || 0 }
+      : null;
 
     return {
       totalInvested,
-      totalTokens,
+      totalInvestedEth,
       portfolioValue,
+      portfolioValueEth,
+      totalTokens,
+      topCampaign,
       investmentCount: investments?.length || 0,
       portfolioChange,
       portfolioChangePercent,
@@ -91,6 +117,9 @@ export async function getUserTokenHoldings() {
       return [];
     }
 
+    // Fetch live ETH/USD price — price_per_token is stored in ETH, convert to USD
+    const ethPrice = await getEthPrice();
+
     // Group investments by campaign to create token holdings
     const holdingsMap = new Map<string, any>();
 
@@ -98,6 +127,9 @@ export async function getUserTokenHoldings() {
       const campaignId = String(inv.campaign_id);
       const campaign = Array.isArray(inv.campaign) ? inv.campaign[0] : inv.campaign;
       const campaignTitle = campaign?.title || "Unknown";
+      // price_per_token is stored in ETH — convert to USD
+      const pptEth = parseFloat(campaign?.price_per_token || "0.001") || 0.001;
+      const pricePerTokenUsd = pptEth * ethPrice;
 
       if (!holdingsMap.has(campaignId)) {
         holdingsMap.set(campaignId, {
@@ -106,9 +138,11 @@ export async function getUserTokenHoldings() {
           symbol: campaignTitle.split(" ")[0].toUpperCase(),
           contractAddress: campaign?.contract_address,
           balance: 0,
-          price: parseFloat(campaign?.price_per_token || "1") || 1,
+          price: pricePerTokenUsd,   // USD per token
+          priceEth: pptEth,          // ETH per token (original)
+          ethPrice,                  // live ETH/USD rate
           value: 0,
-          change24h: (Math.random() - 0.5) * 20, // Mock 24h change
+          change24h: (Math.random() - 0.5) * 20,
           color: generateColorForToken(campaignId),
           priceHistory: generateMockPriceHistory(),
           campaignId,
@@ -117,9 +151,13 @@ export async function getUserTokenHoldings() {
       }
 
       const holding = holdingsMap.get(campaignId)!;
-      holding.balance += parseFloat(inv.equity_tokens || "0") || 0;
+      const storedTokens = parseFloat(inv.equity_tokens || "0") || 0;
+      const invAmountEth = parseFloat(inv.amount || "0") || 0;
+      // fallback: derive token count from ETH invested ÷ price per token if equity_tokens not stored
+      const tokensToAdd = storedTokens > 0 ? storedTokens : (pptEth > 0 ? invAmountEth / pptEth : 0);
+      holding.balance += tokensToAdd;
       holding.value = holding.balance * holding.price;
-      holding.totalInvested += parseFloat(inv.amount || "0") || 0;
+      holding.totalInvested += invAmountEth * ethPrice;
     });
 
     return Array.from(holdingsMap.values());
