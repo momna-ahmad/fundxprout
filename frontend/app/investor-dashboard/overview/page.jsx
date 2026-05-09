@@ -70,14 +70,20 @@ export default function DashboardPage() {
   }, []);
 
   // Derive values
-  const totalInvested   = portfolioData?.totalInvested   ?? 0;
-  const portfolioValue  = portfolioData?.portfolioValue  ?? 0;
-  const totalTokens     = portfolioData?.totalTokens     ?? 0;
-  const investmentCount = portfolioData?.investmentCount ?? 0;
-  const portfolioChange = portfolioData?.portfolioChange ?? 0;
+  const totalInvested      = portfolioData?.totalInvested      ?? 0;
+  const totalInvestedEth   = portfolioData?.totalInvestedEth   ?? 0;
+  const portfolioValue     = portfolioData?.portfolioValue     ?? 0;
+  const portfolioValueEth  = portfolioData?.portfolioValueEth  ?? 0;
+  const totalTokens        = portfolioData?.totalTokens        ?? 0;
+  const investmentCount    = portfolioData?.investmentCount    ?? 0;
+  const portfolioChange    = portfolioData?.portfolioChange    ?? 0;
   const portfolioChangePct = portfolioData?.portfolioChangePercent ?? 0;
-  const walletAddress   = portfolioData?.walletAddress   ?? null;
-  const investments     = portfolioData?.investments     ?? [];
+  const walletAddress      = portfolioData?.walletAddress      ?? null;
+  const investments        = portfolioData?.investments        ?? [];
+  const topCampaignData    = portfolioData?.topCampaign        ?? null;
+
+  // Derive live ETH→USD rate from the two values already in portfolio data
+  const ethPrice = totalInvestedEth > 0 ? totalInvested / totalInvestedEth : 3000;
 
   // Portfolio history from real investments
   const portfolioHistory = investments.length > 0
@@ -103,20 +109,20 @@ export default function DashboardPage() {
       type: "Buy",
       tokenSymbol: camp?.title?.split(" ")[0]?.toUpperCase() ?? "TKN",
       hash: inv.transaction_hash ?? "0x000000000000",
-      valueUSD: parseFloat(inv.amount || "0") || 0,
+      valueUSD: (parseFloat(inv.amount || "0") || 0) * ethPrice,
       date: inv.invested_at ?? new Date().toISOString(),
       status: inv.status === "completed" ? "Confirmed" : "Pending",
     };
   });
 
-  // Build invested campaign cards
+  // Build invested campaign cards — investedAmount in real USD
   const investedCampaigns = investments.map((inv) => {
     const camp = Array.isArray(inv.campaign) ? inv.campaign[0] : inv.campaign;
     return {
       id: inv.id,
       name:           camp?.title     ?? `Campaign #${inv.campaign_id}`,
       industry:       camp?.category  ?? "Unknown",
-      investedAmount: parseFloat(inv.amount || "0") || 0,
+      investedAmount: (parseFloat(inv.amount || "0") || 0) * ethPrice,
       roi:            parseFloat(inv.roi_percent || "0") || 0,
       fundedPercent:  parseFloat(inv.funded_percent || "0") || 0,
     };
@@ -390,21 +396,59 @@ export default function DashboardPage() {
 
           {/* Quick Stats */}
           <div className="flex flex-col gap-3">
-            {[
-              { label: "Total Invested",    value: formatCurrency(totalInvested),       textCls: "text-white"      },
-              { label: "Portfolio Value",   value: formatCurrency(portfolioValue),      textCls: "text-[#a78bfa]"  },
-              { label: "Total Tokens",      value: `${formatNumber(totalTokens)} TKN`,  textCls: "text-yellow-400" },
-              { label: "Campaigns",         value: String(investmentCount),             textCls: "text-green-400"  },
-            ].map((s) => (
-              <div key={s.label} className="bg-card border border-white/5 rounded-xl px-[18px] py-4 flex-1">
-                <div className="text-[10px] text-gray-500 mb-1.5 uppercase tracking-[0.05em]">
-                  {s.label}
-                </div>
-                <div className={`text-xl font-black tracking-tight ${s.textCls}`}>
-                  {s.value}
-                </div>
+
+            {/* Top campaign */}
+            <div className="bg-card border border-white/5 rounded-xl px-[18px] py-4 flex-1">
+              <div className="text-[10px] text-gray-500 mb-1.5 uppercase tracking-[0.05em]">
+                Max Investment
               </div>
-            ))}
+              {topCampaignData ? (
+                <>
+                  <div className="text-sm font-bold text-white truncate leading-tight mb-0.5">
+                    {topCampaignData.name}
+                  </div>
+                  <div className="text-[13px] font-black text-[#a78bfa]">
+                    {topCampaignData.amountEth.toFixed(4)} ETH
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-gray-500 italic">No investments yet</div>
+              )}
+            </div>
+
+            {/* Total Invested in ETH */}
+            <div className="bg-card border border-white/5 rounded-xl px-[18px] py-4 flex-1">
+              <div className="text-[10px] text-gray-500 mb-1.5 uppercase tracking-[0.05em]">
+                Total Invested
+              </div>
+              <div className="text-xl font-black tracking-tight text-white">
+                {totalInvestedEth.toFixed(4)}
+                <span className="text-[13px] text-gray-400 font-semibold ml-1">ETH</span>
+              </div>
+            </div>
+
+            {/* Total Tokens — dynamic from DB */}
+            <div className="bg-card border border-white/5 rounded-xl px-[18px] py-4 flex-1">
+              <div className="text-[10px] text-gray-500 mb-1.5 uppercase tracking-[0.05em]">
+                Total Tokens
+              </div>
+              <div className="text-xl font-black tracking-tight text-yellow-400">
+                {formatNumber(Math.round(totalTokens))}
+                <span className="text-[13px] text-gray-400 font-semibold ml-1">TKN</span>
+              </div>
+            </div>
+
+            {/* Portfolio Value in ETH */}
+            <div className="bg-card border border-white/5 rounded-xl px-[18px] py-4 flex-1">
+              <div className="text-[10px] text-gray-500 mb-1.5 uppercase tracking-[0.05em]">
+                Portfolio Value
+              </div>
+              <div className="text-xl font-black tracking-tight text-[#a78bfa]">
+                {portfolioValueEth.toFixed(4)}
+                <span className="text-[13px] text-gray-400 font-semibold ml-1">ETH</span>
+              </div>
+            </div>
+
           </div>
         </div>
 

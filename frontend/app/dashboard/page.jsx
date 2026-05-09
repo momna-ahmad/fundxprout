@@ -23,7 +23,7 @@ import {
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import { getMyCampaigns } from "@/utils/supabase/getCampaigns";
-import { getMyProfile, calcProfileCompletion, getUserRole } from "@/utils/supabase/getProfile";
+import { getMyProfile, calcProfileCompletion } from "@/utils/supabase/getProfile";
 import Navbar from "@/components/navbar";
 
 const ITEMS_PER_PAGE = 6; // shafqaat — campaigns per page in My Campaigns tab
@@ -66,8 +66,6 @@ function buildDraftEditHref(campaign) {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [userRole, setUserRole] = useState(null);
-  const [redirecting, setRedirecting] = useState(false);
 
   // shafqaat — Active tab state
   const [activeTab, setActiveTab] = useState("overview");
@@ -81,15 +79,6 @@ export default function DashboardPage() {
   // shafqaat — My Campaigns tab: search + pagination state
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-
-  // Check user role and redirect if needed
-  useEffect(() => {
-    async function checkRole() {
-      const role = await getUserRole();
-      setUserRole(role);
-    }
-    checkRole();
-  }, [router, redirecting]);
 
   // shafqaat — Fetch user, campaigns and profile in parallel on mount
   useEffect(() => {

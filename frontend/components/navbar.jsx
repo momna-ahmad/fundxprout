@@ -1,20 +1,30 @@
 "use client";
-import { Wallet, Menu, X, Sun, Moon } from "lucide-react";
+import { UserCircle, Menu, X, Sun, Moon, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/components/theme-provider";
 import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/context/auth-context";
+import { getUserRole } from "@/utils/supabase/getProfile";
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userRole, setUserRole] = useState(null);
   const { user, session, loading } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
 
   const isLoggedIn = !!user && !!session;
+
+  useEffect(() => {
+    if (!user) { setUserRole(null); return; }
+    getUserRole().then((role) => setUserRole(role));
+  }, [user]);
+
+  const dashboardHref =
+    userRole === "owner" ? "/dashboard" : "/investor-dashboard/overview";
 
   const handleLogout = async () => {
     const supabase = createClient();
@@ -25,7 +35,7 @@ export default function Navbar() {
   };
 
   const navLinks = [
-    { href: "/", label: "Home" },
+    { href: "/homepage", label: "Home" },
     { href: "/about", label: "About" },
     { href: "/how-it-works", label: "How It Works" },
     { href: "/campaigns", label: "Campaigns" },
@@ -35,7 +45,7 @@ export default function Navbar() {
   return (
     <nav className="w-full bg-[#181A2A]/95 backdrop-blur-md px-6 md:px-12 py-4 flex items-center justify-between sticky top-0 z-50 border-b border-white/5">
       {/* Logo */}
-      <Link href="/" className="flex items-center gap-2">
+      <Link href="/homepage" className="flex items-center gap-2">
         <Image
           src="/logo.png"
           alt="FundXProut Logo"
@@ -75,12 +85,25 @@ export default function Navbar() {
           )}
         </button>
 
-        <Link
-          href="/profile"
-          className="text-gray-300 hover:text-[#a78bfa] transition-colors"
-        >
-          <Wallet className="h-5 w-5" />
-        </Link>
+        {isLoggedIn && userRole === "owner" && (
+          <Link
+            href="/profile"
+            title="My Profile"
+            className="text-gray-300 hover:text-[#a78bfa] transition-colors"
+          >
+            <UserCircle className="h-5 w-5" />
+          </Link>
+        )}
+
+        {isLoggedIn && userRole && (
+          <Link
+            href={dashboardHref}
+            title={userRole === "owner" ? "Campaign Owner Dashboard" : "Investor Dashboard"}
+            className="text-gray-300 hover:text-[#a78bfa] transition-colors"
+          >
+            <LayoutDashboard className="h-5 w-5" />
+          </Link>
+        )}
         
         {isLoggedIn ? (
           <button
@@ -120,6 +143,16 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
+          {isLoggedIn && userRole && (
+            <Link
+              href={dashboardHref}
+              onClick={() => setMobileOpen(false)}
+              className="flex items-center gap-2 text-sm font-medium text-gray-300 hover:text-white transition-colors py-2"
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              {userRole === "owner" ? "Owner Dashboard" : "Investor Dashboard"}
+            </Link>
+          )}
           {isLoggedIn ? (
             <button
               onClick={handleLogout}
