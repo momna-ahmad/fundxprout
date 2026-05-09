@@ -264,6 +264,8 @@ def main():
                         help="Score only the first unscored campaign (for testing)")
     parser.add_argument("--all", action="store_true",
                         help="Re-score ALL campaigns, even those already scored")
+    parser.add_argument("--campaign-id", type=str, default=None,
+                        help="Score one specific campaign by id")
     args = parser.parse_args()
 
     # ── Validate env vars ────────────────────────────────────────────────────
@@ -300,6 +302,9 @@ def main():
         "problem_statement, proof_of_capability, idea_clarity, "
         "differentiation, gtm_strategy, business_model, vagueness, credibility"
     )
+
+    if args.campaign_id:
+        query = query.eq("id", args.campaign_id)
 
     if not args.all:
         # Default: only campaigns without a risk score

@@ -108,7 +108,7 @@ export default function CampaignDetailPage() {
             // Check authentication
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) {
-                router.push("/log-in");
+                router.push("/login");
                 return;
             }
 
