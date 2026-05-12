@@ -10,6 +10,10 @@ const cidToUrl = (cid: string | null | undefined) =>
   cid ? `https://gateway.pinata.cloud/ipfs/${cid}` : null;
 
 type AppRole = "owner" | "investor";
+type SignupState = {
+  error: string;
+  success: string;
+};
 
 const normalizeRole = (role: string | null | undefined): AppRole | null => {
   const value = (role || "").trim().toLowerCase();
@@ -148,9 +152,8 @@ export async function login(prevState: string | undefined, formData: FormData) {
     password,
   });
 
-  console.log(error);
-
   if (error) {
+    console.error("[login] Auth error:", error.message);
     return "Invalid credentials"; // Return error to frontend
   }
 
@@ -159,8 +162,11 @@ export async function login(prevState: string | undefined, formData: FormData) {
   } = await supabase.auth.getUser();
 
   if (!user?.id) {
+    console.error("[login] Unable to get user ID");
     return "Unable to load user session";
   }
+
+  console.log("[login] User authenticated:", user.id);
 
   const { data: profile, error: profileError } = await supabase
       .from("profiles")
@@ -169,23 +175,30 @@ export async function login(prevState: string | undefined, formData: FormData) {
       .single();
 
   if (profileError?.code === "PGRST116") {
+    console.log("[login] No profile found, redirecting to role selection");
     redirect("/auth/select-role");
   }
 
   if (profileError) {
+    console.error("[login] Profile fetch error:", profileError.message);
     return "Unable to load profile";
   }
 
   const roleFromProfile = normalizeRole(profile?.role);
+  console.log("[login] User role from profile:", profile?.role, "normalized:", roleFromProfile);
+
   if (!roleFromProfile) {
+    console.log("[login] Invalid role, redirecting to role selection");
     redirect("/auth/select-role");
   }
 
-  redirect(getRoleRedirect(roleFromProfile));
+  const redirectUrl = getRoleRedirect(roleFromProfile);
+  console.log("[login] Redirecting to:", redirectUrl, "for role:", roleFromProfile);
+  redirect(redirectUrl);
 }
 
 export async function signup(
-  prevState: { error: string | undefined },
+  prevState: SignupState,
   formData: FormData,
 ) {
   const supabase = await createClient();
@@ -194,13 +207,13 @@ export async function signup(
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
   const fullName = formData.get("fullName") as string;
-  const userRole = formData.get("userRole") as string;
+  //const userRole = formData.get("userRole") as string;
 
   // 2. Validate role
-  const normalizedRole = normalizeRole(userRole);
-  if (!normalizedRole) {
-    return { error: "Please select a valid account type" };
-  }
+  // const normalizedRole = normalizeRole(userRole);
+  // if (!normalizedRole) {
+  //   return { error: "Please select a valid account type" };
+  // }
 
   // 3. Determine the "Redirect URL" for email confirmation
   // We need to tell Supabase where to send the user after they click the link in their email.
@@ -215,14 +228,14 @@ export async function signup(
       emailRedirectTo: `${origin}/auth/callback`,
       data: {
         full_name: fullName,
-        user_role: normalizedRole, // Store role in auth metadata
+        //user_role: normalizedRole, // Store role in auth metadata
       },
     },
   });
 
   if (error) {
     console.error(error.code + " " + error.message);
-    return { error: error.message };
+    return { error: error.message, success: "" };
   }
 
   // 5. Insert user profile row with user_id, full_name, and role
@@ -231,7 +244,7 @@ export async function signup(
       {
         user_id: authData.user.id,
         full_name: fullName,
-        role: normalizedRole,
+        //role: normalizedRole,
       },
     ]);
 
@@ -241,8 +254,10 @@ export async function signup(
     }
   }
 
-  // 6. Redirect based on role
-  redirect(getRoleRedirect(normalizedRole));
+  return {
+    error: "",
+    success: "Account created successfully. Redirecting you to the login screen...",
+  };
 }
 
 export async function logOut() {

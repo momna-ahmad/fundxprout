@@ -7,7 +7,6 @@ import InvestorRouteGuard from '@/components/Investor/RouteGuard';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <InvestorRouteGuard>
       <WalletProvider>
         <div className="flex min-h-screen bg-[#181A2A]">
           <Sidebar />
@@ -19,6 +18,5 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </div>
       </WalletProvider>
-    </InvestorRouteGuard>
   );
 }
