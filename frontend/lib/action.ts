@@ -305,6 +305,7 @@ export async function saveCampaignToDb(formData: any) {
   // Build the row — store both the raw CID and the clickable IPFS gateway URL
   const row = {
     title: formData.title,
+    token_symbol: formData.tokenSymbol,
     description: formData.description,
     funding_goal: formData.goal,
     duration: formData.duration,
@@ -312,7 +313,8 @@ export async function saveCampaignToDb(formData: any) {
     owner: user.id,
     status: "launched",
     transaction_hash: formData.txHash,
-    contract_address: formData.contractAddress ?? null, // ✅ add this
+    contract_address: formData.contractAddress , 
+    token_contract_address: formData.tokenContractAddress ,
     price_per_token: formData.pricePerToken,
     image_url: formData.imageUrl ?? null,
     // ── IPFS CIDs (raw hash for on-chain verification) ─────────────

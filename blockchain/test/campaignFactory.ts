@@ -7,6 +7,7 @@ describe("CampaignFactory", function () {
 
   // Test Parameters
   const name = "Test Startup";
+  const symbol = "TST";
   const fundingGoal = ethers.parseEther("10"); // 10 ETH
   const durationInDays = 30;
   const pricePerToken = ethers.parseEther("0.01"); // 0.01 ETH
@@ -27,6 +28,7 @@ describe("CampaignFactory", function () {
     // 1. Call the create function
     const tx = await factory.createCampaign(
       name,
+      symbol,
       fundingGoal,
       durationInDays,
       pricePerToken

@@ -1,9 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+interface IEquityToken {
+    function mintEquity(address to, uint256 amount) external;
+}
+
 contract BusinessCampaign /*is Ownable*/ {
 
     enum CampaignState { Active , Failed , Funded}  //states should start with capital letters otherwise it gives error
+    address public equityTokenAddress; //corresponding equity token for this campaign 
+
+    mapping(address => uint256) public tokenEscrowBalances; //track how many token each investor is owed
+    IEquityToken public equityToken;
 
     struct Campaign {
         address payable owner;         // The address that can withdraw funds if target is met
@@ -37,10 +45,11 @@ contract BusinessCampaign /*is Ownable*/ {
         //string memory _detailedPlan,
         uint256 _fundingGoal, 
         uint256 _durationInDays,
-        uint256 _pricePerToken
+        uint256 _pricePerToken,
+        address payable _owner //owner wallet address so withdraw can work and contract knows that owner is the one who can withdraw funds and msg.sender doesnt evaluate to the parent campaign factory contract 
     ) payable {
         // The address that deployed the contract is the campaign owner
-        startup.owner = payable(msg.sender);
+        startup.owner = payable(_owner);
         startup.name = _name;
         //startup.shortDescription = _shortDescription; // NEW FIELD
         //startup.detailedPlan = _detailedPlan;         // NEW FIELD
@@ -69,11 +78,16 @@ contract BusinessCampaign /*is Ownable*/ {
         function contribute() public payable onlyActive {
         require(msg.value > 0, "Contribution must be greater than zero.");
         
+        uint256 tokensToBuy = (msg.value / startup.pricePerToken) * 10**18;
+        
         // 1. Record the contribution amount for the investor
         contributions[msg.sender] += msg.value;
 
         // 2. Update the total amount raised
         startup.amountRaised += msg.value;
+
+        // do not mint yet. Just record what they are owed in escrow.
+        tokenEscrowBalances[msg.sender] += tokensToBuy;
 
         // 3. Check if the goal was just met
         if (startup.amountRaised >= startup.fundingGoal) {
@@ -140,6 +154,27 @@ contract BusinessCampaign /*is Ownable*/ {
         // Send Ether back to the investor
         (bool success, ) = msg.sender.call{value: amount}("");
         require(success, "Refund transfer failed.");
+    }
+
+    function setTokenAddress(address _tokenAddress) external {
+        // Security check: Only allow this to be set if it hasn't been linked to a token yet
+        require(equityTokenAddress == address(0), "Token address has already been set.");
+        equityTokenAddress = _tokenAddress;
+        equityToken = IEquityToken(_tokenAddress); // initialize so mint token function doesnt fail
+    }
+
+    function claimTokens() public {
+        // Enforce the escrow rule: Campaign must be successfully funded
+        require(startup.state == CampaignState.Funded, "Campaign must be successful to claim tokens.");
+        
+        uint256 tokensOwed = tokenEscrowBalances[msg.sender];
+        require(tokensOwed > 0, "No escrowed tokens available to claim.");
+
+        // Clear the ledger balance BEFORE the external call (Reentrancy protection)
+        tokenEscrowBalances[msg.sender] = 0;
+
+        // Mint the tokens directly to their wallet now that the escrow conditions are met
+        equityToken.mintEquity(msg.sender, tokensOwed);
     }
 
 }
