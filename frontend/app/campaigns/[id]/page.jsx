@@ -213,6 +213,17 @@ export default function CampaignDetailPage() {
             const provider = new ethers.BrowserProvider(window.ethereum);
             const signer = await provider.getSigner();
 
+            const balance = await provider.getBalance(signer.address);
+            const amount = ethers.parseEther(investmentAmount);
+
+            if (balance < amount) {
+                const userBalanceEth = ethers.formatEther(balance);
+                setInvestmentError(
+                    `Insufficient funds: You have ${parseFloat(userBalanceEth).toFixed(4)} ETH, but you entered ${investmentAmount} ETH (plus gas).`
+                );
+                return; // Exit early safely without triggering an RPC contract error!
+            }
+
             // Create contract instance
             console.log("Campaign data:", campaign);
             console.log("Contract address:", campaign.contract_address);
@@ -225,7 +236,7 @@ export default function CampaignDetailPage() {
 
             const contract = new ethers.Contract(
                 campaign.contract_address,
-                BusinessCampaignABI,
+                BusinessCampaignABI.abi,
                 signer
             );
 
@@ -254,8 +265,35 @@ export default function CampaignDetailPage() {
                 }
             }
         } catch (error) {
-            console.error("Investment error:", error);
-            setInvestmentError(error.message || "Investment failed");
+            // Check if the user simply rejected/cancelled the prompt in MetaMask
+            const isUserRejection = 
+                error.code === "ACTION_REJECTED" || 
+                error.code === 4001 || 
+                error?.info?.error?.code === 4001 ||
+                error?.message?.includes("user rejected");
+
+            if (isUserRejection) {
+                // DO NOT call console.error here! 
+                // Calling console.warn or skipping console logs completely prevents Next.js dev overlay from opening.
+                console.warn("User cancelled MetaMask signature request.");
+                setInvestmentError("Transaction aborted: You rejected the request in MetaMask.");
+            } 
+            else if (
+                error.code === "INSUFFICIENT_FUNDS" ||
+                error.message?.includes("insufficient funds") ||
+                error?.info?.error?.message?.includes("insufficient funds")
+            ) {
+                console.warn("Insufficient funds for transaction.");
+                setInvestmentError("Insufficient funds: You don't have enough Sepolia ETH to cover this investment and the gas fees.");
+            } 
+            else if (error.code === "CALL_EXCEPTION") {
+                console.error("Smart contract execution reverted:", error);
+                setInvestmentError("Transaction failed: Smart contract execution reverted.");
+            } 
+            else {
+                console.error("Unhandled investment error:", error);
+                setInvestmentError(error.reason || error.message || "Investment failed");
+            }
         } finally {
             setIsInvesting(false);
         }
