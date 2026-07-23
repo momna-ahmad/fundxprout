@@ -7,7 +7,7 @@ import { launchBusinessCampaign } from "@/lib/launchCampaign";
 import { saveDraftCampaign } from "@/lib/action";
 import {
   Upload, Target, Calendar, DollarSign,
-  Loader2, CheckCircle, FileText, AlertCircle,
+  Loader2, CheckCircle, FileText, AlertCircle, Coins
 } from "lucide-react";
 import Image from "next/image";
 
@@ -177,6 +177,8 @@ export function CreateCampaignForm() {
     duration: searchParams.get("duration") ?? "",
     category: searchParams.get("category") ?? "",
     image_url: searchParams.get("image_url") ?? "",
+    tokenSymbol: searchParams.get("tokenSymbol") ?? "",
+    pricePerToken: searchParams.get("pricePerToken") ?? "",
   };
 }, [searchParams]);
 
@@ -258,6 +260,8 @@ export function CreateCampaignForm() {
       if (!formData.duration) throw new Error("Campaign duration is required");
       if (!formData.category) throw new Error("Category is required");
       if (!imageUrl) throw new Error("Campaign cover image is required");
+      if (!formData.tokenSymbol.trim()) throw new Error("Token Symbol is required");
+      if (!formData.pricePerToken) throw new Error("Price per token is required");
 
       // Call server action to save draft
       const result = await saveDraftCampaign({
@@ -273,6 +277,8 @@ export function CreateCampaignForm() {
         financialsCid: docCids.financials_cid,
         useOfFundsCid: docCids.use_of_funds_cid,
         productDemoCid: docCids.product_demo_cid,
+        tokenSymbol: formData.tokenSymbol,
+        pricePerToken: formData.pricePerToken,
       });
 
       if (result.error) {
@@ -385,6 +391,32 @@ export function CreateCampaignForm() {
                   <option key={c} value={c.toLowerCase()} className="bg-[#1a2030]">{c}</option>
                 ))}
               </select>
+            </div>
+
+            {/* ── Token Mechanics (New Sections) ────────────────────── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-2 uppercase tracking-wider">
+                  Equity Token Ticker Symbol *
+                </label>
+                <div className="relative">
+                  <Coins className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                  <input type="text" name="tokenSymbol" value={formData.tokenSymbol}
+                    onChange={handleInputChange} className={inputClass + " pl-10"}
+                    placeholder="e.g. RON" maxLength={5} minLength={3} required />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-2 uppercase tracking-wider">
+                  Price Per Equity Token (ETH) *
+                </label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                  <input type="number" name="pricePerToken" value={formData.pricePerToken}
+                    onChange={handleInputChange} className={inputClass + " pl-10"}
+                    placeholder="e.g. 0.1" step="0.0001" min="0.0001" required />
+                </div>
+              </div>
             </div>
 
             {/* ── Cover Image (Cloudinary) ───────────────────── */}
