@@ -92,7 +92,6 @@ export async function getAllCampaigns() {
         const { data, error } = await supabase
             .from("campaigns")
             .select(`*`)
-            .eq("status", "launched")
             .order("created_at", { ascending: false }); // newest first
 
         if (error) {

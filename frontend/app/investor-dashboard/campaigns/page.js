@@ -1,11 +1,13 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { getAllCampaigns } from "@/utils/supabase/getCampaigns";
-import { fetchInvestmentHistory as fetchHistoryUtil } from "@/utils/investmentUtils";
-import { Target, Users, Clock, DollarSign, ExternalLink, TrendingUp } from "lucide-react";
+import { fetchInvestmentHistory as fetchHistoryUtil, logTransaction } from "@/utils/investmentUtils";
+import { Target, Users, Clock, DollarSign, ExternalLink, TrendingUp , Filter } from "lucide-react";
 import Link from "next/link";
 import RiskBadge from "@/components/RiskBadge";
+import { ethers } from "ethers";
+import BusinessCampaignJSON from "@/abis/BusinessCampaign.json";
 
 function calcDaysLeft(createdAt, durationDays) {
   const deadline = new Date(
@@ -20,6 +22,183 @@ export default function InvestorCampaignsPage() {
   const [campaigns, setCampaigns] = useState([]);
   const [investmentHistory, setInvestmentHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [claimPending, setClaimPending] = useState(null);
+  const [refundPending, setRefundPending] = useState(null);
+
+  const [activeFilter, setActiveFilter] = useState("all");
+
+  async function handleClaimTokens(campaignContractAddress, tokenContractAddress, tokenSymbol, setClaimPending) {
+  if (typeof window === "undefined" || !window.ethereum) {
+    alert("Please install MetaMask!");
+    return;
+  }
+
+  try {
+    setClaimPending(campaignContractAddress);
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+
+    const campaignContract = new ethers.Contract(
+      campaignContractAddress,
+      BusinessCampaignJSON.abi,
+      signer
+    );
+
+    // 1. Call claimTokens on the campaign smart contract
+    console.log("Claiming tokens from contract:", campaignContractAddress);
+    const tx = await campaignContract.claimTokens();
+    alert(`Claim transaction submitted! Hash: ${tx.hash}`);
+
+    await tx.wait();
+    alert("Tokens successfully claimed!");
+
+    // 2. Prompt MetaMask to register/display the new ERC-20 token
+    if (tokenContractAddress && tokenSymbol) {
+      try {
+        await window.ethereum.request({
+          method: "wallet_watchAsset",
+          params: {
+            type: "ERC20",
+            options: {
+              address: tokenContractAddress,
+              symbol: tokenSymbol,
+              decimals: 18,
+            },
+          },
+        });
+      } catch (watchErr) {
+        console.warn("Could not automatically register token in MetaMask:", watchErr);
+      }
+    }
+
+    window.location.reload();
+  } catch (err) {
+    console.error("Error claiming tokens:", err);
+    alert(err.reason || err.message || "Failed to claim tokens. Make sure campaign is Funded and deadline has passed.");
+  } finally {
+    setClaimPending(null);
+  }
+}
+
+// 2. Request ETH Refund (Failure Path)
+  async function handleRefund(campaignContractAddress, campaignId, investmentId) {
+    if (typeof window === "undefined" || !window.ethereum) {
+      alert("Please install MetaMask!");
+      return;
+    }
+
+    try {
+      setRefundPending(campaignContractAddress);
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+
+      const campaignContract = new ethers.Contract(
+        campaignContractAddress,
+        BusinessCampaignJSON.abi,
+        signer
+      );
+
+      const startupStruct = await campaignContract.startup();
+      const currentState = startupStruct.state;
+
+      // ONLY call finalize if the contract is still in Active (0) state!
+      if (Number(currentState) === 0) {
+        console.log("Campaign is active. Calling finalize()...");
+        const finalizeTx = await campaignContract.finalize();
+        await finalizeTx.wait();
+      }
+
+      const userContribution = await campaignContract.contributions(signer.getAddress());
+
+    if (BigInt(userContribution) === BigInt(0)) {
+      alert("Contribution has already been refunded.");
+      setRefundPending(null);
+      return;
+    }
+
+      console.log("Requesting refund from contract:", campaignContractAddress);
+      const tx = await campaignContract.refund();
+      alert(`Refund transaction submitted! Hash: ${tx.hash}`);
+
+      await tx.wait();
+      alert("Refund successful! Funds have been returned to your wallet.");
+
+      if (user?.id) {
+      await logTransaction({
+        userId: user.id,
+        campaignId: campaignId,
+        investmentId: investmentId,
+        type: "refund",
+        txHash: tx.hash,
+      });
+    }
+
+      window.location.reload();
+    } catch (err) {
+    console.error("Error requesting refund:", err);
+
+    // Directly match the specific revert reason or error message
+    const reason = err?.reason || err?.message || "";
+
+    if (reason.includes("No contribution recorded for this address")) {
+      alert("No contribution recorded for this address.");
+    } else {
+      alert(reason || "Failed to process refund.");
+    }
+  } finally {
+      setRefundPending(null);
+    }
+  }
+
+  // Aggregate duplicate investments into single campaign cards
+  const aggregatedCampaigns = useMemo(() => {
+    const map = new Map();
+
+    for (const inv of investmentHistory) {
+      const campaign = campaigns.find((c) => c.id === inv.campaign_id);
+      console.log("Processing investment:", inv, "Campaign found:", campaign);
+      if (!campaign) continue;
+
+      const existing = map.get(campaign.id);
+      const invAmount = parseFloat(inv.amount || 0);
+
+      if (existing) {
+        existing.userTotalInvested += invAmount;
+        if (inv.transaction_hash && !existing.transactions.includes(inv.transaction_hash)) {
+          existing.transactions.push(inv.transaction_hash);
+        }
+        // Keep latest investment id for logging references
+        existing.latestInvestmentId = inv.id;
+      } else {
+        map.set(campaign.id, {
+          campaign,
+          userTotalInvested: invAmount,
+          transactions: inv.transaction_hash ? [inv.transaction_hash] : [],
+          latestInvestmentId: inv.id,
+          created_at: inv.created_at || campaign.created_at,
+        });
+      }
+    }
+
+    return Array.from(map.values());
+  }, [investmentHistory, campaigns]);
+
+  // Apply active filter (all, ongoing, ended, recent)
+  const filteredCampaigns = useMemo(() => {
+    let list = [...aggregatedCampaigns];
+
+    if (activeFilter === "ongoing") {
+      list = list.filter(({ campaign }) => calcDaysLeft(campaign.created_at, campaign.duration) > 0);
+    } else if (activeFilter === "ended") {
+      list = list.filter(({ campaign }) => calcDaysLeft(campaign.created_at, campaign.duration) === 0);
+    } else if (activeFilter === "recent") {
+      list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+
+    return list;
+  }, [aggregatedCampaigns, activeFilter]);
 
   useEffect(() => {
     async function load() {
@@ -81,7 +260,7 @@ export default function InvestorCampaignsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground mb-1">Campaigns Invested</p>
-              <p className="text-2xl font-bold text-foreground">{investedCampaigns.length}</p>
+              <p className="text-2xl font-bold text-foreground">{filteredCampaigns.length}</p>
             </div>
             <Target className="w-8 h-8 text-ring opacity-60" />
           </div>
@@ -97,8 +276,35 @@ export default function InvestorCampaignsPage() {
         </div>
       </div>
 
+      {/* Filter Tabs Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border pb-4">
+        <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+          <Filter className="w-4 h-4 text-ring" /> Filter Investments
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: "all", label: "All Campaigns" },
+            { id: "ongoing", label: "Ongoing" },
+            { id: "ended", label: "Ended" },
+            { id: "recent", label: "Most Recent" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveFilter(tab.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                activeFilter === tab.id
+                  ? "bg-ring text-white"
+                  : "bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Campaign cards */}
-      {investedCampaigns.length === 0 ? (
+      {filteredCampaigns.length === 0 ? (
         <div className="bg-card border border-border rounded-xl p-12 text-center">
           <Target className="w-14 h-14 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-bold text-foreground mb-2">No investments yet</h3>
@@ -115,7 +321,7 @@ export default function InvestorCampaignsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {investedCampaigns.map(({ campaign, ...inv }, idx) => {
+          {filteredCampaigns.map(({ campaign, ...inv }, idx) => {
             const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration);
             const goal = parseFloat(campaign.funding_goal ?? 0);
             const raised = parseFloat(
@@ -124,6 +330,7 @@ export default function InvestorCampaignsPage() {
             const remaining = Math.max(0, goal - raised);
             const progress = goal > 0 ? Math.min(100, (raised / goal) * 100) : 0;
             const isActive = daysLeft > 0;
+            const isGoalReached = raised >= goal && goal > 0;
 
             return (
               <div
@@ -230,7 +437,7 @@ export default function InvestorCampaignsPage() {
                         </span>
                       </div>
                       <p className="text-sm font-bold text-foreground">
-                        {parseFloat(inv.amount).toFixed(4)} ETH
+                        {parseFloat(inv.userTotalInvested).toFixed(4)} ETH
                       </p>
                     </div>
                     <div className="bg-background rounded-lg p-3 border border-border">
@@ -250,28 +457,39 @@ export default function InvestorCampaignsPage() {
                     </div>
                   </div>
 
+                  <div className="px-5 pb-3">
+                    {isGoalReached && (
+                      <button
+                        onClick={() =>
+                          handleClaimTokens(
+                            campaign.contract_address,
+                            campaign.token_contract_address,
+                            campaign.token_symbol || "EQT",
+                            setClaimPending
+                          )
+                        }
+                        disabled={claimPending === campaign.contract_address}
+                        className="w-full mb-3 py-2 px-4 rounded-lg text-xs font-bold text-white transition duration-200 flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50"
+                      >
+                        {claimPending === campaign.contract_address ? "Claiming Tokens..." : "Claim Equity Tokens"}
+                      </button>
+                    )}
+                  </div>
+
+                  {!isGoalReached && (
+                      <button
+                        onClick={() => handleRefund(campaign.contract_address,campaign.id, inv.id)}
+                        disabled={refundPending === campaign.contract_address}
+                        className="w-full py-2.5 px-4 rounded-lg text-xs font-bold text-white transition duration-200 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 disabled:opacity-50"
+                      >
+                        
+                        {refundPending === campaign.contract_address ? "Processing Refund..." : "Withdraw Invested Funds"}
+                      </button>
+                    )}
+
                   {/* Transaction footer */}
                   <div className="flex items-center justify-between pt-3 border-t border-border gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[10px] text-muted-foreground mb-0.5">Transaction</p>
-                      <p className="text-[11px] font-mono text-ring truncate">
-                        {inv.transaction_hash
-                          ? `${inv.transaction_hash.slice(0, 10)}...${inv.transaction_hash.slice(-8)}`
-                          : "—"}
-                      </p>
-                    </div>
                     <div className="flex items-center gap-3 flex-shrink-0">
-                      {inv.transaction_hash && (
-                        <a
-                          href={`https://sepolia.etherscan.io/tx/${inv.transaction_hash}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-ring transition-colors"
-                        >
-                          <ExternalLink size={11} />
-                          Etherscan
-                        </a>
-                      )}
                       <Link
                         href={`/campaigns/${campaign.id}`}
                         className="text-[11px] font-semibold transition-colors hover:underline"

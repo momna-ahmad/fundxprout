@@ -31,6 +31,11 @@ export async function launchBusinessCampaign(
   const useOfFundsCid = (formData.get("use_of_funds_cid") as string) ?? "";
   const productDemoCid = (formData.get("product_demo_cid") as string) ?? "";
 
+  // 2. Calculate the Deadline Timestamp (Current Date + Duration in Days)
+  const deadlineDate = new Date();
+  deadlineDate.setDate(deadlineDate.getDate() + duration);
+  const deadlineIso = deadlineDate.toISOString();
+
   const goalInWei = ethers.parseEther(goal);
   const priceInWei = ethers.parseEther(pricePerToken.toString());
 
@@ -114,6 +119,7 @@ export async function launchBusinessCampaign(
       financialsCid,
       useOfFundsCid,
       productDemoCid,
+      deadline: deadlineIso
     });
 
     if (dbResult.error) return { error: dbResult.error };

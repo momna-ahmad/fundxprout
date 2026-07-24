@@ -193,3 +193,37 @@ export const getTotalRaisedForCampaign = async (campaignId: string) => {
     return 0;
   }
 };
+
+export async function logTransaction({
+  userId,
+  campaignId,
+  investmentId,
+  type, // "token_claim" | "refund" | "investment"
+  txHash,
+  quantity = null,
+  pricePerToken = null,
+}: {
+  userId: string;
+  campaignId: string | number;
+  investmentId?: string | number;
+  type: string;
+  txHash: string;
+  quantity?: number | null;
+  pricePerToken?: number | null;
+}) {
+  const supabase = createClient();
+
+  console.log(`Logging ${type} transaction for user ${userId}, campaign ${campaignId}, investment ${investmentId}, txHash ${txHash}`);
+
+  const { error } = await supabase.from("transactions").insert({
+    user_id: userId,
+    campaign_id: campaignId,
+    investment_id: investmentId,
+    type: type,
+    tx_hash: txHash,
+  });
+
+  if (error) {
+    console.error(`Error logging ${type} transaction:`, error);
+  }
+}

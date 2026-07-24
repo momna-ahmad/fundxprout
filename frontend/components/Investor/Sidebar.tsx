@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation';
 const navItems = [
   { href: '/investor-dashboard/overview',      label: 'Overview',      icon: LayoutDashboard },
   { href: '/investor-dashboard/portfolio',     label: 'Portfolio',     icon: Wallet          },
-  { href: '/investor-dashboard/campaigns',     label: 'Campaigns',     icon: Briefcase       },
+  { href: '/investor-dashboard/campaigns',     label: 'Investments',     icon: Briefcase       },
   { href: '/investor-dashboard/tokens',        label: 'My Tokens',     icon: Coins           },
   { href: '/investor-dashboard/marketplace',    label: 'Marketplace',   icon: Store           },
   { href: '/investor-dashboard/transactions',  label: 'Transactions',  icon: ArrowLeftRight  },
