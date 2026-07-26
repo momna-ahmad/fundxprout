@@ -359,6 +359,7 @@ export default function DashboardPage() {
                     );
                     const goal = parseFloat(campaign.funding_goal ?? "0");
                     const statusStyle = getStatusStyle(campaign.status);
+                    const isGoalReached = campaign.amount_pledged >= goal;
 
                     return (
                       <div
@@ -442,7 +443,7 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="flex gap-4">
-                          {campaign.contract_address && (
+                          {campaign.status === "ended" && isGoalReached && (
                             <button
                               onClick={() => handleWithdrawFunds(campaign.contract_address, setTxPending)}
                               disabled={txPending === campaign.contract_address}

@@ -72,7 +72,7 @@ export const recordInvestment = async (
     const priceNum = parseFloat(pricePerToken ?? "0");
     const equityTokens = priceNum > 0 ? amountNum / priceNum : 0;
 
-    const { error } = await supabase.from("investments").insert([{
+    const { data , error } = await supabase.from("investments").insert([{
       investor_id:               userId,
       campaign_id:               parseInt(campaignId),
       amount:                    amountNum,
@@ -84,13 +84,15 @@ export const recordInvestment = async (
       investor_address:          investorAddress,
       invested_at:               new Date().toISOString(),
       status:                    "completed",
-    }]);
+    }])
+    .select("id")
+    .single();
 
     if (error) {
       console.error("Error recording investment:", error);
       return false;
     }
-    return true;
+    return data;
   } catch (err) {
     console.error("Exception recording investment:", err);
     return false;
@@ -197,33 +199,65 @@ export const getTotalRaisedForCampaign = async (campaignId: string) => {
 export async function logTransaction({
   userId,
   campaignId,
-  investmentId,
+  referenceId,
   type, // "token_claim" | "refund" | "investment"
   txHash,
   quantity = null,
-  pricePerToken = null,
+  token = null,
 }: {
   userId: string;
   campaignId: string | number;
-  investmentId?: string | number;
+  referenceId?: string | number;
   type: string;
   txHash: string;
   quantity?: number | null;
-  pricePerToken?: number | null;
+  token?: number | null;
 }) {
   const supabase = createClient();
 
-  console.log(`Logging ${type} transaction for user ${userId}, campaign ${campaignId}, investment ${investmentId}, txHash ${txHash}`);
+  console.log(`Logging ${type} transaction for user ${userId}, campaign ${campaignId}, reference ${referenceId}, txHash ${txHash}`);
 
   const { error } = await supabase.from("transactions").insert({
     user_id: userId,
     campaign_id: campaignId,
-    investment_id: investmentId,
+    reference_id: referenceId,
     type: type,
     tx_hash: txHash,
+    token_amount: quantity,
+    token_symbol: token,
   });
 
   if (error) {
-    console.error(`Error logging ${type} transaction:`, error);
+    console.error(`Error logging transaction:`, error);
+  }
+}
+
+export async function recordClaimedToken({
+  campaignId,
+  investmentId,
+  userId,
+  amount,
+  tokenSymbol,
+}: {
+  campaignId: number | string;
+  investmentId?: string;
+  userId: string;
+  amount: number;
+  tokenSymbol: string;
+}) {
+  const supabase = createClient();
+
+  const { data, error } = await supabase.from("tokens").insert({
+    campaign_id: campaignId,
+    investment_id: investmentId,
+    user_id: userId,
+    amount: amount,
+    token_symbol: tokenSymbol,
+  });
+
+  if (error) {
+    console.error("Error inserting into tokens table:", error);
+  } else {
+    console.log("Token record created successfully:", data);
   }
 }

@@ -10,31 +10,28 @@ export async function getUserTransactions() {
     if (!user) return [];
 
     const { data, error } = await supabase
-      .from("investments")
-      .select(`
-        *,
-        campaign:campaigns(title, category)
-      `)
-      .eq("investor_id", user.id)
-      .order("invested_at", { ascending: false });
+      .from("transactions")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
 
     if (error) {
       console.error("[getUserTransactions] Supabase error:", error);
       return [];
     }
 
-    // Transform investments to transaction format
-    return (data ?? []).map((inv) => ({
-      id: String(inv.id),
-      hash: inv.transaction_hash || "N/A",
-      type: "Buy" as const,
-      tokenSymbol: inv.campaign?.title?.split(" ")[0] || "TOKEN",
-      tokenAmount: inv.equity_tokens || 0,
-      valueUSD: inv.amount || 0,
-      date: inv.invested_at || new Date().toISOString(),
+    // Transform transactions to the expected format
+    return (data ?? []).map((txn) => ({
+      id: String(txn.id),
+      hash: txn.tx_hash || "N/A",
+      type: txn.type || "Buy",
+      tokenSymbol: txn.token_symbol || "TOKEN",
+      tokenAmount: txn.token_amount || 0,
+      valueUSD: txn.amount || 0,
+      date: txn.created_at || new Date().toISOString(),
       status: "Confirmed" as const,
-      from: inv.investor_address,
-      to: inv.campaign_id ? `Campaign ${inv.campaign_id}` : "N/A",
+      from: txn.investor_address,
+      to: txn.campaign_id ? `Campaign ${txn.campaign_id}` : "N/A",
     }));
   } catch (err) {
     console.error("[getUserTransactions] Exception:", err);

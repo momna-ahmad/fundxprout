@@ -2,7 +2,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { getAllCampaigns } from "@/utils/supabase/getCampaigns";
-import { fetchInvestmentHistory as fetchHistoryUtil, logTransaction } from "@/utils/investmentUtils";
+import { fetchInvestmentHistory as fetchHistoryUtil, logTransaction , recordClaimedToken} from "@/utils/investmentUtils";
 import { Target, Users, Clock, DollarSign, ExternalLink, TrendingUp , Filter } from "lucide-react";
 import Link from "next/link";
 import RiskBadge from "@/components/RiskBadge";
@@ -27,7 +27,7 @@ export default function InvestorCampaignsPage() {
 
   const [activeFilter, setActiveFilter] = useState("all");
 
-  async function handleClaimTokens(campaignContractAddress, tokenContractAddress, tokenSymbol, setClaimPending) {
+  async function handleClaimTokens(campaignContractAddress, tokenContractAddress, tokenSymbol, investmentId, campaignId) {
   if (typeof window === "undefined" || !window.ethereum) {
     alert("Please install MetaMask!");
     return;
@@ -45,12 +45,44 @@ export default function InvestorCampaignsPage() {
       signer
     );
 
+    const tokensOwedWei = await campaignContract.tokenEscrowBalances(signer.getAddress());
+
+    if (BigInt(tokensOwedWei) === BigInt(0)) {
+      alert("No escrowed tokens available to claim for this address.");
+      setClaimPending(null);
+      return;
+    }
+
+    const claimedAmount = parseFloat(ethers.formatUnits(tokensOwedWei, 18));
+
     // 1. Call claimTokens on the campaign smart contract
     console.log("Claiming tokens from contract:", campaignContractAddress);
     const tx = await campaignContract.claimTokens();
     alert(`Claim transaction submitted! Hash: ${tx.hash}`);
 
     await tx.wait();
+
+    if (user?.id) {
+      await recordClaimedToken({
+        campaignId: campaignId,
+        investmentId: investmentId,
+        userId: user.id,
+        amount: claimedAmount,
+        tokenSymbol: tokenSymbol,
+      });
+
+      // Also log to transactions table if needed
+      await logTransaction({
+        userId: user.id,
+        campaignId: campaignId,
+        referenceId: investmentId,
+        type: "token_claim",
+        txHash: tx.hash,
+        quantity: claimedAmount,
+        token: tokenSymbol,
+      });
+    }
+
     alert("Tokens successfully claimed!");
 
     // 2. Prompt MetaMask to register/display the new ERC-20 token
@@ -465,7 +497,8 @@ export default function InvestorCampaignsPage() {
                             campaign.contract_address,
                             campaign.token_contract_address,
                             campaign.token_symbol || "EQT",
-                            setClaimPending
+                            inv.id,
+                            campaign.id
                           )
                         }
                         disabled={claimPending === campaign.contract_address}

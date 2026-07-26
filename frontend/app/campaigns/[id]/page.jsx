@@ -21,6 +21,7 @@ import {
     getInvestmentsByCampaign,
 } from "@/utils/investmentUtils";
 import RiskAssessmentPanel from "@/components/RiskAssessmentPanel";
+import { logTransaction } from "@/utils/investmentUtils";
 
 // shafqaat — Helper: calculate days left from created_at + duration
 function calcDaysLeft(createdAt, durationDays) {
@@ -263,6 +264,16 @@ export default function CampaignDetailPage() {
                     setInvestModal(false);
                     alert("Investment successful! Transaction: " + receipt.hash);
                 }
+
+                const log = await logTransaction({
+                    userId : user.id,
+                    campaignId : campaign.id,
+                    txHash : receipt.hash,
+                    referenceId : recorded?.id || null,
+                    quantity : parseFloat(investmentAmount),
+                    type : "investment",
+                    token: "ETH"
+                });
             }
         } catch (error) {
             // Check if the user simply rejected/cancelled the prompt in MetaMask

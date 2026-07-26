@@ -103,46 +103,52 @@ export async function getUserTokenHoldings() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
 
-    const { data: investments, error } = await supabase
-      .from("investments")
+    // 1. Fetch claimed tokens joined with campaign details
+    const { data: userTokens, error } = await supabase
+      .from("tokens")
       .select(`
         *,
-        campaign:campaigns(id, title, category, price_per_token, contract_address)
+        campaign:campaigns(id, title, category, price_per_token, contract_address, token_symbol)
       `)
-      .eq("investor_id", user.id)
-      .eq("status", "completed");
+      .eq("user_id", user.id);
 
     if (error) {
       console.error("[getUserTokenHoldings] Supabase error:", error);
       return [];
     }
 
-    // Fetch live ETH/USD price — price_per_token is stored in ETH, convert to USD
+    // 2. Fetch live ETH/USD price for fiat value calculation
     const ethPrice = await getEthPrice();
 
-    // Group investments by campaign to create token holdings
+    // 3. Group token holdings by campaign_id
     const holdingsMap = new Map<string, any>();
 
-    (investments ?? []).forEach((inv) => {
-      const campaignId = String(inv.campaign_id);
-      const campaign = Array.isArray(inv.campaign) ? inv.campaign[0] : inv.campaign;
+    (userTokens ?? []).forEach((tokenRecord) => {
+      const campaignId = String(tokenRecord.campaign_id);
+      const campaign = Array.isArray(tokenRecord.campaign)
+        ? tokenRecord.campaign[0]
+        : tokenRecord.campaign;
+
       const campaignTitle = campaign?.title || "Unknown";
-      // price_per_token is stored in ETH — convert to USD
+      const symbol = tokenRecord.token_symbol || campaign?.token_symbol || campaignTitle.split(" ")[0].toUpperCase();
+      
+      // price_per_token is in ETH -> convert to USD
       const pptEth = parseFloat(campaign?.price_per_token || "0.001") || 0.001;
       const pricePerTokenUsd = pptEth * ethPrice;
+      const tokenAmount = parseFloat(tokenRecord.amount || "0") || 0;
 
       if (!holdingsMap.has(campaignId)) {
         holdingsMap.set(campaignId, {
           id: campaignId,
           name: campaignTitle,
-          symbol: campaignTitle.split(" ")[0].toUpperCase(),
+          symbol: symbol,
           contractAddress: campaign?.contract_address,
           balance: 0,
           price: pricePerTokenUsd,   // USD per token
-          priceEth: pptEth,          // ETH per token (original)
-          ethPrice,                  // live ETH/USD rate
+          priceEth: pptEth,          // ETH per token
+          ethPrice,                  // Live ETH/USD rate
           value: 0,
-          change24h: (Math.random() - 0.5) * 20,
+          change24h: (Math.random() - 0.5) * 20, // UI mock metric
           color: generateColorForToken(campaignId),
           priceHistory: generateMockPriceHistory(),
           campaignId,
@@ -151,13 +157,9 @@ export async function getUserTokenHoldings() {
       }
 
       const holding = holdingsMap.get(campaignId)!;
-      const storedTokens = parseFloat(inv.equity_tokens || "0") || 0;
-      const invAmountEth = parseFloat(inv.amount || "0") || 0;
-      // fallback: derive token count from ETH invested ÷ price per token if equity_tokens not stored
-      const tokensToAdd = storedTokens > 0 ? storedTokens : (pptEth > 0 ? invAmountEth / pptEth : 0);
-      holding.balance += tokensToAdd;
+      holding.balance += tokenAmount;
       holding.value = holding.balance * holding.price;
-      holding.totalInvested += invAmountEth * ethPrice;
+      holding.totalInvested += tokenAmount * pricePerTokenUsd;
     });
 
     return Array.from(holdingsMap.values());

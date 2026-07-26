@@ -15,10 +15,10 @@ type TxType   = 'All' | 'Buy' | 'Sell' | 'Transfer' | 'Stake' | 'Dividend';
 type TxStatus = 'All' | 'Confirmed' | 'Pending' | 'Failed';
 
 const TYPE_COLORS: Record<string, { bg: string; text: string }> = {
-  Buy:      { bg: 'bg-green-500/10',         text: 'text-green-400'         },
-  Sell:     { bg: 'bg-destructive/10',        text: 'text-destructive'       },
-  Transfer: { bg: 'bg-white/6',              text: 'text-muted-foreground'  },
-  Stake:    { bg: 'bg-[#6f42c1]/10',         text: 'text-[#a78bfa]'         },
+  Investment:      { bg: 'bg-green-500/10',         text: 'text-green-400'         },
+  Token_claim:     { bg: 'bg-destructive/10',        text: 'text-destructive'       },
+  Buy: { bg: 'bg-white/6',              text: 'text-muted-foreground'  },
+  Sell:    { bg: 'bg-[#6f42c1]/10',         text: 'text-[#a78bfa]'         },
   Dividend: { bg: 'bg-[var(--chart-4)]/10',  text: 'text-[var(--chart-4)]'  },
 };
 
@@ -118,7 +118,7 @@ export default function TransactionsPage() {
           {/* Type filter */}
           <div className="flex items-center gap-1.5">
             <Filter size={13} className="text-muted-foreground flex-shrink-0" />
-            {(['All', 'Buy', 'Sell', 'Transfer', 'Stake', 'Dividend'] as TxType[]).map((f) => (
+            {(['All', 'Investment', 'Token_claim', 'Buy', 'Sell', 'Dividend'] as TxType[]).map((f) => (
               <button
                 key={f}
                 onClick={() => setTypeFilter(f)}
@@ -167,7 +167,7 @@ export default function TransactionsPage() {
             </thead>
             <tbody>
               {filtered.map((tx) => {
-                const typeStyle = TYPE_COLORS[tx.type] ?? TYPE_COLORS.Transfer;
+                const typeStyle = TYPE_COLORS[tx.type] ?? TYPE_COLORS.Buy;
                 return (
                   <tr key={tx.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3">
