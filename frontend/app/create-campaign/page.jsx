@@ -401,7 +401,7 @@ export function CreateCampaignForm() {
                 </label>
                 <div className="relative">
                   <Coins className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-                  <input type="text" name="tokenSymbol" value={formData.tokenSymbol}
+                  <input type="text" name="tokenSymbol" value={formData.tokenSymbol || ""}
                     onChange={handleInputChange} className={inputClass + " pl-10"}
                     placeholder="e.g. RON" maxLength={5} minLength={3} required />
                 </div>
@@ -412,7 +412,7 @@ export function CreateCampaignForm() {
                 </label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-                  <input type="number" name="pricePerToken" value={formData.pricePerToken}
+                  <input type="number" name="pricePerToken" value={formData.pricePerToken || ""}
                     onChange={handleInputChange} className={inputClass + " pl-10"}
                     placeholder="e.g. 0.1" step="0.0001" min="0.0001" required />
                 </div>

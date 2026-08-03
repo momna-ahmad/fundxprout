@@ -15,12 +15,17 @@ export interface Token {
 export interface Campaign {
   id: string;
   name: string;
+  title: string;
+  imageUrl: string;
   description: string;
   industry: 'Energy' | 'Real Estate' | 'Healthcare' | 'Agriculture' | 'Finance' | 'Infrastructure';
+  category: string;
   investedAmount: number;
   tokenAmount: number;
   tokenSymbol: string;
   fundedPercent: number;
+  amount_pledged: number;
+  funding_goal: number;
   totalTarget: number;
   roi: number;
   status: 'Active' | 'Completed' | 'Pending';
@@ -57,4 +62,11 @@ export interface InvestorProfile {
 export interface PortfolioDataPoint {
   month: string;
   value: number;
+}
+
+export interface Investment{
+  campaign: Campaign;
+  amount : number;
+  date: string;
+  status: 'active' | 'completed' | 'pending' | 'claimed' | 'failed' | 'refunded';
 }
