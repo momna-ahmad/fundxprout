@@ -9,6 +9,11 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors()); // Allows Frontend to connect
+
+// IMPORTANT: Mount didit routes BEFORE express.json() because the webhook needs the raw body
+const diditRoutes = require('./routes/diditRoutes');
+app.use('/api/didit', diditRoutes);
+
 app.use(express.json()); // Parses JSON data
 
 // Routes

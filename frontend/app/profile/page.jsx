@@ -119,6 +119,7 @@ export default function ProfilePage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [profile, setProfile] = useState(null);
+  const [userId, setUserId] = useState(null);
   const [docCids, setDocCids] = useState({});  // shafqaat — tracks newly uploaded doc CIDs
 
   const [form, setForm] = useState({
@@ -132,6 +133,7 @@ export default function ProfilePage() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push("/"); return; }
+      setUserId(user.id);
       const existing = await getMyProfile();
       if (existing) {
         setProfile(existing);
@@ -182,6 +184,25 @@ export default function ProfilePage() {
       setProfile(updated);
     }
     setSaving(false);
+  };
+
+  const startDiditVerification = async (type) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/didit/${type}/create-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert("Failed to start verification: " + (data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error starting Didit verification.");
+    }
   };
 
   const completion = calcProfileCompletion(profile);
@@ -261,6 +282,18 @@ export default function ProfilePage() {
         {/* ── Section 2: KYC (Identity Verification) ── */}
         <Section icon={ShieldCheck} title="Identity Verification (KYC)"
           description="Required by AML/KYC standards — Kickstarter, Indiegogo, FCA, SECP">
+          <div className="mb-4">
+            {profile?.identity_verified ? (
+              <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl text-sm font-medium">
+                <CheckCircle className="h-5 w-5" /> Biometric Identity Verified (Didit)
+              </div>
+            ) : (
+              <button onClick={(e) => { e.preventDefault(); startDiditVerification('kyc'); }} 
+                className="inline-flex items-center gap-2 px-5 py-3 bg-[#6f42c1] hover:bg-[#5a3599] text-white rounded-xl text-sm font-bold transition shadow-lg shadow-[#6f42c1]/20">
+                <ShieldCheck className="h-5 w-5" /> Verify Identity with Didit
+              </button>
+            )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <DocUpload fieldKey="national_id_cid" label="National ID / CNIC" required
               hint="Both sides — primary identity document" accept=".pdf,.jpg,.jpeg,.png"
