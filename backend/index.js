@@ -14,7 +14,16 @@ const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_RO
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 app.use(cors());
+
+// IMPORTANT: Mount didit routes BEFORE express.json() because the webhook needs the raw body
+const diditRoutes = require('./routes/diditRoutes');
+app.use('/api/didit', diditRoutes);
+
 app.use(express.json());
+
+// Routes
+const campaignRoutes = require('./routes/campaignRoutes');
+app.use('/api/campaigns', campaignRoutes);
 
 function runRiskAssessmentForCampaign(campaignId) {
   return new Promise((resolve, reject) => {
