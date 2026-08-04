@@ -9,7 +9,8 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
-import { getUserPortfolioData, generatePortfolioTimeSeries } from "@/utils/supabase/getPortfolio";
+import { getCampaignRecommendations , getUserPortfolioData, generatePortfolioTimeSeries } from "@/utils/supabase/getPortfolio";
+import RecommnendationCampaigns from "@/components/Investor/RecommendationCampaigns";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 const formatCurrency = (v) =>
@@ -60,24 +61,50 @@ function CustomTooltip({ active, payload, label }) {
 // ── Main Component ───────────────────────────────────────────────────
 export default function DashboardPage() {
   const [portfolioData, setPortfolioData] = useState(null);
+  const [categoryDistribution, setCategoryDistribution] = useState({});
+  const [categoryBreakdownList, setCategoryBreakdownList] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getUserPortfolioData().then((data) => {
+    async function loadData() {
+      const data = await getUserPortfolioData();
+      
       setPortfolioData(data);
+      setCategoryDistribution(data?.categoryDistribution ?? {});
+
+      // Map the returned categoryBreakdownList to include colors for Recharts
+      if (data?.categoryBreakdownList?.length > 0) {
+        const formattedChartData = data.categoryBreakdownList.map((item, idx) => ({
+          name: item.category,
+          value: item.totalValueUsd,
+          percentage: item.percentage,
+          color: COLORS[idx % COLORS.length],
+        }));
+
+        setCategoryBreakdownList(formattedChartData);
+      }
+
       setLoading(false);
-    });
+    }
+
+    loadData();
   }, []);
 
   // Derive values
-  const totalInvested   = portfolioData?.totalInvested   ?? 0;
-  const portfolioValue  = portfolioData?.portfolioValue  ?? 0;
-  const totalTokens     = portfolioData?.totalTokens     ?? 0;
-  const investmentCount = portfolioData?.investmentCount ?? 0;
-  const portfolioChange = portfolioData?.portfolioChange ?? 0;
+  const totalInvested      = portfolioData?.totalInvested      ?? 0;
+  const totalInvestedEth   = portfolioData?.totalEthInvested   ?? 0;
+  const portfolioValue     = portfolioData?.totalNetWorthUsd     ?? 0;
+  const portfolioValueEth  = portfolioData?.portfolioValueEth  ?? 0;
+  const totalTokens        = portfolioData?.totalTokens        ?? 0;
+  const investmentCount    = portfolioData?.investments.length    ?? 0;
+  const portfolioChange    = portfolioData?.portfolioChange    ?? 0;
   const portfolioChangePct = portfolioData?.portfolioChangePercent ?? 0;
-  const walletAddress   = portfolioData?.walletAddress   ?? null;
-  const investments     = portfolioData?.investments     ?? [];
+  const walletAddress      = portfolioData?.walletAddress      ?? null;
+  const investments        = portfolioData?.investments        ?? [];
+  const topCampaignData    = portfolioData?.topCampaign        ?? null;
+
+  // Derive live ETH→USD rate from the two values already in portfolio data
+  const ethPrice = totalInvestedEth > 0 ? totalInvested / totalInvestedEth : 3000;
 
   // Portfolio history from real investments
   const portfolioHistory = investments.length > 0
@@ -103,20 +130,20 @@ export default function DashboardPage() {
       type: "Buy",
       tokenSymbol: camp?.title?.split(" ")[0]?.toUpperCase() ?? "TKN",
       hash: inv.transaction_hash ?? "0x000000000000",
-      valueUSD: parseFloat(inv.amount || "0") || 0,
+      valueUSD: (parseFloat(inv.amount || "0") || 0) * ethPrice,
       date: inv.invested_at ?? new Date().toISOString(),
       status: inv.status === "completed" ? "Confirmed" : "Pending",
     };
   });
 
-  // Build invested campaign cards
+  // Build invested campaign cards — investedAmount in real USD
   const investedCampaigns = investments.map((inv) => {
     const camp = Array.isArray(inv.campaign) ? inv.campaign[0] : inv.campaign;
     return {
       id: inv.id,
       name:           camp?.title     ?? `Campaign #${inv.campaign_id}`,
       industry:       camp?.category  ?? "Unknown",
-      investedAmount: parseFloat(inv.amount || "0") || 0,
+      investedAmount: (parseFloat(inv.amount || "0") || 0) * ethPrice,
       roi:            parseFloat(inv.roi_percent || "0") || 0,
       fundedPercent:  parseFloat(inv.funded_percent || "0") || 0,
     };
@@ -133,6 +160,12 @@ export default function DashboardPage() {
     { label: "Active Campaigns", value: String(investmentCount),          change: `${investmentCount} total`,      up: true,                    icon: Briefcase,  sub: "invested in"   },
     { label: "Total Returns",    value: formatCurrency(portfolioChange),  change: formatPercent(portfolioChangePct), up: portfolioChange >= 0,   icon: DollarSign, sub: "all-time ROI"  },
   ];
+
+  // Extract backed IDs so recommendation engine ignores campaigns the user already holds
+const userBackedCampaignIds = (portfolioData?.investments ?? []).map((inv) => {
+  const camp = Array.isArray(inv.campaign) ? inv.campaign[0] : inv.campaign;
+  return camp?.id || inv.campaign_id;
+});
 
   if (loading) {
     return (
@@ -302,16 +335,17 @@ export default function DashboardPage() {
         <div className="grid grid-cols-[280px_1fr_260px] gap-4 mb-5">
 
           {/* Token Allocation Donut */}
+          {/* Token / Industry Allocation Donut */}
           <div className="bg-card border border-white/5 rounded-2xl px-5 py-[22px]">
             <div className="text-[11px] text-gray-500 uppercase tracking-[0.05em] mb-4">
-              Investment Allocation
+              Category Allocation
             </div>
-            {tokenAllocData.length > 0 ? (
+            {categoryBreakdownList.length > 0 ? (
               <>
                 <ResponsiveContainer width="100%" height={160}>
                   <PieChart>
                     <Pie
-                      data={tokenAllocData}
+                      data={categoryBreakdownList}
                       cx="50%"
                       cy="50%"
                       innerRadius={46}
@@ -319,31 +353,36 @@ export default function DashboardPage() {
                       dataKey="value"
                       strokeWidth={0}
                     >
-                      {tokenAllocData.map((entry, index) => (
-                        <Cell key={index} fill={entry.color} />
+                      {categoryBreakdownList.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
                     <Tooltip
                       formatter={(v) => formatCurrency(v)}
-                      contentStyle={{ background: "#0d1117", border: "1px solid rgba(111,66,193,0.25)", borderRadius: 8, color: "#fff" }}
+                      contentStyle={{
+                        background: "#0d1117",
+                        border: "1px solid rgba(111,66,193,0.25)",
+                        borderRadius: 8,
+                        color: "#fff",
+                      }}
                     />
                   </PieChart>
                 </ResponsiveContainer>
+                
+                {/* Dynamic Category Legend */}
                 <div className="flex flex-col gap-1.5 mt-2">
-                  {tokenAllocData.map((t, i) => (
+                  {categoryBreakdownList.map((item, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs">
-                      <div className="w-2 h-2 rounded-[2px] flex-shrink-0" style={{ background: t.color }} />
-                      <span className="text-gray-400 flex-1 truncate">{t.name}</span>
-                      <span className="text-white font-semibold">
-                        {portfolioValue > 0 ? ((t.value / totalInvested) * 100).toFixed(1) : "0.0"}%
-                      </span>
+                      <div className="w-2 h-2 rounded-[2px] flex-shrink-0" style={{ background: item.color }} />
+                      <span className="text-gray-400 flex-1 truncate">{item.name}</span>
+                      <span className="text-white font-semibold">{item.percentage}%</span>
                     </div>
                   ))}
                 </div>
               </>
             ) : (
               <div className="flex items-center justify-center h-40 text-muted-foreground text-xs">
-                No allocation data
+                No allocation data available
               </div>
             )}
           </div>
@@ -386,25 +425,6 @@ export default function DashboardPage() {
                 No transactions yet
               </div>
             )}
-          </div>
-
-          {/* Quick Stats */}
-          <div className="flex flex-col gap-3">
-            {[
-              { label: "Total Invested",    value: formatCurrency(totalInvested),       textCls: "text-white"      },
-              { label: "Portfolio Value",   value: formatCurrency(portfolioValue),      textCls: "text-[#a78bfa]"  },
-              { label: "Total Tokens",      value: `${formatNumber(totalTokens)} TKN`,  textCls: "text-yellow-400" },
-              { label: "Campaigns",         value: String(investmentCount),             textCls: "text-green-400"  },
-            ].map((s) => (
-              <div key={s.label} className="bg-card border border-white/5 rounded-xl px-[18px] py-4 flex-1">
-                <div className="text-[10px] text-gray-500 mb-1.5 uppercase tracking-[0.05em]">
-                  {s.label}
-                </div>
-                <div className={`text-xl font-black tracking-tight ${s.textCls}`}>
-                  {s.value}
-                </div>
-              </div>
-            ))}
           </div>
         </div>
 
@@ -465,6 +485,22 @@ export default function DashboardPage() {
               </a>
             </div>
           )}
+        </div>
+
+        {/* ── Recommended Campaigns ── */}
+        <div className="mt-8">
+          <div className="flex items-center justify-between mb-3.5">
+            <div className="text-[11px] text-gray-500 uppercase tracking-[0.05em]">
+              Recommended Campaigns
+            </div>
+            <a href="/investor-dashboard/campaigns" className="text-[11px] text-[#a78bfa] flex items-center gap-1 no-underline hover:underline">
+              Browse all <ExternalLink size={10} />
+            </a>
+          </div>
+          <RecommnendationCampaigns 
+          categoryDistribution={categoryDistribution} 
+          userBackedCampaignIds={userBackedCampaignIds}
+          />
         </div>
 
       </div>

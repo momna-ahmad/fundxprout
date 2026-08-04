@@ -92,7 +92,6 @@ export async function getAllCampaigns() {
         const { data, error } = await supabase
             .from("campaigns")
             .select(`*`)
-            .eq("status", "launched")
             .order("created_at", { ascending: false }); // newest first
 
         if (error) {
@@ -217,10 +216,7 @@ export async function getFeaturedCampaigns(limit: number = 4) {
             .from("campaigns")
             .select("*")
             .eq("status", "launched")
-            .not("image_url", "is", null)       // shafqaat — exclude NULL image_url
-            .neq("image_url", "")               // shafqaat — also exclude empty string
-            .order("created_at", { ascending: false })
-            .limit(limit);
+            .order("created_at", { ascending: false });
 
         if (error || !data) return [];
         

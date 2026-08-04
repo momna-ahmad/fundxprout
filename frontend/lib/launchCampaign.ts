@@ -4,7 +4,10 @@ import { saveCampaignToDb } from "./action";
 import CampaignFactoryJSON from "@/abis/CampaignFactory.json";
 
 // ⚠️ Hafsa has Updated this after redeploying CampaignFactory with the new event
-const CONTRACT_ADDRESS = "0x2FCA6AF6d0C9FF4a129fEF46bD4bc4eA2A0B25d0";
+//const CONTRACT_ADDRESS = "0x2FCA6AF6d0C9FF4a129fEF46bD4bc4eA2A0B25d0";
+
+//redeployed after erc 20 smart contract (18-7-2026)
+const CONTRACT_ADDRESS = "0x876daC31839C7aeD4fa742da1D10B4902099c673" ;
 
 export async function launchBusinessCampaign(
   prevState: any,
@@ -18,6 +21,9 @@ export async function launchBusinessCampaign(
   const goal = formData.get("goal") as string;
   const duration = parseInt(formData.get("duration") as string);
   const category = formData.get("category") as string;
+  const tokenSymbol = formData.get("tokenSymbol") as string; 
+  const pricePerToken = formData.get("pricePerToken") as string;
+
   const imageUrl = (formData.get("image_url") as string) ?? "";
   const pitchDeckCid = (formData.get("pitch_deck_cid") as string) ?? "";
   const businessPlanCid = (formData.get("business_plan_cid") as string) ?? "";
@@ -25,12 +31,13 @@ export async function launchBusinessCampaign(
   const useOfFundsCid = (formData.get("use_of_funds_cid") as string) ?? "";
   const productDemoCid = (formData.get("product_demo_cid") as string) ?? "";
 
-  // 2. Price per token = Goal / 1000
-  const goalNum = parseFloat(goal);
-  const pricePerTokenNum = goalNum / 1000;
+  // 2. Calculate the Deadline Timestamp (Current Date + Duration in Days)
+  const deadlineDate = new Date();
+  deadlineDate.setDate(deadlineDate.getDate() + duration);
+  const deadlineIso = deadlineDate.toISOString();
 
   const goalInWei = ethers.parseEther(goal);
-  const priceInWei = ethers.parseEther(pricePerTokenNum.toString());
+  const priceInWei = ethers.parseEther(pricePerToken.toString());
 
   if (typeof window === "undefined" || !window.ethereum) {
     return { error: "Please install MetaMask!" };
@@ -58,6 +65,7 @@ export async function launchBusinessCampaign(
 
     const transaction = await contract.createCampaign(
       title,
+      tokenSymbol,
       goalInWei,
       duration,
       priceInWei,
@@ -69,6 +77,8 @@ export async function launchBusinessCampaign(
 
     // ✅ NEW: Parse the CampaignCreated event to get the deployed contract address
     let campaignContractAddress: string | null = null;
+    let tokenContractAddress: string | null = null;
+
     const iface = new ethers.Interface(CampaignFactoryJSON.abi);
 
     for (const log of receipt.logs) {
@@ -76,7 +86,9 @@ export async function launchBusinessCampaign(
         const parsed = iface.parseLog(log);
         if (parsed && parsed.name === "CampaignCreated") {
           campaignContractAddress = parsed.args.campaignAddress;
+          tokenContractAddress = parsed.args.tokenAddress;
           console.log("Deployed campaign contract address:", campaignContractAddress);
+          console.log("Deployed token contract address:", tokenContractAddress);
           break;
         }
       } catch {
@@ -84,7 +96,7 @@ export async function launchBusinessCampaign(
       }
     }
 
-    if (!campaignContractAddress) {
+    if (!campaignContractAddress || !tokenContractAddress) {
       console.error("CampaignCreated event not found in logs:", receipt.logs);
       return { error: "Campaign deployed on blockchain but contract address could not be extracted. Contact support with tx hash: " + receipt.hash };
     }
@@ -92,19 +104,22 @@ export async function launchBusinessCampaign(
     // 4. Save to Supabase — now includes contractAddress
     const dbResult = await saveCampaignToDb({
       title,
+      tokenSymbol,
       description,
       goal,
       duration,
       category,
       txHash: receipt.hash,
-      contractAddress: campaignContractAddress, // ✅ NEW
-      pricePerToken: pricePerTokenNum.toString(),
+      contractAddress: campaignContractAddress, 
+      tokenContractAddress,
+      pricePerToken,
       imageUrl,
       pitchDeckCid,
       businessPlanCid,
       financialsCid,
       useOfFundsCid,
       productDemoCid,
+      deadline: deadlineIso
     });
 
     if (dbResult.error) return { error: dbResult.error };

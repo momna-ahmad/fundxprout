@@ -1,71 +1,164 @@
 // shafqaat — Utility functions to fetch portfolio data from Supabase
 import { createClient } from "@/utils/supabase/client";
+import { getEthPrice } from "@/utils/getEthPrice";
+
+export interface CategoryBreakdown {
+  category: string;
+  totalValueUsd: number;
+  percentage: number; // e.g., 45.5 for 45.5%
+}
+
+export interface UserPortfolioMetrics {
+  totalNetWorthUsd: number;
+  totalEthInvested: number;
+  totalCampaignsBacked: number;
+  investments?: any[]; 
+  categoryDistribution: Record<string, number>; // { "AI": 0.6, "FinTech": 0.4 }
+  categoryBreakdownList: CategoryBreakdown[];
+}
 
 // Fetch user's portfolio data (all their investments aggregated)
-export async function getUserPortfolioData() {
+export async function getUserPortfolioData(): Promise<UserPortfolioMetrics> {
   const supabase = createClient();
 
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    if (!user) 
+      return {
+      totalNetWorthUsd: 0,
+      totalEthInvested: 0,
+      totalCampaignsBacked: 0,
+      categoryDistribution: {},
+      categoryBreakdownList: [],
+    };
 
     // Fetch all investments for the user
     const { data: investments, error: invError } = await supabase
       .from("investments")
       .select(`
         *,
-        campaign:campaigns(id, title, category, price_per_token)
+        campaign:campaigns(id, title, category, price_per_token,status)
       `)
       .eq("investor_id", user.id)
-      .eq("status", "completed")
+      .in("status", ["completed", "claimed", "active"])
       .order("invested_at", { ascending: false });
 
     if (invError) {
       console.error("[getUserPortfolioData] Investments fetch error:", invError);
-      return null;
+      return {
+      totalNetWorthUsd: 0,
+      totalEthInvested: 0,
+      totalCampaignsBacked: 0,
+      categoryDistribution: {},
+      categoryBreakdownList: [],
+    };
     }
 
-    // Fetch user profile
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("user_id", user.id)
-      .single();
+    // Fetch user profile redundant , profile is already fetched in another function and can be cached and displayed
+    // const { data: profile, error: profileError } = await supabase
+    //   .from("profiles")
+    //   .select("*")
+    //   .eq("user_id", user.id)
+    //   .single();
 
-    if (profileError && profileError.code !== "PGRST116") {
-      console.error("[getUserPortfolioData] Profile fetch error:", profileError);
-    }
+    // if (profileError && profileError.code !== "PGRST116") {
+    //   console.error("[getUserPortfolioData] Profile fetch error:", profileError);
+    // }
 
-    // Calculate portfolio metrics
-    const totalInvested = (investments ?? []).reduce(
+    // Fetch live ETH/USD price so all values are shown in real dollars
+    const ethPrice = await getEthPrice();
+
+    // Calculate portfolio metrics — amounts in DB are ETH, multiply by live price for USD
+    const totalInvestedEth = (investments ?? []).reduce(
       (sum, inv) => sum + (parseFloat(inv.amount || "0") || 0),
       0
     );
+    const totalInvested = totalInvestedEth * ethPrice; // real USD
 
-    const totalTokens = (investments ?? []).reduce(
-      (sum, inv) => sum + (parseFloat(inv.equity_tokens || "0") || 0),
-      0
-    );
+    //redundant fetching , tokens are fetched in another function and result can be cached and displayed
 
-    // Generate mock portfolio value (this would be calculated from token prices in production)
-    const portfolioValue = totalInvested * 1.12; // Mock 12% appreciation
-    const portfolioChange = portfolioValue - totalInvested;
-    const portfolioChangePercent = totalInvested > 0 ? (portfolioChange / totalInvested) * 100 : 0;
+    // Token count — use equity_tokens if stored, else derive from amount ÷ price_per_token
+    // const totalTokens = (investments ?? []).reduce((sum, inv) => {
+    //   const stored = parseFloat(inv.equity_tokens || "0") || 0;
+    //   if (stored > 0) return sum + stored;
+    //   const campaign = Array.isArray(inv.campaign) ? inv.campaign[0] : inv.campaign;
+    //   const pricePerToken = parseFloat(campaign?.price_per_token || "0") || 0;
+    //   const amountEth = parseFloat(inv.amount || "0") || 0;
+    //   return sum + (pricePerToken > 0 ? amountEth / pricePerToken : 0);
+    // }, 0);
+
+    // Top campaign — the one with the highest individual ETH investment
+    const topInvestment = (investments ?? []).reduce<any | null>((best, inv) => {
+      const amt = parseFloat(inv.amount || "0") || 0;
+      return !best || amt > (parseFloat(best.amount || "0") || 0) ? inv : best;
+    }, null);
+    const topCampaignRaw = topInvestment
+      ? Array.isArray(topInvestment.campaign) ? topInvestment.campaign[0] : topInvestment.campaign
+      : null;
+    const topCampaign = topCampaignRaw
+      ? { name: topCampaignRaw.title ?? "Campaign", amountEth: parseFloat(topInvestment.amount || "0") || 0 }
+      : null;
+
+    const categoryTotals: Record<string, number> = {};
+    let overallPortfolioValueUsd = 0;
+    let totalEthInvested = 0;
+    const uniqueCampaignIds = new Set<string>();
+
+    investments.forEach((inv: any) => {
+      const campaign = Array.isArray(inv.campaign) ? inv.campaign[0] : inv.campaign;
+      if (!campaign) return;
+
+      uniqueCampaignIds.add(String(campaign.id));
+
+      // ETH contributed to this campaign
+      const invAmountEth = parseFloat(inv.amount || "0") || 0;
+      totalEthInvested += invAmountEth;
+
+      // Determine token quantity (either stored equity_tokens or calculated from price)
+      const pptEth = parseFloat(campaign.price_per_token || "0.001") || 0.001;
+      const storedTokens = parseFloat(inv.equity_tokens || "0") || 0;
+      const tokenAmount = storedTokens > 0 ? storedTokens : invAmountEth / pptEth;
+
+      // Current USD holding value for this investment
+      const holdingValueUsd = tokenAmount * pptEth * ethPrice;
+      const category = campaign.category || "Uncategorized";
+
+      categoryTotals[category] = (categoryTotals[category] || 0) + holdingValueUsd;
+      overallPortfolioValueUsd += holdingValueUsd;
+    });
+
+    // 3. Calculate category percentage weights
+    const categoryDistribution: Record<string, number> = {};
+    const categoryBreakdownList: CategoryBreakdown[] = [];
+
+    Object.entries(categoryTotals).forEach(([cat, val]) => {
+      const ratio = overallPortfolioValueUsd > 0 ? val / overallPortfolioValueUsd : 0;
+      categoryDistribution[cat] = ratio; // Vector scale 0.0 to 1.0 for recommendation engine
+
+      categoryBreakdownList.push({
+        category: cat,
+        totalValueUsd: val,
+        percentage: parseFloat((ratio * 100).toFixed(2)),
+      });
+    });
 
     return {
-      totalInvested,
-      totalTokens,
-      portfolioValue,
-      investmentCount: investments?.length || 0,
-      portfolioChange,
-      portfolioChangePercent,
-      walletAddress: profile?.wallet_address || "0x...",
-      profile,
+      totalNetWorthUsd:  totalInvested,
+      totalEthInvested:    totalInvestedEth,
       investments,
+      totalCampaignsBacked: uniqueCampaignIds.size,
+      categoryDistribution,
+      categoryBreakdownList,
     };
   } catch (err) {
     console.error("[getUserPortfolioData] Exception:", err);
-    return null;
+    return {
+      totalNetWorthUsd: 0,
+      totalEthInvested: 0,
+      totalCampaignsBacked: 0,
+      categoryDistribution: {},
+      categoryBreakdownList: [],
+    };
   }
 }
 
@@ -77,38 +170,52 @@ export async function getUserTokenHoldings() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
 
-    const { data: investments, error } = await supabase
-      .from("investments")
+    // 1. Fetch claimed tokens joined with campaign details
+    const { data: userTokens, error } = await supabase
+      .from("tokens")
       .select(`
         *,
-        campaign:campaigns(id, title, category, price_per_token, contract_address)
+        campaign:campaigns(id, title, category, price_per_token, contract_address, token_symbol)
       `)
-      .eq("investor_id", user.id)
-      .eq("status", "completed");
+      .eq("user_id", user.id);
 
     if (error) {
       console.error("[getUserTokenHoldings] Supabase error:", error);
       return [];
     }
 
-    // Group investments by campaign to create token holdings
+    // 2. Fetch live ETH/USD price for fiat value calculation
+    const ethPrice = await getEthPrice();
+
+    // 3. Group token holdings by campaign_id
     const holdingsMap = new Map<string, any>();
 
-    (investments ?? []).forEach((inv) => {
-      const campaignId = String(inv.campaign_id);
-      const campaign = Array.isArray(inv.campaign) ? inv.campaign[0] : inv.campaign;
+    (userTokens ?? []).forEach((tokenRecord) => {
+      const campaignId = String(tokenRecord.campaign_id);
+      const campaign = Array.isArray(tokenRecord.campaign)
+        ? tokenRecord.campaign[0]
+        : tokenRecord.campaign;
+
       const campaignTitle = campaign?.title || "Unknown";
+      const symbol = tokenRecord.token_symbol || campaign?.token_symbol || campaignTitle.split(" ")[0].toUpperCase();
+      
+      // price_per_token is in ETH -> convert to USD
+      const pptEth = parseFloat(campaign?.price_per_token || "0.001") || 0.001;
+      const pricePerTokenUsd = pptEth * ethPrice;
+      const tokenAmount = parseFloat(tokenRecord.amount || "0") || 0;
 
       if (!holdingsMap.has(campaignId)) {
         holdingsMap.set(campaignId, {
           id: campaignId,
           name: campaignTitle,
-          symbol: campaignTitle.split(" ")[0].toUpperCase(),
+          symbol: symbol,
           contractAddress: campaign?.contract_address,
           balance: 0,
-          price: parseFloat(campaign?.price_per_token || "1") || 1,
+          price: pricePerTokenUsd,   // USD per token
+          priceEth: pptEth,          // ETH per token
+          ethPrice,                  // Live ETH/USD rate
           value: 0,
-          change24h: (Math.random() - 0.5) * 20, // Mock 24h change
+          change24h: (Math.random() - 0.5) * 20, // UI mock metric
           color: generateColorForToken(campaignId),
           priceHistory: generateMockPriceHistory(),
           campaignId,
@@ -117,9 +224,9 @@ export async function getUserTokenHoldings() {
       }
 
       const holding = holdingsMap.get(campaignId)!;
-      holding.balance += parseFloat(inv.equity_tokens || "0") || 0;
+      holding.balance += tokenAmount;
       holding.value = holding.balance * holding.price;
-      holding.totalInvested += parseFloat(inv.amount || "0") || 0;
+      holding.totalInvested += tokenAmount * pricePerTokenUsd;
     });
 
     return Array.from(holdingsMap.values());

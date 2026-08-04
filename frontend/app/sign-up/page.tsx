@@ -1,14 +1,27 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect } from 'react';
 import { useActionState } from 'react';
+import { useRouter } from 'next/navigation';
 import { signup } from '@/lib/action';
 import GoogleSignIn from "@/components/google-signIn";
 
-const initialState = { error: '' };
+const initialState = { error: '', success: '' };
 
 export default function Page() {
+  const router = useRouter();
   const [state, formAction] = useActionState(signup, initialState);
+
+  useEffect(() => {
+    if (!state?.success) return;
+
+    const timer = setTimeout(() => {
+      router.replace('/login');
+    }, 1800);
+
+    return () => clearTimeout(timer);
+  }, [router, state?.success]);
 
   return (
     <div className="min-h-screen bg-[#181A2A] flex items-center justify-center px-4">
@@ -46,7 +59,12 @@ export default function Page() {
             />
           </div>
 
-          {/* Fix: use state?.error from useActionState, not static initialState.error */}
+          {state?.success && (
+            <p className="text-emerald-300 text-sm bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-2">
+              {state.success}
+            </p>
+          )}
+
           {state?.error && (
             <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2">
               {state.error}

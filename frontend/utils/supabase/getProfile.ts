@@ -14,8 +14,8 @@ export async function getUserRole() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const metadataRole = normalizeRole(user.user_metadata?.user_role);
-    if (metadataRole) return metadataRole;
+    // const metadataRole = normalizeRole(user.user_metadata?.user_role);
+    // if (metadataRole) return metadataRole;
 
     const { data: profile } = await supabase
         .from("profiles")
@@ -23,7 +23,7 @@ export async function getUserRole() {
         .eq("user_id", user.id)
         .single();
 
-    return normalizeRole(profile?.role) || 'investor';
+    return normalizeRole(profile?.role);
 }
 
 // shafqaat — Fetch the profile row for the currently logged-in user

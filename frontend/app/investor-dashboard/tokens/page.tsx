@@ -56,20 +56,7 @@ export default function TokensPage() {
             style={{ background: 'var(--chart-3)', boxShadow: '0 0 6px var(--chart-3)' }}
           />
           <span className="text-muted-foreground font-medium">Ethereum Mainnet</span>
-        </div>
-        <div className="w-px h-6 bg-border" />
-        <div className="flex items-center gap-2 text-[13px]">
-          <Fuel size={14} className="text-[var(--chart-4)] flex-shrink-0" />
-          <span className="text-muted-foreground">Gas:</span>
-          <span className="text-[var(--chart-4)] font-bold">24 gwei</span>
-          <span className="text-muted-foreground text-[11px]">(~ $1.40)</span>
-        </div>
-        <div className="w-px h-6 bg-border" />
-        <div className="flex items-center gap-2 text-[13px]">
-          <Wifi size={14} className="text-[var(--chart-3)] flex-shrink-0" />
-          <span className="text-muted-foreground">Block:</span>
-          <span className="font-mono text-foreground font-bold">#21,847,302</span>
-        </div>
+        </div>  
         <div className="ml-auto">
           <button className="bg-[#6f42c1] hover:bg-[#5a3599] text-white text-xs font-semibold px-[18px] py-2 rounded-xl transition-all">
             + Import Token
@@ -120,7 +107,12 @@ export default function TokensPage() {
                   <div className="text-[22px] font-black tracking-tight bg-gradient-to-r from-[#6f42c1] to-[#a78bfa] bg-clip-text text-transparent">
                     {formatCurrency(token.value, 0)}
                   </div>
-                  <div className="text-xs text-muted-foreground">@ {formatCurrency(token.price, 2)}/token</div>
+                  <div className="text-xs text-muted-foreground">
+                    ≈ {(token.value / (token.ethPrice ?? 3000)).toFixed(4)} ETH
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                    @ {formatCurrency(token.price, 2)} ({(token.priceEth ?? 0).toFixed(6)} ETH)/token
+                  </div>
                 </div>
               </div>
 

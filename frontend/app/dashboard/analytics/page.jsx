@@ -7,10 +7,11 @@ import { ChevronLeft, TrendingUp } from "lucide-react";
 import Navbar from "@/components/navbar";
 import OwnerCampaignAnalytics from "@/components/owner-campaign-analytics";
 import { getMyCampaigns } from "@/utils/supabase/getCampaigns";
-import { getUserRole } from "@/utils/supabase/getProfile";
+import { useAuth } from "@/context/auth-context";
 
 export default function OwnerCampaignAnalyticsPage() {
   const router = useRouter();
+  const { role, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [campaigns, setCampaigns] = useState([]);
 
@@ -18,7 +19,9 @@ export default function OwnerCampaignAnalyticsPage() {
     let isMounted = true;
 
     async function loadAnalytics() {
-      const role = await getUserRole();
+      if (authLoading) {
+        return;
+      }
 
       if (role === null) {
         router.replace("/login");
@@ -37,12 +40,12 @@ export default function OwnerCampaignAnalyticsPage() {
       setLoading(false);
     }
 
-    loadAnalytics();
+    void loadAnalytics();
 
     return () => {
       isMounted = false;
     };
-  }, [router]);
+  }, [authLoading, role, router]);
 
   return (
     <div className="min-h-screen bg-[#181A2A]">

@@ -23,10 +23,47 @@ import {
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import { getMyCampaigns } from "@/utils/supabase/getCampaigns";
-import { getMyProfile, calcProfileCompletion, getUserRole } from "@/utils/supabase/getProfile";
+import { getMyProfile, calcProfileCompletion } from "@/utils/supabase/getProfile";
 import Navbar from "@/components/navbar";
+import { ethers } from "ethers";
+import BusinessCampaignJSON from "@/abis/BusinessCampaign.json";
 
 const ITEMS_PER_PAGE = 6; // shafqaat — campaigns per page in My Campaigns tab
+
+// Function to invoke withdrawFunds on the specific campaign contract
+async function handleWithdrawFunds(contractAddress, setTxPending) {
+  if (typeof window === "undefined" || !window.ethereum) {
+    alert("Please install MetaMask!");
+    return;
+  }
+
+  try {
+    setTxPending(contractAddress); // Set loading state for this specific card
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+
+    // Attach to the specific campaign contract address fetched from Supabase
+    const campaignContract = new ethers.Contract(
+      contractAddress,
+      BusinessCampaignJSON.abi,
+      signer
+    );
+
+    // Trigger the withdrawFunds() method on BusinessCampaign.sol
+    const tx = await campaignContract.withdrawFunds();
+    alert("Withdrawal transaction submitted! Hash: " + tx.hash);
+
+    await tx.wait();
+    alert("Funds successfully withdrawn to your wallet!");
+    window.location.reload(); // Refresh UI to update balances
+  } catch (err) {
+    console.error("Withdrawal error:", err);
+    alert(err.reason || err.message || "Withdrawal failed");
+  } finally {
+    setTxPending(null);
+  }
+}
 
 // shafqaat — Calculate days left from created_at + duration
 function calcDaysLeft(createdAt, durationDays) {
@@ -66,8 +103,6 @@ function buildDraftEditHref(campaign) {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [userRole, setUserRole] = useState(null);
-  const [redirecting, setRedirecting] = useState(false);
 
   // shafqaat — Active tab state
   const [activeTab, setActiveTab] = useState("overview");
@@ -82,14 +117,7 @@ export default function DashboardPage() {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Check user role and redirect if needed
-  useEffect(() => {
-    async function checkRole() {
-      const role = await getUserRole();
-      setUserRole(role);
-    }
-    checkRole();
-  }, [router, redirecting]);
+  const [txPending, setTxPending] = useState(null);
 
   // shafqaat — Fetch user, campaigns and profile in parallel on mount
   useEffect(() => {
@@ -331,6 +359,7 @@ export default function DashboardPage() {
                     );
                     const goal = parseFloat(campaign.funding_goal ?? "0");
                     const statusStyle = getStatusStyle(campaign.status);
+                    const isGoalReached = campaign.amount_pledged >= goal;
 
                     return (
                       <div
@@ -414,6 +443,17 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="flex gap-4">
+                          {campaign.status === "ended" && isGoalReached && (
+                            <button
+                              onClick={() => handleWithdrawFunds(campaign.contract_address, setTxPending)}
+                              disabled={txPending === campaign.contract_address}
+                              className="bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-4 py-2 rounded-full transition flex items-center gap-1.5 disabled:opacity-50"
+                            >
+                              <DollarSign className="h-3.5 w-3.5" />
+                              {txPending === campaign.contract_address ? "Withdrawing..." : "Withdraw Funds"}
+                            </button>
+                          )}
+
                           {campaign.status?.toLowerCase() === "draft" && (
                             <Link
                               href={buildDraftEditHref(campaign)}
