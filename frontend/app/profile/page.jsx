@@ -313,6 +313,23 @@ export default function ProfilePage() {
         {/* ── Section 3: KYB (Business Verification) ── */}
         <Section icon={Building2} title="Business Verification (KYB)"
           description="SEC, FCA, SECP, FBR standards — required for investor-facing campaigns">
+          <div className="mb-4">
+            {profile?.businesses?.[0]?.kyb_verified ? (
+              <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl text-sm font-medium">
+                <CheckCircle className="h-5 w-5" /> Business Verified (Didit)
+              </div>
+            ) : (
+              <button onClick={(e) => { e.preventDefault(); startDiditVerification('kyb'); }} 
+                className="inline-flex items-center gap-2 px-5 py-3 bg-[#6f42c1] hover:bg-[#5a3599] text-white rounded-xl text-sm font-bold transition shadow-lg shadow-[#6f42c1]/20">
+                <Building2 className="h-5 w-5" /> Verify Business with Didit
+              </button>
+            )}
+            {!profile?.businesses?.[0] && !profile?.businesses?.kyb_verified && (
+              <p className="text-xs text-orange-400 mt-2">
+                * Please upload your business documents and click <strong>Save Profile</strong> before verifying with Didit.
+              </p>
+            )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <DocUpload fieldKey="business_reg_cid" label="Business Registration" required
               hint="Certificate of Incorporation / SECP registration" accept=".pdf"

@@ -503,5 +503,22 @@ export async function saveCreatorProfile(profileData: any) {
     return { error: error.message };
   }
 
+  // shafqaat — If business documents are provided, upsert into 'businesses' table for KYB
+  if (profileData.business_reg_cid || profileData.tax_cert_cid || profileData.bank_statement_cid) {
+    const businessRow = {
+      owner_id: user.id,
+      company_name: profileData.display_name || profileData.full_name || "My Business",
+    };
+
+    const { error: businessError } = await supabase
+      .from("businesses")
+      .upsert([businessRow], { onConflict: "owner_id" });
+
+    if (businessError) {
+      console.error("[saveCreatorProfile] Business table error:", businessError.message);
+      // We don't fail the whole profile save just for this, but log it
+    }
+  }
+
   return { success: true };
 }

@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { launchBusinessCampaign } from "@/lib/launchCampaign";
 import { saveDraftCampaign } from "@/lib/action";
+import { getMyProfile } from "@/utils/supabase/getProfile";
 import {
   Upload, Target, Calendar, DollarSign,
   Loader2, CheckCircle, FileText, AlertCircle, Coins
@@ -163,6 +164,22 @@ export function CreateCampaignForm() {
 
   const searchParams = useSearchParams();
 
+  const [checkingKyb, setCheckingKyb] = useState(true);
+
+  useEffect(() => {
+    async function checkBusinessVerification() {
+      const profile = await getMyProfile();
+      // If no business or business is not KYB verified, block them
+      if (!profile?.businesses?.[0]?.kyb_verified) {
+        alert("You must verify your business with Didit on the Profile page before creating a campaign.");
+        router.push("/profile");
+      } else {
+        setCheckingKyb(false);
+      }
+    }
+    checkBusinessVerification();
+  }, [router]);
+
   const draftCampaign = useMemo(() => {
   const isEditMode = searchParams.get("idedit") === "true";
   const campaignId = searchParams.get("campaignId");
@@ -306,6 +323,15 @@ export function CreateCampaignForm() {
 
   const inputClass =
     "w-full px-4 py-3 bg-[#0d1117] border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#6f42c1] focus:border-transparent transition text-sm";
+
+  if (checkingKyb) {
+    return (
+      <div className="min-h-screen bg-[#181A2A] py-8 pt-24 flex flex-col items-center justify-center text-gray-400">
+        <Loader2 className="h-8 w-8 animate-spin mb-4 text-[#a78bfa]" />
+        <p>Checking Business Verification Status...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#181A2A] py-8 pt-24">

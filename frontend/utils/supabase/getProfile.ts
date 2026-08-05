@@ -36,7 +36,7 @@ export async function getMyProfile() {
 
     const { data, error } = await supabase
         .from("profiles")          // shafqaat — use the existing profiles table
-        .select("*")
+        .select("*, businesses(*)")
         .eq("user_id", user.id)
         .single();
 
