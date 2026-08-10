@@ -1,0 +1,4 @@
+secondary marketplace lifecycle 
+- verify off chain EIP 712 signature (token holder list tokens off chain using this signature)
+- verify KYC for both token holder and buyer (didit verification status)
+- swap token using the smart contract address
