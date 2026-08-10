@@ -3,6 +3,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
 
 // Helper: convert a Pinata CID to a public gateway URL
@@ -507,12 +508,28 @@ export async function saveCreatorProfile(profileData: any) {
   if (profileData.business_reg_cid || profileData.tax_cert_cid || profileData.bank_statement_cid) {
     const businessRow = {
       owner_id: user.id,
-      company_name: profileData.display_name || profileData.full_name || "My Business",
+      business_name: profileData.display_name || profileData.full_name || "My Business",
     };
 
-    const { error: businessError } = await supabase
+    const { data: existingBusiness } = await supabase
       .from("businesses")
-      .upsert([businessRow], { onConflict: "owner_id" });
+      .select("id")
+      .eq("owner_id", user.id)
+      .maybeSingle();
+
+    let businessError;
+    if (existingBusiness) {
+      const { error } = await supabase
+        .from("businesses")
+        .update(businessRow)
+        .eq("id", existingBusiness.id);
+      businessError = error;
+    } else {
+      const { error } = await supabase
+        .from("businesses")
+        .insert([businessRow]);
+      businessError = error;
+    }
 
     if (businessError) {
       console.error("[saveCreatorProfile] Business table error:", businessError.message);
@@ -520,5 +537,46 @@ export async function saveCreatorProfile(profileData: any) {
     }
   }
 
+  return { success: true };
+}
+
+// ── Admin Actions ────────────────────────────────────────────────────────────
+
+async function checkAdmin(supabase: any) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { data: profile } = await supabase.from('profiles').select('role').eq('user_id', user.id).single();
+  return profile?.role === 'admin';
+}
+
+export async function adminVerifyKYC(userId: string) {
+  const supabase = await createClient();
+  const isAdmin = await checkAdmin(supabase);
+  if (!isAdmin) return { error: "Unauthorized: Admins only" };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ identity_verified: true })
+    .eq("user_id", userId);
+
+  if (error) return { error: error.message };
+  
+  revalidatePath("/admin-dashboard");
+  return { success: true };
+}
+
+export async function adminVerifyKYB(businessId: string) {
+  const supabase = await createClient();
+  const isAdmin = await checkAdmin(supabase);
+  if (!isAdmin) return { error: "Unauthorized: Admins only" };
+
+  const { error } = await supabase
+    .from("businesses")
+    .update({ kyb_verified: true })
+    .eq("id", businessId);
+
+  if (error) return { error: error.message };
+  
+  revalidatePath("/admin-dashboard");
   return { success: true };
 }

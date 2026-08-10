@@ -38,11 +38,15 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const timestamp = req.get('X-Timestamp');
     const rawBody = req.body.toString('utf8');
 
+    console.log(`\n[Didit Webhook] Received webhook at ${new Date().toISOString()}`);
+
     if (!signature || !timestamp || !verifySignature(rawBody, signature, timestamp, process.env.DIDIT_WEBHOOK_SECRET)) {
+      console.log("[Didit Webhook] Invalid signature rejected!");
       return res.status(401).json({ message: 'Invalid signature' });
     }
 
     const payload = JSON.parse(rawBody);
+    console.log("[Didit Webhook] Payload:", payload.status, payload.decision, payload.session_kind);
     const { session_id, status, vendor_data, session_kind } = payload;
 
     // Update the verification session
