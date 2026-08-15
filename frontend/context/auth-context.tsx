@@ -1,3 +1,4 @@
+// ── frontend/context/auth-context.tsx ───────────────────────────────────────────────
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";

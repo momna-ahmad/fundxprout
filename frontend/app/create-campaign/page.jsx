@@ -273,7 +273,9 @@ export function CreateCampaignForm() {
       // Validate required fields
       if (!formData.title.trim()) throw new Error("Campaign title is required");
       if (!formData.description.trim()) throw new Error("Campaign description is required");
-      if (!formData.goal) throw new Error("Funding goal is required");
+      if (!formData.goal || Number(formData.goal) <= 0) {
+        throw new Error("Funding goal must be greater than zero");
+      }
       if (!formData.duration) throw new Error("Campaign duration is required");
       if (!formData.category) throw new Error("Category is required");
       if (!imageUrl) throw new Error("Campaign cover image is required");
@@ -390,7 +392,7 @@ export function CreateCampaignForm() {
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
                   <input type="number" name="goal" value={formData.goal}
                     onChange={handleInputChange} className={inputClass + " pl-10"}
-                    placeholder="0.00" step="0.01" min="0" required />
+                    placeholder="0.00" step="any" required />
                 </div>
               </div>
               <div>

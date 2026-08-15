@@ -1,3 +1,5 @@
+// blockchain/contracts/equityToken.sol
+//this is the equity token contract that will be deployed for each business campaign. It is an ERC20 token that represents equity in the business. The BusinessCampaign contract will be the only contract that can mint new tokens, and it will do so based on the contributions made by investors.
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
