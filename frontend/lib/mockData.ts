@@ -84,6 +84,7 @@ export const tokens: Token[] = [
 export const campaigns: Campaign[] = [
   {
     id: 'camp_001',
+    title: 'GreenTech Solar Initiative',
     name: 'GreenTech Solar Initiative',
     description: 'Utility-scale solar farm development across 3 locations in West Africa with guaranteed power purchase agreements.',
     industry: 'Energy',
@@ -95,9 +96,14 @@ export const campaigns: Campaign[] = [
     roi: 14.2,
     status: 'Active',
     startDate: '2024-01-15',
+    imageUrl: "/null" ,
+    category: 'Renewable Energy',
+    amount_pledged: 15000,
+    funding_goal: 2500000
   },
   {
     id: 'camp_002',
+    title: 'Urban Housing Project Alpha',
     name: 'Urban Housing Project Alpha',
     description: 'Mixed-use residential and commercial development in high-growth urban corridor. Fully tokenized ownership structure.',
     industry: 'Real Estate',
@@ -110,9 +116,14 @@ export const campaigns: Campaign[] = [
     status: 'Completed',
     startDate: '2023-06-01',
     endDate: '2024-06-01',
+    imageUrl: "/null" ,
+    category: 'Renewable Energy',
+    amount_pledged: 15000,
+    funding_goal: 2500000
   },
   {
     id: 'camp_003',
+    title: 'MediChain Hospital Network',
     name: 'MediChain Hospital Network',
     description: 'Blockchain-verified medical supply chain across 12 hospitals. Reduces counterfeit risk by 94%.',
     industry: 'Healthcare',
@@ -124,9 +135,14 @@ export const campaigns: Campaign[] = [
     roi: 2.1,
     status: 'Active',
     startDate: '2024-04-01',
+    imageUrl: "/null" ,
+    category: 'Renewable Energy',
+    amount_pledged: 15000,
+    funding_goal: 2500000
   },
   {
     id: 'camp_004',
+    title: 'AgroFund Kenya Program',
     name: 'AgroFund Kenya Program',
     description: 'Agricultural credit facility for 5,000+ smallholder farmers. Asset-backed by crop futures and land tokenization.',
     industry: 'Agriculture',
@@ -138,35 +154,11 @@ export const campaigns: Campaign[] = [
     roi: 18.5,
     status: 'Active',
     startDate: '2023-11-20',
-  },
-  {
-    id: 'camp_005',
-    name: 'FinBridge SME Lending',
-    description: 'Decentralized lending protocol for SMEs with collateralized on-chain credit scoring and automated underwriting.',
-    industry: 'Finance',
-    investedAmount: 18000,
-    tokenAmount: 1463,
-    tokenSymbol: 'FBL',
-    fundedPercent: 72,
-    totalTarget: 8000000,
-    roi: -0.4,
-    status: 'Active',
-    startDate: '2024-02-10',
-  },
-  {
-    id: 'camp_006',
-    name: 'CleanWater Africa Initiative',
-    description: 'Infrastructure tokenization for water purification plants across 8 sub-Saharan countries. Impact-first investment.',
-    industry: 'Infrastructure',
-    investedAmount: 7000,
-    tokenAmount: 2333,
-    tokenSymbol: 'CWA',
-    fundedPercent: 45,
-    totalTarget: 4500000,
-    roi: 0.0,
-    status: 'Pending',
-    startDate: '2024-08-01',
-  },
+    imageUrl: "/null" ,
+    category: 'Renewable Energy',
+    amount_pledged: 15000,
+    funding_goal: 2500000
+  }
 ];
 
 export const transactions: Transaction[] = [
