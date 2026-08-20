@@ -31,7 +31,8 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install Root Dependencies
+      - name: Install Blockchain Dependencies
+        working-directory: ./blockchain
         run: npm ci
 
       - name: Compile Solidity Contracts
