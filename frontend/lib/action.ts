@@ -504,8 +504,19 @@ export async function saveCreatorProfile(profileData: any) {
     return { error: error.message };
   }
 
-  // shafqaat — If business documents are provided, upsert into 'businesses' table for KYB
-  if (profileData.business_reg_cid || profileData.tax_cert_cid || profileData.bank_statement_cid) {
+  // shafqaat — If user has owner role or business documents are provided, upsert into 'businesses' table for KYB
+  const { data: profileRole } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", user.id)
+    .single();
+
+  if (
+    (profileRole?.role && profileRole.role !== "investor") ||
+    profileData.business_reg_cid ||
+    profileData.tax_cert_cid ||
+    profileData.bank_statement_cid
+  ) {
     const businessRow = {
       owner_id: user.id,
       business_name: profileData.display_name || profileData.full_name || "My Business",
@@ -544,15 +555,29 @@ export async function saveCreatorProfile(profileData: any) {
 
 async function checkAdmin(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
+  if (!user) return null;
   const { data: profile } = await supabase.from('profiles').select('role').eq('user_id', user.id).single();
-  return profile?.role === 'admin';
+  return profile?.role === 'admin' ? user : null;
+}
+
+async function logAdminAction(supabase: any, adminId: string, action: string, targetType: string, targetId: string, reason?: string) {
+  try {
+    await supabase.from("admin_actions").insert([{
+      admin_id: adminId,
+      action,
+      target_type: targetType,
+      target_id: targetId,
+      reason: reason || "Manual admin override",
+    }]);
+  } catch (e) {
+    console.error("[logAdminAction] Error logging audit:", e);
+  }
 }
 
 export async function adminVerifyKYC(userId: string) {
   const supabase = await createClient();
-  const isAdmin = await checkAdmin(supabase);
-  if (!isAdmin) return { error: "Unauthorized: Admins only" };
+  const adminUser = await checkAdmin(supabase);
+  if (!adminUser) return { error: "Unauthorized: Admins only" };
 
   const { error } = await supabase
     .from("profiles")
@@ -560,6 +585,8 @@ export async function adminVerifyKYC(userId: string) {
     .eq("user_id", userId);
 
   if (error) return { error: error.message };
+
+  await logAdminAction(supabase, adminUser.id, "verify_kyc", "profile", userId, "Admin manually approved KYC");
   
   revalidatePath("/admin-dashboard");
   return { success: true };
@@ -567,8 +594,8 @@ export async function adminVerifyKYC(userId: string) {
 
 export async function adminVerifyKYB(businessId: string) {
   const supabase = await createClient();
-  const isAdmin = await checkAdmin(supabase);
-  if (!isAdmin) return { error: "Unauthorized: Admins only" };
+  const adminUser = await checkAdmin(supabase);
+  if (!adminUser) return { error: "Unauthorized: Admins only" };
 
   const { error } = await supabase
     .from("businesses")
@@ -576,6 +603,8 @@ export async function adminVerifyKYB(businessId: string) {
     .eq("id", businessId);
 
   if (error) return { error: error.message };
+
+  await logAdminAction(supabase, adminUser.id, "verify_kyb", "business", businessId, "Admin manually approved KYB");
   
   revalidatePath("/admin-dashboard");
   return { success: true };

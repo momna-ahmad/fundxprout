@@ -101,23 +101,38 @@ export async function updateNotificationPrefs(prefs: Record<string, boolean>) {
 export function calcProfileCompletion(profile: Record<string, any> | null): number {
     if (!profile) return 0;
 
-    // shafqaat — Fields that count toward completion
-    const fields = [
+    const role = (profile.role || "").trim().toLowerCase();
+    const isKycVerified = !!profile.identity_verified;
+
+    if (role === "investor") {
+        const investorFields = [
+            profile.full_name,
+            profile.display_name,
+            profile.bio,
+            profile.phone,
+            profile.country,
+            profile.website_url,
+            isKycVerified,
+        ];
+        const filled = investorFields.filter((f) => f && String(f).trim() !== "" && f !== false).length;
+        return Math.round((filled / investorFields.length) * 100);
+    }
+
+    const isKybVerified = !!(profile.businesses?.[0]?.kyb_verified || profile.businesses?.kyb_verified);
+    const ownerFields = [
         profile.full_name,
         profile.display_name,
         profile.bio,
         profile.phone,
         profile.country,
-        profile.national_id_cid,
-        profile.selfie_cid,
-        profile.proof_of_address_cid,
+        profile.website_url,
+        isKycVerified,
+        isKybVerified,
         profile.business_reg_cid,
         profile.tax_cert_cid,
         profile.bank_statement_cid,
-        profile.business_logo_url,
-        profile.website_url,
     ];
 
-    const filled = fields.filter((f) => f && String(f).trim() !== "").length;
-    return Math.round((filled / fields.length) * 100);
+    const filled = ownerFields.filter((f) => f && String(f).trim() !== "" && f !== false).length;
+    return Math.round((filled / ownerFields.length) * 100);
 }

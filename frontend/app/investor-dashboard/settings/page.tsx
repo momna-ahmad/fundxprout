@@ -3,6 +3,7 @@
 // Dynamic investor profile & settings — reads/writes to Supabase profiles table
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import {
   Shield, Bell, Key, User, Wallet, CheckCircle, AlertCircle,
   Copy, Plus, Trash2, Pencil, Save, X, Loader2, Check,
@@ -33,15 +34,13 @@ interface Profile {
 // ── Tier derived from KYC docs ───────────────────────────────────────
 function deriveTier(profile: Profile | null): 'Retail' | 'Accredited' {
   if (!profile) return 'Retail';
-  const hasKyc =
-    profile.national_id_cid && profile.selfie_cid && profile.proof_of_address_cid;
-  return hasKyc ? 'Accredited' : 'Retail';
+  return profile.identity_verified ? 'Accredited' : 'Retail';
 }
 
 function deriveKycStatus(profile: Profile | null): 'Verified' | 'Pending' | 'Not Started' {
   if (!profile) return 'Not Started';
-  if (profile.national_id_cid && profile.selfie_cid) return 'Verified';
-  if (profile.national_id_cid || profile.selfie_cid)  return 'Pending';
+  if (profile.identity_verified) return 'Verified';
+  if (profile.national_id_cid || profile.selfie_cid) return 'Pending';
   return 'Not Started';
 }
 
@@ -359,10 +358,19 @@ export default function SettingsPage() {
             <div key={s.label} className="px-4 py-3.5 bg-black/25 border border-border rounded-xl">
               <div className="text-[10px] text-muted-foreground uppercase tracking-[0.05em] mb-1.5">{s.label}</div>
               {s.kyc ? (
-                <Badge variant={kycStatus === 'Verified' ? 'green' : kycStatus === 'Pending' ? 'amber' : 'red'}>
-                  {kycStatus === 'Verified' ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
-                  {kycStatus}
-                </Badge>
+                <div>
+                  <Badge variant={kycStatus === 'Verified' ? 'green' : kycStatus === 'Pending' ? 'amber' : 'red'}>
+                    {kycStatus === 'Verified' ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
+                    {kycStatus}
+                  </Badge>
+                  {kycStatus !== 'Verified' && (
+                    <div className="mt-2">
+                      <Link href="/profile" className="text-[11px] font-semibold text-[#a78bfa] hover:underline flex items-center gap-1">
+                        Verify KYC Now →
+                      </Link>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className={`text-[13px] text-foreground font-semibold ${s.mono ? 'font-mono text-[11px]' : ''}`}>
                   {s.value}
