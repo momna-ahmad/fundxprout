@@ -2,6 +2,9 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 require("dotenv").config();
 
+const SEPOLIA_URL = process.env.ALCHEMY_SEPOLIA_URL;
+const PRIVATE_KEY = process.env.METAMASK_PRIVATE_KEY;
+
 const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.28",
@@ -15,11 +18,17 @@ const config: HardhatUserConfig = {
     },
   },
   networks: {
-    sepolia: {
-      url: process.env.ALCHEMY_SEPOLIA_URL,
-      accounts: [process.env.METAMASK_PRIVATE_KEY!],
-      timeout: 60000, // 60 seconds
-    },
+    hardhat: {},
+    // Only register the Sepolia network if valid credentials are present
+    ...(SEPOLIA_URL && PRIVATE_KEY
+      ? {
+          sepolia: {
+            url: SEPOLIA_URL,
+            accounts: [PRIVATE_KEY],
+            timeout: 60000,
+          },
+        }
+      : {}),
   },
 };
 
