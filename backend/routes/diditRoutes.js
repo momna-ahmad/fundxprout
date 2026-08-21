@@ -38,26 +38,57 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const timestamp = req.get('X-Timestamp');
     const rawBody = req.body.toString('utf8');
 
+    console.log(`\n[Didit Webhook] Received webhook at ${new Date().toISOString()}`);
+
     if (!signature || !timestamp || !verifySignature(rawBody, signature, timestamp, process.env.DIDIT_WEBHOOK_SECRET)) {
+      console.log("[Didit Webhook] Invalid signature rejected!");
       return res.status(401).json({ message: 'Invalid signature' });
     }
 
     const payload = JSON.parse(rawBody);
-    const { session_id, status, vendor_data, session_kind } = payload;
+    console.log("[Didit Webhook] Received payload:", JSON.stringify(payload, null, 2));
 
-    // Update the verification session
-    await supabaseAdmin
-      .from('verification_sessions')
-      .update({ status, decision: payload.decision || null, updated_at: new Date() })
-      .eq('didit_session_id', session_id);
+    const session_id = payload.session_id || payload.id || payload.session?.id || payload.session?.session_id;
+    const status = payload.status || payload.session_status || payload.session?.status;
+    const decision = payload.decision || payload.decision_status || payload.session?.decision || (status === 'Approved' ? 'Approved' : null);
 
-    if (status === 'Approved') {
-      if (session_kind === 'KYC') {
-        // Update user profile to be identity verified
-        await supabaseAdmin.from('profiles').update({ identity_verified: true }).eq('user_id', vendor_data);
-      } else if (session_kind === 'KYB') {
-        // Update business to be KYB verified
-        await supabaseAdmin.from('businesses').update({ kyb_verified: true }).eq('id', vendor_data);
+    let entityId = payload.vendor_data || payload.session?.vendor_data;
+    let sessionKind = payload.session_kind || payload.type || payload.session?.session_kind;
+
+    if (session_id) {
+      const { data: dbSession } = await supabaseAdmin
+        .from('verification_sessions')
+        .select('*')
+        .eq('didit_session_id', session_id)
+        .maybeSingle();
+
+      if (dbSession) {
+        if (!entityId) entityId = dbSession.entity_id;
+        if (!sessionKind) sessionKind = dbSession.session_kind;
+      }
+    }
+
+    const isApproved = status === 'Approved' || decision === 'Approved' || status === 'Completed';
+
+    if (session_id) {
+      await supabaseAdmin
+        .from('verification_sessions')
+        .update({ 
+          status: status || (isApproved ? 'Approved' : 'Pending'), 
+          decision: payload.decision || decision || null, 
+          updated_at: new Date() 
+        })
+        .eq('didit_session_id', session_id);
+    }
+
+    if (isApproved && entityId) {
+      if (sessionKind === 'KYC') {
+        console.log(`[Didit Webhook] Marking identity_verified = true for user: ${entityId}`);
+        await supabaseAdmin.from('profiles').update({ identity_verified: true }).eq('user_id', entityId);
+      } else if (sessionKind === 'KYB') {
+        console.log(`[Didit Webhook] Marking kyb_verified = true for business/owner: ${entityId}`);
+        await supabaseAdmin.from('businesses').update({ kyb_verified: true }).eq('id', entityId);
+        await supabaseAdmin.from('businesses').update({ kyb_verified: true }).eq('owner_id', entityId);
       }
     }
 
@@ -86,6 +117,8 @@ router.post('/kyc/create-session', async (req, res) => {
       body: JSON.stringify({
         workflow_id: process.env.DIDIT_KYC_WORKFLOW_ID,
         callback: `${process.env.APP_URL || 'http://localhost:3000'}/profile?kyc=complete`,
+        redirect_url: `${process.env.APP_URL || 'http://localhost:3000'}/profile?kyc=complete`,
+        return_url: `${process.env.APP_URL || 'http://localhost:3000'}/profile?kyc=complete`,
         vendor_data: userId, // We pass userId so it comes back in the webhook!
       }),
     });
@@ -136,6 +169,8 @@ router.post('/kyb/create-session', async (req, res) => {
       body: JSON.stringify({
         workflow_id: process.env.DIDIT_KYB_WORKFLOW_ID,
         callback: `${process.env.APP_URL || 'http://localhost:3000'}/profile?kyb=complete`,
+        redirect_url: `${process.env.APP_URL || 'http://localhost:3000'}/profile?kyb=complete`,
+        return_url: `${process.env.APP_URL || 'http://localhost:3000'}/profile?kyb=complete`,
         vendor_data: business.id, // Pass business ID
       }),
     });
@@ -158,6 +193,52 @@ router.post('/kyb/create-session', async (req, res) => {
     res.json({ url: session.url });
   } catch (error) {
     console.error("KYB session error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4. Manual Sync Status Endpoint
+router.post('/sync-status', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId is required" });
+
+    // Check latest KYC session
+    const { data: kycSession } = await supabaseAdmin
+      .from('verification_sessions')
+      .select('*')
+      .eq('entity_id', userId)
+      .eq('session_kind', 'KYC')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let updated = false;
+
+    if (kycSession) {
+      // Query Didit API for session status directly if session_id exists
+      try {
+        const diditRes = await fetch(`https://verification.didit.me/v3/session/${kycSession.didit_session_id}/`, {
+          headers: { 'x-api-key': process.env.DIDIT_API_KEY }
+        });
+        if (diditRes.ok) {
+          const diditData = await diditRes.json();
+          console.log("[sync-status] Didit API Session Data:", diditData.status, diditData.decision);
+          const isApproved = diditData.status === 'Approved' || diditData.decision === 'Approved' || diditData.status === 'Completed';
+          if (isApproved) {
+            await supabaseAdmin.from('profiles').update({ identity_verified: true }).eq('user_id', userId);
+            await supabaseAdmin.from('verification_sessions').update({ status: 'Approved', decision: 'Approved' }).eq('didit_session_id', kycSession.didit_session_id);
+            updated = true;
+          }
+        }
+      } catch (e) {
+        console.error("[sync-status] Error fetching from Didit API:", e);
+      }
+    }
+
+    res.json({ success: true, updated });
+  } catch (error) {
+    console.error("[sync-status] Error:", error);
     res.status(500).json({ error: error.message });
   }
 });

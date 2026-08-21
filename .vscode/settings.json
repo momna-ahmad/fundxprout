@@ -1,9 +1,11 @@
 {
   "solidity.packageDefaultDependenciesDirectory": "blockchain/node_modules",
-  "solidity.remappingsUnix": [
+  "solidity.remappings": [
+    "@openzeppelin/contracts/=blockchain/node_modules/@openzeppelin/contracts/",
     "@openzeppelin/=blockchain/node_modules/@openzeppelin/"
   ],
-  "solidity.remappings": [
+  "solidity.remappingsUnix": [
+    "@openzeppelin/contracts/=blockchain/node_modules/@openzeppelin/contracts/",
     "@openzeppelin/=blockchain/node_modules/@openzeppelin/"
   ]
 }

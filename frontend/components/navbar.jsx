@@ -1,5 +1,5 @@
 "use client";
-import { UserCircle, Menu, X, Sun, Moon, LayoutDashboard } from "lucide-react";
+import { UserCircle, Menu, X, Sun, Moon, LayoutDashboard, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useState, useEffect } from "react";
@@ -102,6 +102,16 @@ export default function Navbar() {
             className="text-gray-300 hover:text-[#a78bfa] transition-colors"
           >
             <LayoutDashboard className="h-5 w-5" />
+          </Link>
+        )}
+
+        {isLoggedIn && userRole === "admin" && (
+          <Link
+            href="/admin-dashboard"
+            title="Admin Dashboard"
+            className="text-gray-300 hover:text-[#a78bfa] transition-colors"
+          >
+            <ShieldCheck className="h-5 w-5" />
           </Link>
         )}
         

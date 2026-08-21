@@ -1,0 +1,44 @@
+name: Blockchain CI
+
+on:
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - "blockchain/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/blockchain-ci.yml"
+  push:
+    branches: [ "master" ]
+    paths:
+      - "blockchain/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/blockchain-ci.yml"
+
+jobs:
+  test-contracts:
+    name: Hardhat Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Blockchain Dependencies
+        working-directory: ./blockchain
+        run: npm ci
+
+      - name: Compile Solidity Contracts
+        working-directory: ./blockchain
+        run: npx hardhat compile
+
+      - name: Run Hardhat Tests
+        working-directory: ./blockchain
+        run: npx hardhat test

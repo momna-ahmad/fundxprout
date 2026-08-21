@@ -120,6 +120,8 @@ export default function ProfilePage() {
   const [error, setError] = useState("");
   const [profile, setProfile] = useState(null);
   const [userId, setUserId] = useState(null);
+  const [verifying, setVerifying] = useState(null); // 'kyc' | 'kyb' | null
+  const [verificationSuccessMsg, setVerificationSuccessMsg] = useState("");
   const [docCids, setDocCids] = useState({});  // shafqaat — tracks newly uploaded doc CIDs
 
   const [form, setForm] = useState({
@@ -127,13 +129,62 @@ export default function ProfilePage() {
     country: "", city: "", website_url: "", linkedin_url: "",
   });
 
-  // shafqaat — Load existing profile and pre-fill the form
+  // shafqaat — Load existing profile, handle URL return callbacks, and listen for cross-tab sync
   useEffect(() => {
     async function load() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push("/"); return; }
       setUserId(user.id);
+
+      // 1. Listen for cross-tab verification completion events from child tab
+      const handleStorageChange = async (e) => {
+        if (e.key === "didit_verified_event") {
+          const updated = await getMyProfile();
+          if (updated) {
+            setProfile(updated);
+            setVerifying(false);
+            setVerificationSuccessMsg("Verification completed in popup tab! Profile updated automatically.");
+          }
+        }
+      };
+      window.addEventListener("storage", handleStorageChange);
+
+      // 2. Check URL query parameters if this tab is the return callback from Didit
+      if (typeof window !== "undefined") {
+        const searchParams = new URLSearchParams(window.location.search);
+        const kycParam = searchParams.get("kyc");
+        const kybParam = searchParams.get("kyb");
+        const statusParam = searchParams.get("status");
+        const sessionIdParam = searchParams.get("verificationSessionId");
+
+        if (statusParam === "Approved" || kycParam === "complete" || kybParam === "complete" || sessionIdParam) {
+          setVerificationSuccessMsg("Didit verification approved! Syncing profile status...");
+          if (statusParam === "Approved" || kycParam === "complete") {
+            await supabase.from("profiles").update({ identity_verified: true }).eq("user_id", user.id);
+          }
+          if (statusParam === "Approved" || kybParam === "complete") {
+            await supabase.from("businesses").update({ kyb_verified: true }).eq("owner_id", user.id);
+          }
+
+          // Broadcast sync event to parent/original profile tab
+          localStorage.setItem(
+            "didit_verified_event",
+            JSON.stringify({ type: kybParam === "complete" ? "kyb" : "kyc", timestamp: Date.now() })
+          );
+
+          // If this tab was opened as a separate popup/child window by window.open, attempt to close it automatically
+          if (window.opener && window.opener !== window) {
+            setTimeout(() => {
+              window.close();
+            }, 1000);
+          }
+
+          pollUntilVerified(kybParam === "complete" ? "kyb" : "kyc");
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
+
       const existing = await getMyProfile();
       if (existing) {
         setProfile(existing);
@@ -149,6 +200,10 @@ export default function ProfilePage() {
         });
       }
       setLoading(false);
+
+      return () => {
+        window.removeEventListener("storage", handleStorageChange);
+      };
     }
     load();
   }, []);
@@ -186,26 +241,84 @@ export default function ProfilePage() {
     setSaving(false);
   };
 
+  const pollUntilVerified = async (type, attempts = 0) => {
+    // Try triggering backend API sync directly in case webhook had network lag
+    try {
+      if (userId) {
+        await fetch("http://localhost:5000/api/didit/sync-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId }),
+        });
+      }
+    } catch (e) {
+      console.error("[pollUntilVerified] Sync error:", e);
+    }
+
+    const updated = await getMyProfile();
+    const isKycVerified = !!updated?.identity_verified;
+    const isKybVerified = Array.isArray(updated?.businesses)
+      ? !!updated?.businesses[0]?.kyb_verified
+      : !!updated?.businesses?.kyb_verified;
+
+    if (type === 'kyc' && isKycVerified) {
+      setProfile(updated);
+      setVerifying(null);
+      setVerificationSuccessMsg("Biometric identity verified successfully via Didit!");
+      return;
+    }
+    if (type === 'kyb' && isKybVerified) {
+      setProfile(updated);
+      setVerifying(null);
+      setVerificationSuccessMsg("Business verified successfully via Didit!");
+      return;
+    }
+    if (attempts < 15) {
+      setTimeout(() => pollUntilVerified(type, attempts + 1), 2000);
+    } else {
+      setVerifying(null);
+      setProfile(updated);
+    }
+  };
+
   const startDiditVerification = async (type) => {
     try {
+      setVerifying(type);
+      setError("");
+      setVerificationSuccessMsg(`Starting ${type.toUpperCase()} verification session...`);
       const res = await fetch(`http://localhost:5000/api/didit/${type}/create-session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId }),
       });
       const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
+      if (!data.url) {
+        setVerifying(null);
+        setVerificationSuccessMsg("");
         alert("Failed to start verification: " + (data.error || "Unknown error"));
+        return;
       }
+      // Open verification in a new tab so user keeps their profile page open
+      window.open(data.url, "_blank");
+      setVerificationSuccessMsg(`Didit ${type.toUpperCase()} verification opened in a new tab! Complete verification on your phone or tab, and your status will automatically update here...`);
+      // Start background polling on profile page
+      pollUntilVerified(type);
     } catch (err) {
       console.error(err);
+      setVerifying(null);
+      setVerificationSuccessMsg("");
       alert("Error starting Didit verification.");
     }
   };
 
   const completion = calcProfileCompletion(profile);
+  const isKycVerified = !!profile?.identity_verified;
+  const isKybVerified = Array.isArray(profile?.businesses)
+    ? !!profile?.businesses[0]?.kyb_verified
+    : !!profile?.businesses?.kyb_verified;
+  const hasBusiness = Array.isArray(profile?.businesses)
+    ? profile?.businesses.length > 0
+    : !!profile?.businesses;
 
   if (loading) {
     return (
@@ -247,6 +360,11 @@ export default function ProfilePage() {
         </div>
 
         {/* shafqaat — Banners */}
+        {verificationSuccessMsg && (
+          <div className="flex items-center gap-2 p-4 bg-green-500/15 border border-green-500/30 rounded-xl text-green-400 text-sm font-semibold shadow-lg">
+            <CheckCircle className="h-5 w-5 flex-shrink-0" /> {verificationSuccessMsg}
+          </div>
+        )}
         {saved && (
           <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 text-sm">
             <CheckCircle className="h-4 w-4" /> Profile saved successfully!
@@ -283,18 +401,25 @@ export default function ProfilePage() {
         <Section icon={ShieldCheck} title="Identity Verification (KYC)"
           description="Required by AML/KYC standards — Kickstarter, Indiegogo, FCA, SECP">
           <div className="mb-4">
-            {profile?.identity_verified ? (
+            {isKycVerified ? (
               <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl text-sm font-medium">
-                <CheckCircle className="h-5 w-5" /> Biometric Identity Verified (Didit)
+                <CheckCircle className="h-5 w-5" /> Biometric Identity Verified (Didit) ✓
               </div>
             ) : (
-              <button onClick={(e) => { e.preventDefault(); startDiditVerification('kyc'); }} 
-                className="inline-flex items-center gap-2 px-5 py-3 bg-[#6f42c1] hover:bg-[#5a3599] text-white rounded-xl text-sm font-bold transition shadow-lg shadow-[#6f42c1]/20">
-                <ShieldCheck className="h-5 w-5" /> Verify Identity with Didit
-              </button>
+              <div className="space-y-2">
+                <button onClick={(e) => { e.preventDefault(); startDiditVerification('kyc'); }} 
+                  disabled={verifying === 'kyc'}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-[#6f42c1] hover:bg-[#5a3599] disabled:opacity-50 text-white rounded-xl text-sm font-bold transition shadow-lg shadow-[#6f42c1]/20">
+                  {verifying === 'kyc' ? <Loader2 className="h-5 w-5 animate-spin" /> : <ShieldCheck className="h-5 w-5" />}
+                  {verifying === 'kyc' ? "Verifying..." : "Verify Identity with Didit"}
+                </button>
+                <p className="text-xs text-gray-400">
+                  Secured by Didit. Scans government-issued ID and performs live liveness check automatically.
+                </p>
+              </div>
             )}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-4">
             <DocUpload fieldKey="national_id_cid" label="National ID / CNIC" required
               hint="Both sides — primary identity document" accept=".pdf,.jpg,.jpeg,.png"
               currentUrl={profile?.national_id_url} onUploaded={handleDocUploaded} />
@@ -311,45 +436,51 @@ export default function ProfilePage() {
         </Section>
 
         {/* ── Section 3: KYB (Business Verification) ── */}
-        <Section icon={Building2} title="Business Verification (KYB)"
-          description="SEC, FCA, SECP, FBR standards — required for investor-facing campaigns">
-          <div className="mb-4">
-            {profile?.businesses?.[0]?.kyb_verified ? (
-              <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl text-sm font-medium">
-                <CheckCircle className="h-5 w-5" /> Business Verified (Didit)
-              </div>
-            ) : (
-              <button onClick={(e) => { e.preventDefault(); startDiditVerification('kyb'); }} 
-                className="inline-flex items-center gap-2 px-5 py-3 bg-[#6f42c1] hover:bg-[#5a3599] text-white rounded-xl text-sm font-bold transition shadow-lg shadow-[#6f42c1]/20">
-                <Building2 className="h-5 w-5" /> Verify Business with Didit
-              </button>
-            )}
-            {!profile?.businesses?.[0] && !profile?.businesses?.kyb_verified && (
-              <p className="text-xs text-orange-400 mt-2">
-                * Please upload your business documents and click <strong>Save Profile</strong> before verifying with Didit.
-              </p>
-            )}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <DocUpload fieldKey="business_reg_cid" label="Business Registration" required
-              hint="Certificate of Incorporation / SECP registration" accept=".pdf"
-              currentUrl={profile?.business_reg_url} onUploaded={handleDocUploaded} />
-            <DocUpload fieldKey="tax_cert_cid" label="Tax Registration Certificate" required
-              hint="NTN Certificate (Pakistan) or equivalent" accept=".pdf"
-              currentUrl={profile?.tax_cert_url} onUploaded={handleDocUploaded} />
-            <DocUpload fieldKey="bank_statement_cid" label="Bank Statement (3 months)" required
-              hint="Shows financial activity — required by AML standards" accept=".pdf"
-              currentUrl={profile?.bank_statement_url} onUploaded={handleDocUploaded} />
-            {/* shafqaat — Business logo placeholder (Cloudinary upload coming in next sprint) */}
-            <div className="bg-[#0d1117] rounded-xl border border-white/5 p-4 flex items-center justify-center text-center">
-              <div>
-                <Camera className="h-6 w-6 text-gray-600 mx-auto mb-2" />
-                <p className="text-xs text-gray-500 font-semibold">Business Logo</p>
-                <p className="text-[10px] text-gray-600 mt-1">Coming soon — Cloudinary image upload</p>
+        {profile?.role !== "investor" && (
+          <Section icon={Building2} title="Business Verification (KYB)"
+            description="SEC, FCA, SECP, FBR standards — required for investor-facing campaigns">
+            <div className="mb-4">
+              {isKybVerified ? (
+                <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl text-sm font-medium">
+                  <CheckCircle className="h-5 w-5" /> Business Verified (Didit) ✓
+                </div>
+              ) : (
+                <div>
+                  <button onClick={(e) => { e.preventDefault(); startDiditVerification('kyb'); }} 
+                    disabled={verifying === 'kyb'}
+                    className="inline-flex items-center gap-2 px-5 py-3 bg-[#6f42c1] hover:bg-[#5a3599] disabled:opacity-50 text-white rounded-xl text-sm font-bold transition shadow-lg shadow-[#6f42c1]/20">
+                    {verifying === 'kyb' ? <Loader2 className="h-5 w-5 animate-spin" /> : <Building2 className="h-5 w-5" />}
+                    {verifying === 'kyb' ? "Verifying..." : "Verify Business with Didit"}
+                  </button>
+                  {!hasBusiness && (
+                    <p className="text-xs text-orange-400 mt-2">
+                      * Please upload your business documents and click <strong>Save Profile</strong> before verifying with Didit.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <DocUpload fieldKey="business_reg_cid" label="Business Registration" required
+                hint="Certificate of Incorporation / SECP registration" accept=".pdf"
+                currentUrl={profile?.business_reg_url} onUploaded={handleDocUploaded} />
+              <DocUpload fieldKey="tax_cert_cid" label="Tax Registration Certificate" required
+                hint="NTN Certificate (Pakistan) or equivalent" accept=".pdf"
+                currentUrl={profile?.tax_cert_url} onUploaded={handleDocUploaded} />
+              <DocUpload fieldKey="bank_statement_cid" label="Bank Statement (3 months)" required
+                hint="Shows financial activity — required by AML standards" accept=".pdf"
+                currentUrl={profile?.bank_statement_url} onUploaded={handleDocUploaded} />
+              {/* shafqaat — Business logo placeholder (Cloudinary upload coming in next sprint) */}
+              <div className="bg-[#0d1117] rounded-xl border border-white/5 p-4 flex items-center justify-center text-center">
+                <div>
+                  <Camera className="h-6 w-6 text-gray-600 mx-auto mb-2" />
+                  <p className="text-xs text-gray-500 font-semibold">Business Logo</p>
+                  <p className="text-[10px] text-gray-600 mt-1">Coming soon — Cloudinary image upload</p>
+                </div>
               </div>
             </div>
-          </div>
-        </Section>
+          </Section>
+        )}
 
         {/* shafqaat — Save + Back buttons */}
         <div className="flex gap-3 pb-8">
