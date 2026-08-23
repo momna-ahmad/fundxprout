@@ -1,21 +1,9 @@
 // backend/services/settlementService.js
-// Settles matched trades: commits the token transfer, records the trade,
-// triggers on-chain settlement (stubbed), and emits real-time updates.
+// Records a matched trade. The buyer must subsequently settle it on-chain;
+// Supabase never moves the ERC-20 token balance itself.
 
 const { supabaseAdmin } = require('../config/supabaseAdmin');
-const { commitTransfer, InsufficientBalanceError } = require('./balanceReservationService');
 const { emitTradeExecuted } = require('../sockets/marketplaceSocket');
-
-/**
- * Stub for calling the on-chain marketplace contract. Replace with a real
- * call to EquitySecondaryMarketplace.fillOrder once the buyer-signs flow
- * is wired up.
- * @param {Object} match
- */
-async function callTokenMarketplaceContract(match) {
-  // TODO: implement on-chain settlement via EquitySecondaryMarketplace.fillOrder
-  return { success: true, txHash: null };
-}
 
 /**
  * Execute settlement for a matched trade.
@@ -28,15 +16,7 @@ async function settle(match) {
   const price = Number(match.price);
   const campaignId = buy.campaign_id || sell.campaign_id;
 
-  // 1) Commit transfer in DB (seller.locked -> buyer.available)
-  try {
-    await commitTransfer(sell.investor_id, buy.investor_id, campaignId, qty);
-  } catch (err) {
-    console.error('[settle] commitTransfer failed', { err: err.message, match });
-    throw err;
-  }
-
-  // 2) Insert token_trades row with pending status
+  // Insert a pending trade. ERC-20 ownership changes only in settleTrade().
   let trade;
   try {
     const payload = {
@@ -56,66 +36,16 @@ async function settle(match) {
     if (error) throw error;
     trade = data;
   } catch (err) {
-    console.error('[settle] failed to insert token_trades, attempting rollback', { err: err.message, match });
-    await rollbackTransfer(buy, sell, campaignId, qty);
+    console.error('[settle] failed to insert token_trades', { err: err.message, match });
     throw err;
   }
 
-  // 3) Call on-chain settlement (stubbed)
   try {
-    const onchain = await callTokenMarketplaceContract(match);
-
-    await supabaseAdmin
-      .from('token_trades')
-      .update({ settlement_status: 'settled', tx_hash: onchain.txHash })
-      .eq('id', trade.id);
-
-    await supabaseAdmin
-      .from('campaigns')
-      .update({ last_traded_price: price })
-      .eq('id', campaignId);
-
-    try {
-      emitTradeExecuted(campaignId, trade);
-    } catch (err) {
-      console.warn('[settle] emitTradeExecuted failed', err.message);
-    }
-
-    return { success: true, trade };
+    emitTradeExecuted(campaignId, trade);
   } catch (err) {
-    console.error('[settle] on-chain settlement failed, marking trade failed and attempting rollback', {
-      err: err.message,
-      trade,
-      match
-    });
-
-    try {
-      await supabaseAdmin.from('token_trades').update({ settlement_status: 'failed' }).eq('id', trade.id);
-    } catch (updErr) {
-      console.error('[settle] failed to mark trade as failed', updErr.message, { trade });
-    }
-
-    await rollbackTransfer(buy, sell, campaignId, qty);
-
-    return { success: false, error: err.message };
+    console.warn('[settle] emitTradeExecuted failed', err.message);
   }
-}
-
-/**
- * Reverses a committed transfer when a later settlement step fails.
- */
-async function rollbackTransfer(buy, sell, campaignId, qty) {
-  try {
-    const { error } = await supabaseAdmin.rpc('rollback_token_transfer', {
-      p_seller: sell.investor_id,
-      p_buyer: buy.investor_id,
-      p_campaign_id: campaignId,
-      p_qty: qty,
-    });
-    if (error) throw error;
-  } catch (rbErr) {
-    console.error('[settle] rollback failed', rbErr.message, { buy, sell, campaignId, qty });
-  }
+  return { success: true, trade };
 }
 
 module.exports = { settle };

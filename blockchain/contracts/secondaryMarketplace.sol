@@ -7,40 +7,26 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
- * @notice Fully on-chain order book for 18-decimal campaign ERC-20 tokens.
- * Sell orders escrow tokens and buy orders escrow ETH. Matching, settlement,
- * and cancellation all happen in this contract; no database balance is trusted.
+ * @notice On-chain settlement contract for orders stored and matched in Supabase.
+ * Sellers retain tokens in their own wallet. They approve this contract when
+ * listing; a buyer executes settlement only after an off-chain order match.
  */
 contract EquitySecondaryMarketplace is ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
-    enum Side { Buy, Sell }
-
-    struct Order {
-        address trader;
-        address token;
-        Side side;
-        uint256 pricePerToken; // wei per whole token (1e18 token units)
-        uint256 amount;
-        uint256 remaining;
-        bool active;
-    }
-
     uint256 public platformFeeBps = 200; // 2%
     address public feeTreasury;
-    uint256 public nextOrderId = 1;
-    mapping(uint256 => Order) public orders;
+    mapping(bytes32 => bool) public settledTrades;
 
-    event OrderCreated(
-        uint256 indexed orderId,
-        address indexed trader,
+    event TradeSettled(
+        bytes32 indexed tradeId,
         address indexed token,
-        Side side,
-        uint256 pricePerToken,
-        uint256 amount
+        address indexed buyer,
+        address seller,
+        uint256 tokenAmount,
+        uint256 totalPrice,
+        uint256 platformFee
     );
-    event OrderMatched(uint256 indexed sellOrderId, uint256 indexed buyOrderId, uint256 amount, uint256 totalPrice);
-    event OrderCancelled(uint256 indexed orderId, address indexed trader, uint256 returnedAmount);
     event FeeTreasuryUpdated(address indexed treasury);
     event PlatformFeeUpdated(uint256 feeBps);
 
@@ -49,75 +35,32 @@ contract EquitySecondaryMarketplace is ReentrancyGuard, Ownable {
         feeTreasury = _feeTreasury;
     }
 
-    function createSellOrder(address token, uint256 amount, uint256 pricePerToken)
-        external
-        nonReentrant
-        returns (uint256 orderId)
-    {
-        require(token != address(0), "Invalid token");
-        require(amount > 0 && pricePerToken > 0, "Invalid order");
-        require(_totalPrice(amount, pricePerToken) > 0, "Order value too small");
+    /**
+     * @dev The buyer calls this with exactly `amount * pricePerToken / 1e18` ETH.
+     * The seller must have already approved this contract for `amount` tokens.
+     * `tradeId` should be the bytes32 ID generated from the Supabase trade UUID.
+     */
+    function settleTrade(
+        bytes32 tradeId,
+        address token,
+        address seller,
+        uint256 amount,
+        uint256 pricePerToken
+    ) external payable nonReentrant {
+        require(token != address(0) && seller != address(0), "Invalid address");
+        require(amount > 0 && pricePerToken > 0, "Invalid trade");
+        require(!settledTrades[tradeId], "Trade already settled");
 
-        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-        orderId = _createOrder(msg.sender, token, Side.Sell, amount, pricePerToken);
-    }
-
-    function createBuyOrder(address token, uint256 amount, uint256 pricePerToken)
-        external
-        payable
-        nonReentrant
-        returns (uint256 orderId)
-    {
-        require(token != address(0), "Invalid token");
-        require(amount > 0 && pricePerToken > 0, "Invalid order");
-        uint256 totalPrice = _totalPrice(amount, pricePerToken);
-        require(totalPrice > 0, "Order value too small");
-        require(msg.value == totalPrice, "Incorrect ETH escrow");
-
-        orderId = _createOrder(msg.sender, token, Side.Buy, amount, pricePerToken);
-    }
-
-    /** @notice Matches a compatible sell order with a buy order using the buy escrow. */
-    function matchOrders(uint256 sellOrderId, uint256 buyOrderId, uint256 amount) external nonReentrant {
-        Order storage sellOrder = orders[sellOrderId];
-        Order storage buyOrder = orders[buyOrderId];
-
-        require(sellOrder.active && buyOrder.active, "Inactive order");
-        require(sellOrder.side == Side.Sell && buyOrder.side == Side.Buy, "Invalid order sides");
-        require(sellOrder.token == buyOrder.token, "Token mismatch");
-        require(buyOrder.pricePerToken >= sellOrder.pricePerToken, "Prices do not cross");
-        require(amount > 0 && amount <= sellOrder.remaining && amount <= buyOrder.remaining, "Invalid fill amount");
-
-        // The buyer's limit price is used so its exact ETH escrow always covers the fill.
-        uint256 totalPrice = _totalPrice(amount, buyOrder.pricePerToken);
-        sellOrder.remaining -= amount;
-        buyOrder.remaining -= amount;
-        if (sellOrder.remaining == 0) sellOrder.active = false;
-        if (buyOrder.remaining == 0) buyOrder.active = false;
+        uint256 totalPrice = (amount * pricePerToken) / 1e18;
+        require(totalPrice > 0 && msg.value == totalPrice, "Incorrect ETH value");
 
         uint256 fee = (totalPrice * platformFeeBps) / 10_000;
-        IERC20(sellOrder.token).safeTransfer(buyOrder.trader, amount);
+        settledTrades[tradeId] = true;
+        IERC20(token).safeTransferFrom(seller, msg.sender, amount);
         _sendEth(feeTreasury, fee);
-        _sendEth(sellOrder.trader, totalPrice - fee);
+        _sendEth(seller, totalPrice - fee);
 
-        emit OrderMatched(sellOrderId, buyOrderId, amount, totalPrice);
-    }
-
-    function cancelOrder(uint256 orderId) external nonReentrant {
-        Order storage order = orders[orderId];
-        require(order.active, "Inactive order");
-        require(order.trader == msg.sender, "Not order owner");
-
-        uint256 remaining = order.remaining;
-        order.remaining = 0;
-        order.active = false;
-
-        if (order.side == Side.Sell) {
-            IERC20(order.token).safeTransfer(order.trader, remaining);
-        } else {
-            _sendEth(order.trader, _totalPrice(remaining, order.pricePerToken));
-        }
-        emit OrderCancelled(orderId, order.trader, remaining);
+        emit TradeSettled(tradeId, token, msg.sender, seller, amount, totalPrice, fee);
     }
 
     function setFeeTreasury(address treasury) external onlyOwner {
@@ -130,19 +73,6 @@ contract EquitySecondaryMarketplace is ReentrancyGuard, Ownable {
         require(feeBps <= 1_000, "Fee too high");
         platformFeeBps = feeBps;
         emit PlatformFeeUpdated(feeBps);
-    }
-
-    function _createOrder(address trader, address token, Side side, uint256 amount, uint256 pricePerToken)
-        private
-        returns (uint256 orderId)
-    {
-        orderId = nextOrderId++;
-        orders[orderId] = Order(trader, token, side, pricePerToken, amount, amount, true);
-        emit OrderCreated(orderId, trader, token, side, pricePerToken, amount);
-    }
-
-    function _totalPrice(uint256 amount, uint256 pricePerToken) private pure returns (uint256) {
-        return (amount * pricePerToken) / 1e18;
     }
 
     function _sendEth(address recipient, uint256 amount) private {

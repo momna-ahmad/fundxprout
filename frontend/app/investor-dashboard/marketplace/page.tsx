@@ -1,152 +1,109 @@
-// ── frontend/app/investor-dashboard/marketplace/page.tsx ───────────────────────────────────────────────
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Search, ChevronRight } from 'lucide-react';
-import { getAllCampaigns } from '@/utils/supabase/getCampaigns';
+import { ArrowRight, Search } from 'lucide-react';
+import BuyTokenButton from '@/components/Marketplace/BuyTokenButton';
+import { getOpenSellOrders, type MarketplaceSellOrder } from '@/lib/marketplace-api';
 
-type Campaign = {
-  id: string;
-  title?: string;
-  description?: string;
-  category?: string;
-  funding_goal?: string;
-  amount_pledged?: string;
-  secondary_trading_enabled?: boolean;
-};
+function numeric(value: string | number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function shortAddress(address: string | null) {
+  return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : 'Unknown';
+}
 
 export default function InvestorMarketplacePage() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [orders, setOrders] = useState<MarketplaceSellOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    async function loadCampaigns() {
-      try {
-        setLoading(true);
-        setError(null);
-        const all = await getAllCampaigns();
-        setCampaigns(
-          (all || []).filter(
-            (campaign: any) => campaign.secondary_trading_enabled === true,
-          ),
-        );
-      } catch (err) {
-        console.error(err);
-        setError('Unable to load marketplace campaigns.');
-      } finally {
-        setLoading(false);
-      }
+  const loadOrders = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await getOpenSellOrders();
+      setOrders(result.orders || []);
+    } catch (err) {
+      console.error(err);
+      setError('Unable to load token listings.');
+    } finally {
+      setLoading(false);
     }
-
-    loadCampaigns();
   }, []);
 
-  const filteredCampaigns = campaigns.filter((campaign) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return [campaign.title, campaign.description, campaign.category]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(q));
-  });
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
+
+  const filteredOrders = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return orders;
+    return orders.filter((order) =>
+      [order.campaign?.title, order.campaign?.category, order.campaign?.token_contract_address]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q)),
+    );
+  }, [orders, search]);
 
   return (
     <div className="flex flex-col gap-6">
       <div className="space-y-3">
-        <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground font-semibold">
-          Investor Marketplace
-        </div>
-        <h1 className="text-3xl font-bold text-foreground">Secondary Trading Campaigns</h1>
+        <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground font-semibold">Investor Marketplace</div>
+        <h1 className="text-3xl font-bold text-foreground">Tokens for sale</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Browse campaigns that support tokenized secondary trading and open a dedicated market screen for each.
+          These are active sell orders from the Supabase token order book. Buying settles the selected token order directly on-chain.
         </p>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative flex-1">
           <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search campaigns by title, category, or description…"
-            className="w-full rounded-3xl border border-border bg-card px-12 py-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring"
-          />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search token listings…" className="w-full rounded-3xl border border-border bg-card px-12 py-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring" />
         </div>
-        <div className="text-sm text-muted-foreground">
-          {filteredCampaigns.length} campaign{filteredCampaigns.length === 1 ? '' : 's'} available
-        </div>
+        <div className="text-sm text-muted-foreground">{filteredOrders.length} token listing{filteredOrders.length === 1 ? '' : 's'} available</div>
       </div>
 
       {loading ? (
-        <div className="rounded-3xl border border-border bg-card p-8 text-center text-muted-foreground">
-          Loading marketplace campaigns…
-        </div>
+        <div className="rounded-3xl border border-border bg-card p-8 text-center text-muted-foreground">Loading token listings…</div>
       ) : error ? (
-        <div className="rounded-3xl border border-border bg-card p-8 text-center text-destructive">
-          {error}
-        </div>
-      ) : filteredCampaigns.length === 0 ? (
-        <div className="rounded-3xl border border-border bg-card p-8 text-center text-muted-foreground">
-          No campaigns match your search.
-        </div>
+        <div className="rounded-3xl border border-border bg-card p-8 text-center text-destructive">{error}</div>
+      ) : filteredOrders.length === 0 ? (
+        <div className="rounded-3xl border border-border bg-card p-8 text-center text-muted-foreground">No active token sell orders match your search.</div>
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
-          {filteredCampaigns.map((campaign) => (
-            <Link
-              key={campaign.id}
-              href={`/investor-dashboard/marketplace/${campaign.id}`}
-              className="group block overflow-hidden rounded-3xl border border-border bg-card p-6 transition hover:border-ring hover:shadow-lg"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <h2 className="text-xl font-semibold text-foreground truncate">
-                    {campaign.title || 'Untitled Campaign'}
-                  </h2>
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground line-clamp-3">
-                    {campaign.description || 'No campaign description available.'}
-                  </p>
+          {filteredOrders.map((order) => {
+            const quantity = numeric(order.quantity_remaining);
+            const price = numeric(order.price);
+            return (
+              <article key={order.id} className="overflow-hidden rounded-3xl border border-border bg-card p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <h2 className="truncate text-xl font-semibold text-foreground">{order.campaign?.title || 'Token listing'}</h2>
+                    <p className="mt-2 text-sm text-muted-foreground">{order.campaign?.category || 'Uncategorized'} · seller {shortAddress(order.seller_wallet_address)}</p>
+                    {!order.seller_wallet_address && <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">Seller must link their wallet before this order can be purchased on-chain.</p>}
+                  </div>
+                  <span className="rounded-2xl border border-border bg-muted px-3 py-2 text-xs font-semibold text-muted-foreground">For sale</span>
                 </div>
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-muted text-xs font-semibold text-muted-foreground">
-                  Trade
-                </span>
-              </div>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-3xl border border-border bg-background/80 p-4">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                    Funding Goal
-                  </div>
-                  <div className="mt-2 text-lg font-semibold text-foreground">
-                    {campaign.funding_goal ?? 'N/A'} ETH
-                  </div>
+                <div className="mt-5 grid grid-cols-3 gap-3">
+                  <div className="rounded-2xl border border-border bg-background/80 p-3"><div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Tokens</div><div className="mt-1 font-semibold text-foreground">{quantity}</div></div>
+                  <div className="rounded-2xl border border-border bg-background/80 p-3"><div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Each</div><div className="mt-1 font-semibold text-foreground">{price} ETH</div></div>
+                  <div className="rounded-2xl border border-border bg-background/80 p-3"><div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Total</div><div className="mt-1 font-semibold text-foreground">{(quantity * price).toFixed(6)} ETH</div></div>
                 </div>
-                <div className="rounded-3xl border border-border bg-background/80 p-4">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                    Raised
-                  </div>
-                  <div className="mt-2 text-lg font-semibold text-foreground">
-                    {campaign.amount_pledged ?? '0'} ETH
-                  </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-start">
+                  <BuyTokenButton order={order} onPurchased={(orderId) => setOrders((current) => current.filter((item) => item.id !== orderId))} />
+                  <Link href={`/investor-dashboard/marketplace/${order.campaign_id}`} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border px-4 py-2.5 text-sm font-semibold text-muted-foreground transition hover:border-ring">
+                    Market <ArrowRight size={15} />
+                  </Link>
                 </div>
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                <span className="rounded-2xl border border-border px-3 py-2 bg-muted/70">
-                  {campaign.category || 'Uncategorized'}
-                </span>
-                <span className="rounded-2xl border border-border px-3 py-2 bg-muted/70">
-                  Secondary enabled
-                </span>
-              </div>
-
-              <div className="mt-5 flex items-center justify-between text-sm font-semibold text-muted-foreground">
-                <span>View market</span>
-                <ArrowRight size={16} className="transition group-hover:translate-x-1" />
-              </div>
-            </Link>
-          ))}
+              </article>
+            );
+          })}
         </div>
       )}
     </div>

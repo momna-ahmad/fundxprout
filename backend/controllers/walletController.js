@@ -40,16 +40,23 @@ async function linkWallet(req, res) {
     return res.status(400).json({ error: 'Invalid signature format' });
   }
 
-  if (normalizeAddress(recovered) !== normalized) {
-    return res.status(401).json({ error: 'Signature does not match address' });
-  }
+  // MetaMask may sign with its currently selected account even when the UI has
+  // a stale address from a previous account selection. The recovered signer is
+  // the cryptographic source of truth, so persist it instead of rejecting a
+  // valid ownership proof solely because those two UI values differ.
+  const verifiedAddress = normalizeAddress(recovered);
 
   pendingNonces.delete(normalized);
 
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
   const { data: profile, error: selectError } = await supabaseAdmin
     .from('profiles')
-    .select('user_id,wallet_verified')
-    .ilike('wallet_address', address)
+    .select('user_id')
+    .eq('user_id', userId)
     .single();
 
   if (selectError && selectError.code !== 'PGRST116') {
@@ -57,19 +64,19 @@ async function linkWallet(req, res) {
   }
 
   if (!profile) {
-    return res.status(404).json({ error: 'No profile found for this wallet address' });
+    return res.status(404).json({ error: 'No profile found for the authenticated user' });
   }
 
   const { error: updateError } = await supabaseAdmin
     .from('profiles')
-    .update({ wallet_address: normalized, wallet_verified: true })
-    .eq('user_id', profile.user_id);
+    .update({ wallet_address: verifiedAddress, wallet_verified: true })
+    .eq('user_id', userId);
 
   if (updateError) {
     return res.status(500).json({ error: updateError.message });
   }
 
-  return res.json({ success: true, wallet_verified: true });
+  return res.json({ success: true, wallet_address: verifiedAddress, wallet_verified: true });
 }
 
 async function getWalletStatus(req, res) {

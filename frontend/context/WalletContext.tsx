@@ -1,5 +1,8 @@
 'use client';
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createClient } from '@/utils/supabase/client';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 // ── Types ────────────────────────────────────────────────────────────
 export type WalletContextType = {
@@ -7,9 +10,9 @@ export type WalletContextType = {
   network: number | null;
   isConnecting: boolean;
   isWalletVerified: boolean;
-  connectWallet: () => Promise<void>;
-  connectMetaMask: () => Promise<void>;
-  signVerificationMessage: () => Promise<void>;
+  connectWallet: () => Promise<string | null>;
+  connectMetaMask: () => Promise<string | null>;
+  signVerificationMessage: (address?: string) => Promise<string>;
   disconnect: () => void;
 };
 
@@ -32,9 +35,9 @@ const WalletContext = createContext<WalletContextType>({
   isConnecting: false,
   isWalletVerified: false,
 
-  connectWallet: async () => {},
-  connectMetaMask: async () => {},
-  signVerificationMessage: async () => {},
+  connectWallet: async () => null,
+  connectMetaMask: async () => null,
+  signVerificationMessage: async () => '',
   disconnect: () => {},
 });
 
@@ -47,7 +50,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   async function fetchWalletVerification(address: string) {
     try {
-      const response = await fetch(`/api/wallet/status?address=${encodeURIComponent(address)}`);
+      const response = await fetch(`${API_BASE}/api/wallet/status?address=${encodeURIComponent(address)}`);
       if (!response.ok) return false;
       const data = await response.json();
       return data.wallet_verified === true;
@@ -104,7 +107,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const connectWallet = async () => {
     if (typeof window === 'undefined' || !window.ethereum) {
       alert('Please install MetaMask to connect your wallet.');
-      return;
+      return null;
     }
     try {
       setIsConnecting(true);
@@ -114,26 +117,46 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const chainId: string = await window.ethereum.request({ method: 'eth_chainId' });
       setNetwork(parseInt(chainId, 16));
       setIsWalletVerified(await fetchWalletVerification(address));
+      return address;
     } catch {
       // User rejected the request
+      return null;
     } finally {
       setIsConnecting(false);
     }
   };
 
   const connectMetaMask = async () => {
-    await connectWallet();
+    return connectWallet();
   };
 
-  const signVerificationMessage = async () => {
-    if (typeof window === 'undefined' || !window.ethereum || !walletAddress) {
+  const signVerificationMessage = async (addressToVerify = walletAddress) => {
+    if (typeof window === 'undefined' || !window.ethereum || !addressToVerify) {
       throw new Error('MetaMask is not connected');
     }
 
-    const response = await fetch('/api/wallet/nonce', {
+    // The selected MetaMask account can change after React has rendered. Read
+    // it again and use that same address for the nonce, signature and link
+    // request so the server can verify ownership reliably.
+    const accounts: string[] = await window.ethereum.request({ method: 'eth_accounts' });
+    const signingAddress = accounts[0];
+    if (!signingAddress) throw new Error('No MetaMask account is available');
+    setWalletAddress(signingAddress);
+
+    const supabase = createClient();
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) throw new Error('Please sign in before verifying your wallet');
+
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+
+    const response = await fetch(`${API_BASE}/api/wallet/nonce`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address: walletAddress }),
+      headers,
+      body: JSON.stringify({ address: signingAddress }),
     });
 
     if (!response.ok) {
@@ -143,13 +166,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const { nonce } = await response.json();
     const signature = await window.ethereum.request({
       method: 'personal_sign',
-      params: [nonce, walletAddress],
+      params: [nonce, signingAddress],
     });
 
-    const linkResponse = await fetch('/api/wallet/link', {
+    const linkResponse = await fetch(`${API_BASE}/api/wallet/link`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address: walletAddress, signature }),
+      headers,
+      body: JSON.stringify({ address: signingAddress, signature }),
     });
 
     if (!linkResponse.ok) {
@@ -158,7 +181,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     const data = await linkResponse.json();
+    if (data.wallet_address) setWalletAddress(data.wallet_address);
     setIsWalletVerified(data.wallet_verified === true);
+    return data.wallet_address || signingAddress;
   };
 
   const disconnect = () => {

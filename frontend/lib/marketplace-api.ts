@@ -1,7 +1,7 @@
 // frontend/lib/marketplace-api.ts
 import { createClient } from '@/utils/supabase/client';
 
-const API_BASE = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:5000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export type OrderRequest = {
   campaign_id: string;
@@ -11,6 +11,24 @@ export type OrderRequest = {
 };
 
 export type OrderResponse = { order: any };
+
+export type MarketplaceSellOrder = {
+  id: string;
+  campaign_id: string;
+  investor_id: string;
+  price: string | number;
+  quantity: string | number;
+  quantity_remaining: string | number;
+  created_at: string;
+  seller_wallet_address: string | null;
+  campaign: {
+    id: string;
+    title: string | null;
+    category: string | null;
+    token_contract_address: string | null;
+    secondary_trading_enabled: boolean;
+  } | null;
+};
 
 async function authHeaders(walletAddress?: string) {
   const supabase = createClient();
@@ -44,6 +62,12 @@ export async function createOrder(payload: OrderRequest, walletAddress?: string)
 export async function getOrderBook(campaignId: string) {
   const res = await fetch(`${API_BASE}/api/marketplace/orders/book/${campaignId}`);
   if (!res.ok) throw new Error('Failed to load order book');
+  return res.json();
+}
+
+export async function getOpenSellOrders(): Promise<{ orders: MarketplaceSellOrder[] }> {
+  const res = await fetch(`${API_BASE}/api/marketplace/orders/sell`);
+  if (!res.ok) throw new Error('Failed to load marketplace listings');
   return res.json();
 }
 

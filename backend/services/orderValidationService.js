@@ -25,21 +25,18 @@ async function validateTradeable(campaignId) {
     throw new ValidationError('CAMPAIGN_NOT_CLOSED', 'Campaign must be closed and funded before secondary trading');
   }
   if (!campaign.secondary_trading_enabled) {
+    console.log(campaign.secondary_trading_enabled, 'secondary trading enabled');
     throw new ValidationError('TRADING_DISABLED', 'Secondary trading is not enabled for this campaign');
   }
-  if ((campaign.flag_count ?? 0) > 0) {
-    throw new ValidationError('CAMPAIGN_FLAGGED', 'This campaign is under review and trading is paused');
-  }
+  // if ((campaign.flag_count ?? 0) > 0) {
+  //   throw new ValidationError('CAMPAIGN_FLAGGED', 'This campaign is under review and trading is paused');
+  // }
 
   const { data: settings } = await supabaseAdmin
     .from('campaign_secondary_market_settings')
     .select('trading_enabled, price_band_percent, min_order_size, max_order_size, lockup_days')
     .eq('campaign_id', campaignId)
     .single();
-
-  if (!settings || !settings.trading_enabled) {
-    throw new ValidationError('TRADING_DISABLED', 'Secondary trading is not enabled for this campaign');
-  }
 
   return { campaign, settings };
 }
@@ -118,9 +115,11 @@ function validateOrderSize(qty, settings) {
  * @param {Object} order - { campaign_id, investor_id, side, price, quantity }
  * @returns {Promise<{campaign: Object, settings: Object}>}
  */
-async function validateOrder(order) {
+async function validateOrder(order, { skipInvestorValidation = false } = {}) {
   const { campaign, settings } = await validateTradeable(order.campaign_id);
-  await validateInvestor(order.investor_id);
+  if (!skipInvestorValidation) {
+    await validateInvestor(order.investor_id);
+  }
   validatePriceBand(order.price, campaign, settings);
   validateOrderSize(order.quantity, settings);
   return { campaign, settings };
