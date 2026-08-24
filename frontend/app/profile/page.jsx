@@ -283,6 +283,15 @@ export default function ProfilePage() {
 
   const startDiditVerification = async (type) => {
     try {
+      const currentHasBusiness = Array.isArray(profile?.businesses)
+        ? profile?.businesses.length > 0
+        : !!profile?.businesses;
+
+      if (type === 'kyb' && !currentHasBusiness) {
+        setVerificationSuccessMsg("Creating business profile first...");
+        await handleSave();
+      }
+
       setVerifying(type);
       setError("");
       setVerificationSuccessMsg(`Starting ${type.toUpperCase()} verification session...`);
@@ -452,11 +461,6 @@ export default function ProfilePage() {
                     {verifying === 'kyb' ? <Loader2 className="h-5 w-5 animate-spin" /> : <Building2 className="h-5 w-5" />}
                     {verifying === 'kyb' ? "Verifying..." : "Verify Business with Didit"}
                   </button>
-                  {!hasBusiness && (
-                    <p className="text-xs text-orange-400 mt-2">
-                      * Please upload your business documents and click <strong>Save Profile</strong> before verifying with Didit.
-                    </p>
-                  )}
                 </div>
               )}
             </div>

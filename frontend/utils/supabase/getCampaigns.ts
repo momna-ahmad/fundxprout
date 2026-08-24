@@ -26,6 +26,7 @@ function normalizeCampaign(raw: any) {
         // AI Risk Assessment Fields
         risk_score: raw.risk_score ?? null,
         ai_prep_time_days: raw.ai_prep_time_days ?? null,
+        ai_reasons: raw.ai_reasons ?? null,
         problem_statement: raw.problem_statement ?? null,
         proof_of_capability: raw.proof_of_capability ?? null,
         idea_clarity: raw.idea_clarity ?? null,

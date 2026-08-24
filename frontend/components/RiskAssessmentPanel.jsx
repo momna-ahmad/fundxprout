@@ -1,5 +1,5 @@
-import React from "react";
-import { AlertTriangle, CheckCircle2, ShieldAlert, Info, Activity, Clock, FileCheck2 } from "lucide-react";
+import React, { useState } from "react";
+import { AlertTriangle, CheckCircle2, ShieldAlert, Info, Activity, Clock, FileCheck2, ChevronDown, ChevronUp } from "lucide-react";
 
 // Helper for the animated SVG Gauge
 const CircularGauge = ({ score }) => {
@@ -48,6 +48,7 @@ const CircularGauge = ({ score }) => {
 };
 
 export default function RiskAssessmentPanel({ campaign }) {
+  const [expandedMetric, setExpandedMetric] = useState(null);
   if (!campaign || campaign.risk_score === null || campaign.risk_score === undefined) {
     return (
       <div className="bg-[#1a2030] rounded-2xl border border-white/5 p-6 mt-6">
@@ -193,18 +194,53 @@ export default function RiskAssessmentPanel({ campaign }) {
               
               const barColor = isBad ? "bg-rose-500" : isGood ? "bg-emerald-500" : "bg-amber-400";
               const percent = (val / 10) * 100;
+              const isExpanded = expandedMetric === metric.key;
 
               return (
-                <div key={metric.key} className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-medium text-gray-400">
-                    <span>{metric.label}</span>
-                    <span className="text-gray-200">{val.toFixed(1)}</span>
+                <div 
+                  key={metric.key} 
+                  onClick={() => setExpandedMetric(isExpanded ? null : metric.key)}
+                  className={`p-3 rounded-xl border transition-all duration-300 cursor-pointer ${
+                    isExpanded 
+                      ? "bg-[#1f2638] border-white/10 shadow-lg" 
+                      : "bg-[#131926]/40 border-transparent hover:bg-[#1a2030]/50 hover:border-white/5"
+                  }`}
+                >
+                  <div className="flex justify-between items-center text-xs font-medium text-gray-400 mb-1.5">
+                    <span className="flex items-center gap-1 text-gray-300 font-semibold">
+                      {metric.label}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-100 font-bold bg-[#121622] px-2 py-0.5 rounded text-[11px] border border-white/5">
+                        {val.toFixed(1)}
+                      </span>
+                      {isExpanded ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-[#a78bfa] transition-transform" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-500 hover:text-gray-300 transition-transform" />
+                      )}
+                    </div>
                   </div>
-                  <div className="h-1.5 w-full bg-gray-800 rounded-full overflow-hidden">
+                  
+                  <div className="h-1.5 w-full bg-gray-800/80 rounded-full overflow-hidden mb-1">
                     <div 
                       className={`h-full ${barColor} transition-all duration-1000 ease-in-out`}
                       style={{ width: `${percent}%` }}
                     />
+                  </div>
+
+                  <div 
+                    className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                      isExpanded ? "max-h-40 opacity-100 mt-3" : "max-h-0 opacity-0 pointer-events-none"
+                    }`}
+                  >
+                    <div className="p-3 rounded-lg bg-[#0f121d]/90 border border-white/5 text-[11px] text-gray-300 leading-relaxed font-normal">
+                      <div className="font-bold text-[#a78bfa] mb-1 text-[10px] uppercase tracking-wider flex items-center gap-1">
+                        <FileCheck2 className="w-3 h-3" />
+                        AI Analysis Reasoning
+                      </div>
+                      {campaign.ai_reasons?.[metric.key] || "No detailed reasoning provided for this score."}
+                    </div>
                   </div>
                 </div>
               );
