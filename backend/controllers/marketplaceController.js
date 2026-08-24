@@ -19,10 +19,12 @@ async function createOrder(req, res) {
     // Validate campaign and order rules. Identity/profile completion is not a
     // marketplace requirement in this development flow; MetaMask connection is
     // enforced by the frontend and Supabase login identifies the order owner.
-    await validateOrder(
-      { campaign_id, investor_id: investorId, side, price, quantity },
-      { skipInvestorValidation: true }
-    );
+
+    // validate before sending request to backend by calling the smart contract function and state (completed)
+    // await validateOrder(
+    //   { campaign_id, investor_id: investorId, side, price, quantity },
+    //   { skipInvestorValidation: true }
+    // );
 
     // Keep tokens in the seller's wallet. Prevent over-listing by accounting
     // for the user's unfilled sell orders in Supabase; final ownership is

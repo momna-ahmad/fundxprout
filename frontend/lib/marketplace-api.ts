@@ -1,5 +1,13 @@
 // frontend/lib/marketplace-api.ts
 import { createClient } from '@/utils/supabase/client';
+import { ethers } from "ethers";
+import CampaignABI from "@/abis/BusinessCampaign.json";
+
+export enum CampaignState {
+  Active = 0,
+  Failed = 1,
+  Funded = 2,
+}
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -45,6 +53,52 @@ async function authHeaders(walletAddress?: string) {
 }
 
 export async function createOrder(payload: OrderRequest, walletAddress?: string): Promise<OrderResponse> {
+  const supabase = createClient();
+
+  //verify campaign state to be completed 
+
+    // 1. Fetch the campaign smart contract address from Supabase
+  const { data: campaign, error: campaignError } = await supabase
+    .from("campaigns")
+    .select("contract_address, status")
+    .eq("id", payload.campaign_id)
+    .single();
+
+  if (campaignError || !campaign?.contract_address) {
+    throw new Error("Campaign or contract address not found.");
+  }
+
+  // 2. Query the on-chain campaign contract
+  const rpcUrl = process.env.NEXT_PUBLIC_ALCHEMY_SEPOLIA_URL || "https://rpc.sepolia.org";
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+  const campaignContract = new ethers.Contract(
+    campaign.contract_address,
+    CampaignABI.abi || CampaignABI,
+    provider
+  );
+
+  // 3. Read the startup struct
+  const startupData = await campaignContract.startup();
+
+  // 3. Verify on-chain completion criteria
+  // Adjust these view functions based on your Campaign.sol contract:
+  // e.g. checking state enum, isFinalized, checkGoalReached, or deadline
+  // Destructure either by index or named property (Ethers v6 supports both)
+  const state: CampaignState = Number(startupData.state ?? startupData[6]);
+  const amountRaised: bigint = startupData.amountRaised ?? startupData[4];
+  const fundingGoal: bigint = startupData.fundingGoal ?? startupData[2];
+
+  // 4. Validate that the campaign is successfully funded
+  const isFunded = state === CampaignState.Funded || amountRaised >= fundingGoal;
+
+  console.log("contract state" , state, amountRaised)
+  if (!isFunded) {
+    throw new Error(
+      "Cannot create secondary market order: Campaign is not yet successfully Funded."
+    );
+  }
+
   const res = await fetch(`${API_BASE}/api/marketplace/orders`, {
     method: 'POST',
     headers: await authHeaders(walletAddress),
