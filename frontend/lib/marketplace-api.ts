@@ -145,3 +145,67 @@ export async function getHoldings(campaignId: string): Promise<{ available_balan
 
   return res.json();
 }
+
+export async function validateSellOrderBalance(
+  userId: string,
+  campaignId: string,
+  sellQuantityWei: bigint, // Accepts the bigint parsed by parseUnits
+  decimals: number = 18
+): Promise<{ isValid: boolean; availableBalanceWei: bigint; error?: string }> {
+  try {
+    const supabase = createClient();
+    // 1. Fetch total owned tokens
+    const { data: tokenHoldings, error: tokenError } = await supabase
+      .from('tokens')
+      .select('amount')
+      .eq('user_id', userId)
+      .eq('campaign_id', campaignId);
+
+    if (tokenError) throw tokenError;
+
+    // Convert each row amount to BigInt wei
+    const totalOwnedWei = (tokenHoldings || []).reduce((acc, row) => {
+      const valStr = String(row.amount ?? '0');
+      return acc + ethers.parseUnits(valStr, decimals);
+    }, BigInt(0));
+
+    // 2. Fetch active sell orders
+    const { data: activeOrders, error: orderError } = await supabase
+      .from('token_orders')
+      .select('quantity_remaining')
+      .eq('investor_id', userId)
+      .eq('campaign_id', campaignId)
+      .eq('side', 'sell')
+      .in('status', ['open', 'partially_filled']);
+
+    if (orderError) throw orderError;
+
+    // Convert each remaining quantity to BigInt wei
+    const lockedTokensWei = (activeOrders || []).reduce((acc, row) => {
+      const valStr = String(row.quantity_remaining ?? '0');
+      return acc + ethers.parseUnits(valStr, decimals);
+    }, BigInt(0));
+
+    // 3. Compute available balance in wei
+    const availableBalanceWei = totalOwnedWei - lockedTokensWei;
+
+    if (sellQuantityWei > availableBalanceWei) {
+      const availableReadable = ethers.formatUnits(availableBalanceWei, decimals);
+      const lockedReadable = ethers.formatUnits(lockedTokensWei, decimals);
+
+      return {
+        isValid: false,
+        availableBalanceWei,
+        error: `Insufficient available tokens. You have ${availableReadable} available (${lockedReadable} locked in active sell orders).`,
+      };
+    }
+
+    return { isValid: true, availableBalanceWei };
+  } catch (err: any) {
+    return {
+      isValid: false,
+      availableBalanceWei: BigInt(0),
+      error: err.message || 'Failed to validate token balance.',
+    };
+  }
+}

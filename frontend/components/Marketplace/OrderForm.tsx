@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { ethers } from 'ethers';
 import { useWallet } from '@/context/WalletContext';
-import { createOrder } from '@/lib/marketplace-api';
+import { createOrder, validateSellOrderBalance } from '@/lib/marketplace-api';
+import { useAuth } from '@/context/auth-context';
 
 const ERC20_ABI = ['function approve(address spender, uint256 value) returns (bool)'];
 
@@ -16,12 +17,17 @@ type OrderFormProps = {
 export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy' }: OrderFormProps) {
   const { walletAddress, connectWallet } = useWallet();
   const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
+  const { user } = useAuth();
+  console.log('OrderForm user:', user);
   const [price, setPrice] = useState('0.001');
   const [quantity, setQuantity] = useState('1');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const marketplaceAddress = process.env.NEXT_PUBLIC_MARKETPLACE_CONTRACT_ADDRESS;
+
+  //validate the available tokens against listed sell orders before approving metamask transaction to prevent gas fees for failed transactions.
+
 
   async function placeOrder(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,6 +47,17 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
       if (amount <= BigInt(0) || pricePerToken <= BigInt(0)) throw new Error('Price and quantity must be greater than zero.');
 
       if (side === 'sell') {
+
+        // Note: Ensure user_id/investor_id matches your DB user format (UUID or walletAddress)
+        const validation = await validateSellOrderBalance(user!.id, campaignId, amount);
+        console.log('Sell order validation result:', validation);
+      
+        if (!validation.isValid) {
+          setStatusMessage(validation.error || 'Insufficient available tokens.');
+          setIsSubmitting(false);
+          return; // Halts execution cleanly without triggering the Next.js dev overlay
+        }
+      
         if (!marketplaceAddress || !ethers.isAddress(marketplaceAddress)) {
           throw new Error('Marketplace contract address is not configured.');
         }
