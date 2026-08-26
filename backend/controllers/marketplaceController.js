@@ -6,7 +6,7 @@ const { getOrCreateBook } = require('../services/orderBookService');
 
 async function createOrder(req, res) {
   const investorId = req.investorId || req.user?.id;
-  const { campaign_id, side, price, quantity } = req.body;
+  const { campaign_id, side, price, quantity, wallet_address } = req.body;
 
   if (!campaign_id || !side || !price || !quantity) {
     return res.status(400).json({ error: 'campaign_id, side, price, and quantity are required' });
@@ -59,7 +59,9 @@ async function createOrder(req, res) {
         price,
         quantity,
         quantity_remaining: quantity,
-        status: 'open'
+        status: 'open',
+        seller_wallet_address: wallet_address
+
       }])
       .select()
       .single();
@@ -92,7 +94,7 @@ async function getOpenSellOrders(req, res) {
   try {
     const { data: orders, error: orderError } = await supabaseAdmin
       .from('token_orders')
-      .select('id, campaign_id, investor_id, price, quantity, quantity_remaining, created_at')
+      .select('id, campaign_id, investor_id, price, quantity, quantity_remaining, created_at, seller_wallet_address')
       .eq('side', 'sell')
       .in('status', ['open', 'partially_filled'])
       .gt('quantity_remaining', 0)
@@ -122,7 +124,7 @@ async function getOpenSellOrders(req, res) {
       .map((order) => ({
         ...order,
         campaign: campaignById.get(String(order.campaign_id)) ?? null,
-        seller_wallet_address: sellerById.get(String(order.investor_id))?.wallet_address ?? null,
+        //seller_wallet_address: sellerById.get(String(order.investor_id))?.wallet_address ?? null,
       }))
       // A missing seller wallet prevents settlement, but do not hide the order:
       // buyers should be able to see why it is temporarily unavailable.

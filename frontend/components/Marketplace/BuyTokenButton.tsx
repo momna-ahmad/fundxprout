@@ -14,6 +14,7 @@ export default function BuyTokenButton({ order, onPurchased }: { order: Marketpl
   const [message, setMessage] = useState<string | null>(null);
   const [buying, setBuying] = useState(false);
 
+  //validate on chain state whether order has already been filled
   async function buy() {
     setMessage(null);
     if (!walletAddress) {
@@ -54,7 +55,41 @@ export default function BuyTokenButton({ order, onPurchased }: { order: Marketpl
         { value: total },
       );
       setMessage('Waiting for on-chain confirmation…');
-      await tx.wait();
+      const receipt = await tx.wait();
+
+      if (receipt.status === 1) {
+        setMessage('Syncing database records…');
+
+        // Record off-chain ownership transfer
+        await fetch('/api/marketplace/settleTrade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            order_id: order.id,
+            tx_hash: tx.hash,
+            amount_bought: order.quantity_remaining,
+          }),
+        });
+      }
+
+      // 2. Prompt MetaMask to add and display the token in buyer's wallet UI
+        try {
+          await window.ethereum.request({
+            method: 'wallet_watchAsset',
+            params: {
+              type: 'ERC20',
+              options: {
+                address: tokenAddress,
+                symbol: order.token_symbol || 'TOKEN',
+                decimals: 18,
+              },
+            },
+          });
+        } catch (watchErr) {
+          // Non-blocking: if user dismisses prompt, tokens are still safe in their wallet
+          console.log('User dismissed token import prompt:', watchErr);
+        }
+
       setMessage(`Purchase confirmed: ${tx.hash.slice(0, 10)}…`);
       onPurchased?.(order.id);
     } catch (error) {

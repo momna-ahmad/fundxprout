@@ -16,6 +16,7 @@ export type OrderRequest = {
   side: 'buy' | 'sell';
   price: number;
   quantity: number;
+  wallet_address : string | undefined ;
 };
 
 export type OrderResponse = { order: any };
@@ -28,6 +29,7 @@ export type MarketplaceSellOrder = {
   quantity: string | number;
   quantity_remaining: string | number;
   created_at: string;
+  token_symbol: string;
   seller_wallet_address: string | null;
   campaign: {
     id: string;
@@ -99,10 +101,17 @@ export async function createOrder(payload: OrderRequest, walletAddress?: string)
     );
   }
 
+  // 5. Attach normalized wallet address to payload
+  const normalizedWallet = walletAddress ? walletAddress.toLowerCase() : undefined;
+  const enrichedPayload: OrderRequest = {
+    ...payload,
+    wallet_address: normalizedWallet,
+  };
+
   const res = await fetch(`${API_BASE}/api/marketplace/orders`, {
     method: 'POST',
     headers: await authHeaders(walletAddress),
-    body: JSON.stringify(payload),
+    body: JSON.stringify(enrichedPayload),
   });
 
   if (!res.ok) {
