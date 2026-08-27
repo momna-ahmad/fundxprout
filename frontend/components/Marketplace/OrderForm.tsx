@@ -12,13 +12,14 @@ type OrderFormProps = {
   campaignId: string;
   tokenAddress?: string | null;
   defaultSide?: 'buy' | 'sell';
+  wallet_address?: string;
 };
 
 export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy' }: OrderFormProps) {
   const { walletAddress, connectWallet } = useWallet();
   const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
   const { user } = useAuth();
-  console.log('OrderForm user:', user);
+  
   const [price, setPrice] = useState('0.001');
   const [quantity, setQuantity] = useState('1');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -70,7 +71,7 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
       }
 
       setStatusMessage('Saving order to the marketplace…');
-      await createOrder({ campaign_id: campaignId, side, price: Number(price), quantity: Number(quantity) }, walletAddress);
+      await createOrder({ campaign_id: campaignId, side, price: Number(price), quantity: Number(quantity) , wallet_address : walletAddress});
       setStatusMessage('Order saved. Blockchain settlement happens when a matching buyer confirms the trade.');
     } catch (error) {
       console.error('On-chain order failed:', error);

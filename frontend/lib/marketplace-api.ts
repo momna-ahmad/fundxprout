@@ -54,7 +54,7 @@ async function authHeaders(walletAddress?: string) {
   };
 }
 
-export async function createOrder(payload: OrderRequest, walletAddress?: string): Promise<OrderResponse> {
+export async function createOrder(payload: OrderRequest): Promise<OrderResponse> {
   const supabase = createClient();
 
   //verify campaign state to be completed 
@@ -100,7 +100,7 @@ export async function createOrder(payload: OrderRequest, walletAddress?: string)
       "Cannot create secondary market order: Campaign is not yet successfully Funded."
     );
   }
-
+  const walletAddress = payload.wallet_address;
   // 5. Attach normalized wallet address to payload
   const normalizedWallet = walletAddress ? walletAddress.toLowerCase() : undefined;
   const enrichedPayload: OrderRequest = {
