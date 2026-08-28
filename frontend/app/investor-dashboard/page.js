@@ -21,6 +21,7 @@ import {
   PieChart,
   TrendingDown,
   Star,
+  LogOut
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
@@ -136,6 +137,17 @@ export default function InvestorDashboardPage() {
     }
     loadAll();
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      router.push("/login");
+      router.refresh();
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
+  };
 
   // Compute real stats from the fetched campaigns
   const stats = {
@@ -415,7 +427,7 @@ export default function InvestorDashboardPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-black text-white">
-              {loading ? "Dashboard" : `Welcome, ${displayName}`}
+              {loading ? "Dashboard" : `Welcome, ${profile.full_name}`}
             </h1>
             <p className="text-gray-400 mt-1 text-sm">
               Discover opportunities and track your investments
