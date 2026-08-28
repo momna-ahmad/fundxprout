@@ -179,7 +179,7 @@ function EditableField({
 
 // ── Main Component ────────────────────────────────────────────────────
 export default function SettingsPage() {
-  const { walletAddress, network } = useWallet();
+  const { walletAddress, network, isConnecting, isWalletVerified, connectWallet, signVerificationMessage } = useWallet();
 
   const [profile, setProfile]       = useState<Profile | null>(null);
   const [authEmail, setAuthEmail]   = useState<string>('');
@@ -191,6 +191,8 @@ export default function SettingsPage() {
   const [copyDone, setCopyDone]     = useState(false);
   const [globalSaving, setGlobalSaving] = useState(false);
   const [globalSaved,  setGlobalSaved]  = useState(false);
+  const [walletActionLoading, setWalletActionLoading] = useState(false);
+  const [walletActionMessage, setWalletActionMessage] = useState<string | null>(null);
 
   // Password change state
   const [pwFields, setPwFields] = useState({ current: '', next: '', confirm: '' });
@@ -253,6 +255,31 @@ export default function SettingsPage() {
       setCopyDone(true);
       setTimeout(() => setCopyDone(false), 1500);
     });
+  };
+
+  const connectAndVerifyWallet = async () => {
+    try {
+      setWalletActionLoading(true);
+      setWalletActionMessage(null);
+      // Use the returned address so first-time connections do not depend on a
+      // pending React state update before the signature request.
+      const address = walletAddress ?? await connectWallet();
+      if (!address) {
+        setWalletActionMessage('Wallet connection was cancelled.');
+        return;
+      }
+      let verifiedAddress = address;
+      if (!isWalletVerified) {
+        setWalletActionMessage('Confirm the signature request in MetaMask…');
+        verifiedAddress = await signVerificationMessage(address);
+      }
+      setProfile((current) => ({ ...current, wallet_address: verifiedAddress }));
+      setWalletActionMessage('Wallet verified and saved to your profile.');
+    } catch (error) {
+      setWalletActionMessage(error instanceof Error ? error.message : 'Unable to verify wallet.');
+    } finally {
+      setWalletActionLoading(false);
+    }
   };
 
   // ── Derived values ───────────────────────────────────────────────────
@@ -393,6 +420,7 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="font-mono text-[13px] text-foreground">{truncateAddress(effectiveWallet, 10, 6)}</span>
                   <Badge variant="purple">Primary</Badge>
+                  {isWalletVerified ? <Badge variant="green">Verified</Badge> : <Badge variant="amber">Not verified</Badge>}
                   {network === 11155111 && <Badge variant="green">Sepolia ✓</Badge>}
                 </div>
                 <div className="flex items-center gap-2">
@@ -414,15 +442,19 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* Wallet address field — save to profile */}
-          <div className="mt-1">
-            <EditableField
-              label="Saved Wallet Address (profile)"
-              placeholder="0x... — saved for reference"
-              value={profile?.wallet_address ?? ''}
-              icon={Wallet}
-              onSave={(v) => saveField('wallet_address', v)}
-            />
+          <div className="mt-1 rounded-xl border border-border bg-black/20 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">Connect MetaMask and sign once to securely save the wallet address to your profile.</p>
+              <button
+                type="button"
+                onClick={connectAndVerifyWallet}
+                disabled={walletActionLoading || isConnecting || isWalletVerified}
+                className="inline-flex shrink-0 items-center justify-center rounded-lg bg-[#6f42c1] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7d50d1] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {walletActionLoading || isConnecting ? 'Connecting…' : isWalletVerified ? 'Wallet verified' : effectiveWallet ? 'Verify wallet' : 'Connect & verify wallet'}
+              </button>
+            </div>
+            {walletActionMessage && <p className="mt-3 text-xs text-muted-foreground">{walletActionMessage}</p>}
           </div>
         </div>
       </SectionCard>

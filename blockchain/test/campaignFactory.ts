@@ -1,3 +1,5 @@
+// blockchain/test/campaignFactory.ts
+// This test suite verifies the functionality of the CampaignFactory contract. It checks that users can create new campaigns with the specified parameters and that the deployed campaign addresses are correctly stored in the factory's state. The tests are written using Mocha and Chai, and they run in a Hardhat environment with Ethers.js for contract interaction.
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { Contract } from "ethers";
