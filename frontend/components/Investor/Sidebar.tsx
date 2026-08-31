@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Wallet, Briefcase, Coins,
   ArrowLeftRight, Settings, LogOut, Sprout, UserCircle, Store,
+  Gavel, ClipboardList,
 } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { createClient } from '@/utils/supabase/client';
@@ -13,9 +14,11 @@ import { useRouter } from 'next/navigation';
 const navItems = [
   { href: '/investor-dashboard/overview',      label: 'Overview',      icon: LayoutDashboard },
   { href: '/investor-dashboard/portfolio',     label: 'Portfolio',     icon: Wallet          },
-  { href: '/investor-dashboard/campaigns',     label: 'Investments',     icon: Briefcase       },
+  { href: '/investor-dashboard/campaigns',     label: 'Investments',   icon: Briefcase       },
   { href: '/investor-dashboard/tokens',        label: 'My Tokens',     icon: Coins           },
-  { href: '/investor-dashboard/marketplace',    label: 'Marketplace',   icon: Store           },
+  { href: '/investor-dashboard/marketplace',   label: 'Marketplace',   icon: Store           },
+  { href: '/investor-dashboard/my-bids',       label: 'My Bids',       icon: Gavel           },
+  { href: '/investor-dashboard/my-listings',   label: 'My Listings',   icon: ClipboardList   },
   { href: '/investor-dashboard/transactions',  label: 'Transactions',  icon: ArrowLeftRight  },
   { href: '/investor-dashboard/settings',      label: 'Settings',      icon: Settings        },
 ];

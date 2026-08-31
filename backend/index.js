@@ -25,6 +25,14 @@ app.use(express.json());
 const campaignRoutes = require('./routes/campaignRoutes');
 app.use('/api/campaigns', campaignRoutes);
 
+// Marketplace and wallet APIs must be mounted here because npm start runs index.js.
+const marketplaceRoutes = require('./routes/marketplaceRoutes');
+const walletRoutes = require('./routes/walletRoutes');
+const biddingRoutes = require('./routes/biddingRoutes'); // Auction-style bidding system
+app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/marketplace', biddingRoutes); // Bidding routes share the /api/marketplace prefix
+app.use('/api/wallet', walletRoutes);
+
 function runRiskAssessmentForCampaign(campaignId) {
   return new Promise((resolve, reject) => {
     const scriptPath = path.resolve(__dirname, '..', 'ai', 'score_campaigns.py');
