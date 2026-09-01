@@ -1,4 +1,5 @@
 secondary marketplace lifecycle 
-- verify off chain EIP 712 signature (token holder list tokens off chain using this signature)
+- seller list tokens using the approve function of equitytoken contract which takes the params (marketplace contract address , amount(tokens))
+- verify off chain EIP 712 signature (token holder list tokens off chain using this signature), seller also sets an expiry for the listing
 - verify KYC for both token holder and buyer (didit verification status)
 - swap token using the smart contract address

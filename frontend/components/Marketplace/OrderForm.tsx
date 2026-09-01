@@ -41,7 +41,6 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
   const { walletAddress, connectWallet } = useWallet();
   const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
   const { user } = useAuth();
-
   const [price, setPrice] = useState('0.001');
   const [quantity, setQuantity] = useState('1');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -192,4 +191,3 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
     </div>
   );
 }
-

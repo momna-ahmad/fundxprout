@@ -1,3 +1,5 @@
+// Blockchain/test/equityFundsTransfer.ts
+// This test suite verifies the full lifecycle of a campaign in the FundXProut platform, focusing on the escrow mechanism for token transfers. It ensures that tokens are correctly locked in escrow during the campaign, and that they can be claimed by investors only after the campaign is successfully funded. The tests are written using Mocha and Chai, and they run in a Hardhat environment with Ethers.js for contract interaction.
 import { expect } from "chai";
 import { ethers, network } from "hardhat";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";

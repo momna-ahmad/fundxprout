@@ -7,6 +7,9 @@ const campaignRoutes = require('./routes/campaignRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+const http = require('http');
+const { initMarketplaceSocket } = require('./sockets/marketplaceSocket');
+
 // Middleware
 app.use(cors()); // Allows Frontend to connect
 
@@ -30,6 +33,11 @@ app.get('/', (req, res) => {
     res.send('FundXprout Backend is Live & Connected to IPFS/Supabase 🚀');
 });
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+
+// Initialize sockets after server creation
+initMarketplaceSocket(server);
+
+server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });

@@ -35,6 +35,7 @@ export default function InvestorCampaignsPage() {
 
   try {
     setClaimPending(campaignContractAddress);
+    console.log(investmentId);
     await window.ethereum.request({ method: "eth_requestAccounts" });
     const provider = new ethers.BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
@@ -201,16 +202,21 @@ export default function InvestorCampaignsPage() {
         if (inv.transaction_hash && !existing.transactions.includes(inv.transaction_hash)) {
           existing.transactions.push(inv.transaction_hash);
         }
-        // Keep latest investment id for logging references
-        existing.latestInvestmentId = inv.id;
+
+      // Track investment ID if not already present
+      if (inv.id && !existing.investmentIds.includes(inv.id)) {
+        existing.investmentIds.push(inv.id);
+      }
+
       } else {
         map.set(campaign.id, {
-          campaign,
-          userTotalInvested: invAmount,
-          transactions: inv.transaction_hash ? [inv.transaction_hash] : [],
-          latestInvestmentId: inv.id,
-          created_at: inv.created_at || campaign.created_at,
-        });
+        campaign,
+        userTotalInvested: invAmount,
+        investmentIds: inv.id ? [inv.id] : [],
+        transactions: inv.transaction_hash ? [inv.transaction_hash] : [],
+        status: inv.status,
+        latest_created_at: inv.created_at || campaign.created_at,
+      });
       }
     }
 
@@ -489,7 +495,7 @@ export default function InvestorCampaignsPage() {
                     </div>
                   </div>
 
-                  <div className="px-5 pb-3">
+                  {(inv.status === "completed" || inv.status ==="ongoing") && (<div className="px-5 pb-3">
                     {isGoalReached && (
                       <button
                         onClick={() =>
@@ -497,7 +503,7 @@ export default function InvestorCampaignsPage() {
                             campaign.contract_address,
                             campaign.token_contract_address,
                             campaign.token_symbol || "EQT",
-                            inv.id,
+                            inv.investmentIds,
                             campaign.id
                           )
                         }
@@ -507,7 +513,7 @@ export default function InvestorCampaignsPage() {
                         {claimPending === campaign.contract_address ? "Claiming Tokens..." : "Claim Equity Tokens"}
                       </button>
                     )}
-                  </div>
+                  </div> )}
 
                   {!isGoalReached && (
                       <button
