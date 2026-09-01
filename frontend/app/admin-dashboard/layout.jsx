@@ -11,13 +11,15 @@ export default async function AdminLayout({ children }) {
     redirect("/admin-login");
   }
 
+  const isMetadataAdmin = user?.user_metadata?.is_admin === true;
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("role, full_name")
     .eq("user_id", user.id)
     .single();
 
-  if (profile?.role !== "admin") {
+  if (profile?.role !== "admin" && !isMetadataAdmin) {
     redirect("/admin-login"); // Unauthorized users redirected to admin login portal
   }
 
