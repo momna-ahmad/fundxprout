@@ -78,36 +78,47 @@ async function createOrder(req, res) {
 
 async function getOrderBook(req, res) {
   try {
-    const campaignId = req.params.campaignId;
+    const rawId = req.params.campaignId;
+    const numId = Number(rawId);
+    const campaignMatchValues = [rawId, String(rawId)];
+    if (!isNaN(numId)) campaignMatchValues.push(numId);
 
     // 1. Fetch sell and buy orders from token_orders
     const { data: dbOrders } = await supabaseAdmin
       .from('token_orders')
-      .select('id, side, price, quantity, quantity_remaining, created_at')
-      .eq('campaign_id', campaignId)
+      .select('id, side, price, quantity, quantity_remaining, created_at, campaign_id')
+      .in('campaign_id', campaignMatchValues)
       .in('status', ['open', 'partially_filled'])
       .gt('quantity_remaining', 0);
 
     // 2. Fetch soft bids from token_bids
-    const { data: dbBids } = await supabaseAdmin
+    const { data: allBids } = await supabaseAdmin
       .from('token_bids')
-      .select('id, bid_price_per_token, quantity, created_at, status')
-      .eq('campaign_id', campaignId)
+      .select('id, bid_price_per_token, quantity, created_at, status, listing_id, campaign_id')
       .in('status', ['pending', 'accepted']);
 
-    const asks = (dbOrders ?? []).filter(o => o.side === 'sell').map(o => ({
+    const listingIds = (dbOrders ?? []).map((o) => String(o.id));
+
+    // Filter bids matching this campaign ID or matching any open sell listing of this campaign
+    const campaignBids = (allBids ?? []).filter((b) => {
+      const matchCamp = campaignMatchValues.some((val) => String(b.campaign_id) === String(val));
+      const matchList = listingIds.includes(String(b.listing_id));
+      return matchCamp || matchList;
+    });
+
+    const asks = (dbOrders ?? []).filter((o) => o.side === 'sell').map((o) => ({
       price: Number(o.price),
       quantity: Number(o.quantity_remaining),
       total: Number(o.price) * Number(o.quantity_remaining),
     }));
 
-    const buyOrders = (dbOrders ?? []).filter(o => o.side === 'buy').map(o => ({
+    const buyOrders = (dbOrders ?? []).filter((o) => o.side === 'buy').map((o) => ({
       price: Number(o.price),
       quantity: Number(o.quantity_remaining),
       total: Number(o.price) * Number(o.quantity_remaining),
     }));
 
-    const auctionBids = (dbBids ?? []).map(b => ({
+    const auctionBids = campaignBids.map((b) => ({
       price: Number(b.bid_price_per_token),
       quantity: Number(b.quantity),
       total: Number(b.bid_price_per_token) * Number(b.quantity),
