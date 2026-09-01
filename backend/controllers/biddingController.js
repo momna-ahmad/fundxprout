@@ -384,8 +384,8 @@ async function confirmBid(req, res) {
 
     if (bidErr || !bid) return res.status(404).json({ error: 'Bid not found' });
     if (bid.buyer_id !== buyerId) return res.status(403).json({ error: 'Not your bid' });
-    if (bid.status !== 'accepted') {
-      return res.status(400).json({ error: 'Only accepted bids can be confirmed' });
+    if (!['accepted', 'confirmed'].includes(bid.status)) {
+      return res.status(400).json({ error: 'Only accepted or confirmed bids can be processed' });
     }
     if (bid.accept_deadline && new Date(bid.accept_deadline) < new Date()) {
       // Expire the bid automatically
@@ -448,8 +448,8 @@ async function completeBid(req, res) {
 
     if (bidErr || !bid) return res.status(404).json({ error: 'Bid not found' });
     if (bid.buyer_id !== buyerId) return res.status(403).json({ error: 'Not your bid' });
-    if (bid.status !== 'confirmed') {
-      return res.status(400).json({ error: 'Only confirmed bids can be marked as completed' });
+    if (!['accepted', 'confirmed'].includes(bid.status)) {
+      return res.status(400).json({ error: 'Only accepted or confirmed bids can be marked as completed' });
     }
 
     // Mark bid as completed

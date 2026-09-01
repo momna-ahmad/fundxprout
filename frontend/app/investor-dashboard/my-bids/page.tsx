@@ -257,7 +257,7 @@ export default function MyBidsPage() {
               <div className="flex flex-col gap-3">
                 {activeBids.map((bid) => {
                   const campaign = bid.token_orders?.campaigns;
-                  const isAccepted = bid.status === 'accepted';
+                  const isAccepted = ['accepted', 'confirmed'].includes(bid.status);
                   const isProcessing = processingId === bid.id;
                   const step = progressMsg[bid.id];
 
@@ -316,7 +316,7 @@ export default function MyBidsPage() {
                             style={{ background: 'linear-gradient(135deg, var(--chart-3), var(--ring))' }}
                           >
                             {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <ChevronRight size={14} />}
-                            {isProcessing ? (step || 'Processing…') : 'Confirm Purchase'}
+                            {isProcessing ? (step || 'Processing…') : (bid.status === 'confirmed' ? 'Complete Purchase' : 'Confirm Purchase')}
                           </button>
                         )}
 
