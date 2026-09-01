@@ -234,22 +234,45 @@ export async function logTransaction({
 
 export async function recordClaimedToken({
   campaignId,
-  investmentId,
+  investmentIds,
   userId,
   amount,
   tokenSymbol,
 }: {
   campaignId: number | string;
-  investmentId?: string;
+  investmentIds: string[] | string;
   userId: string;
   amount: number;
   tokenSymbol: string;
 }) {
   const supabase = createClient();
 
+  //update status in investments table 
+
+  // 1. Normalize input to ensure it is always an array of IDs
+  const idsArray = Array.isArray(investmentIds)
+    ? investmentIds
+    : [investmentIds].filter(Boolean);
+
+  if (idsArray.length === 0) {
+    console.error("No valid investment IDs provided.");
+    return { success: false, error: "Missing investment IDs" };
+  }
+
+  // 2. Batch update status for all matching investment records
+  const { data: updatedInvestments, error: investmentError } = await supabase
+    .from("investments")
+    .update({ status: "claimed" })
+    .in("id", idsArray)
+    .select();
+
+  if (investmentError) {
+    console.error("Error updating investment status:", investmentError);
+  }
+
   const { data, error } = await supabase.from("tokens").insert({
     campaign_id: campaignId,
-    investment_id: investmentId,
+    //investment_id: investmentId,
     user_id: userId,
     amount: amount,
     token_symbol: tokenSymbol,

@@ -1,6 +1,8 @@
+// ── frontend/app/investor-dashboard/tokens/page.tsx ───────────────────────────────────────────────
 'use client';
 import { useEffect, useState } from 'react';
-import { ExternalLink, Send, Lock, Fuel, Wifi, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import Link from 'next/link';
+import { ExternalLink, Send, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import { formatCurrency, formatNumber, formatPercent, truncateAddress } from '@/lib/formatters';
 import { getUserTokenHoldings } from '@/utils/supabase/getPortfolio';
@@ -148,9 +150,12 @@ export default function TokensPage() {
                 <button className="flex-1 justify-center bg-[#6f42c1] hover:bg-[#5a3599] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all inline-flex items-center gap-2">
                   <Send size={14} /> Transfer
                 </button>
-                <button className="flex-1 justify-center border border-border text-foreground text-xs font-medium px-4 py-2.5 rounded-xl hover:bg-muted transition-all inline-flex items-center gap-2">
-                  <Lock size={14} /> Stake
-                </button>
+                <Link
+                  href={`/investor-dashboard/marketplace/${token.campaignId}?side=sell`}
+                  className="flex-1 justify-center bg-[#6f42c1] hover:bg-[#5a3599] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all inline-flex items-center gap-2"
+                >
+                  <ArrowUpRight size={14} /> Sell
+                </Link>
                 <button className="text-muted-foreground hover:text-foreground px-3 py-2.5 rounded-xl border border-border hover:bg-muted transition-all">
                   <ExternalLink size={14} />
                 </button>
