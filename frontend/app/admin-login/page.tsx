@@ -122,16 +122,13 @@ export default function AdminLoginPage() {
               <input
                 type="password"
                 required
-                placeholder="Secret key (e.g. FXP_ADMIN_2026_SECRET)"
+                placeholder="Enter secret passcode"
                 value={secretKey}
                 onChange={(e) => setSecretKey(e.target.value)}
                 className="w-full rounded-2xl border border-[#a78bfa]/40 bg-[#0b0f19] pl-11 pr-4 py-3 text-sm outline-none focus:border-[#a78bfa] focus:ring-2 focus:ring-[#a78bfa]/20 transition"
                 style={{ color: '#ffffff', backgroundColor: '#0b0f19' }}
               />
             </div>
-            <p className="mt-1.5 text-[11px]" style={{ color: '#94a3b8' }}>
-              Default secret key: <code className="font-mono px-1.5 py-0.5 rounded bg-white/10" style={{ color: '#c084fc' }}>FXP_ADMIN_2026_SECRET</code>
-            </p>
           </div>
 
           {/* Submit button */}
