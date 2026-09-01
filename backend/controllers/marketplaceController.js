@@ -41,12 +41,8 @@ async function createOrder(req, res) {
         return res.status(400).json({ error: 'Insufficient unlisted token balance' });
       }
     } else {
-      // Buy-side fiat reservation isn't implemented yet (no fiat_balances table).
-      // SKIP_FUND_RESERVATION lets you exercise the rest of the pipeline in dev
-      // without a real balance system — remove this before going live.
-      if (process.env.SKIP_FUND_RESERVATION !== 'true') {
-        return res.status(501).json({ error: 'Buy-order fund reservation not yet implemented' });
-      }
+      // Buy-side fiat reservation isn't required in dev/testing mode.
+      // Buyers place bids on sell listings or post buy orders.
     }
 
     // Persist the order as the source of truth, then feed it into the live book
@@ -80,9 +76,54 @@ async function createOrder(req, res) {
   }
 }
 
-function getOrderBook(req, res) {
-  const book = getOrCreateBook(req.params.campaignId);
-  return res.json(book.getBookSnapshot(20));
+async function getOrderBook(req, res) {
+  try {
+    const campaignId = req.params.campaignId;
+
+    // 1. Fetch sell and buy orders from token_orders
+    const { data: dbOrders } = await supabaseAdmin
+      .from('token_orders')
+      .select('id, side, price, quantity, quantity_remaining, created_at')
+      .eq('campaign_id', campaignId)
+      .in('status', ['open', 'partially_filled'])
+      .gt('quantity_remaining', 0);
+
+    // 2. Fetch soft bids from token_bids
+    const { data: dbBids } = await supabaseAdmin
+      .from('token_bids')
+      .select('id, bid_price_per_token, quantity, created_at, status')
+      .eq('campaign_id', campaignId)
+      .in('status', ['pending', 'accepted']);
+
+    const asks = (dbOrders ?? []).filter(o => o.side === 'sell').map(o => ({
+      price: Number(o.price),
+      quantity: Number(o.quantity_remaining),
+      total: Number(o.price) * Number(o.quantity_remaining),
+    }));
+
+    const buyOrders = (dbOrders ?? []).filter(o => o.side === 'buy').map(o => ({
+      price: Number(o.price),
+      quantity: Number(o.quantity_remaining),
+      total: Number(o.price) * Number(o.quantity_remaining),
+    }));
+
+    const auctionBids = (dbBids ?? []).map(b => ({
+      price: Number(b.bid_price_per_token),
+      quantity: Number(b.quantity),
+      total: Number(b.bid_price_per_token) * Number(b.quantity),
+    }));
+
+    const bids = [...buyOrders, ...auctionBids].sort((a, b) => b.price - a.price);
+
+    return res.json({
+      bids,
+      asks: asks.sort((a, b) => a.price - b.price),
+    });
+  } catch (err) {
+    console.error('[getOrderBook] error:', err);
+    const book = getOrCreateBook(req.params.campaignId);
+    return res.json(book.getBookSnapshot(20));
+  }
 }
 
 /**

@@ -4,13 +4,13 @@
 // Seller views their own sell listings and the bids placed on each one.
 // Sellers can accept a bid from this page.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { getListingBids, acceptBid, type TokenBid } from '@/lib/bidding-api';
 import { toast } from 'sonner';
 import {
   Loader2, ChevronDown, ChevronUp, CheckCircle2, Trophy,
-  Clock, AlertCircle, RotateCcw,
+  Clock, AlertCircle, RotateCcw, ShieldCheck, ArrowUpDown, Filter,
 } from 'lucide-react';
 
 type Listing = {
@@ -53,6 +53,10 @@ function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
   const [bidsError, setBidsError] = useState<string | null>(null);
   const [accepting, setAccepting] = useState<string | null>(null);
 
+  // Filter & Sort state for bids
+  const [sortBy, setSortBy] = useState<'highest' | 'lowest' | 'newest' | 'oldest'>('highest');
+  const [filterBy, setFilterBy] = useState<'all' | 'pending' | 'accepted' | 'kyc'>('all');
+
   async function loadBids() {
     setBidsLoading(true);
     setBidsError(null);
@@ -86,7 +90,27 @@ function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
   }
 
   const pendingBids = bids.filter((b) => b.status === 'pending');
-  const activeBids = bids.filter((b) => ['pending', 'accepted', 'confirmed'].includes(b.status));
+
+  const filteredAndSortedBids = useMemo(() => {
+    let list = [...bids];
+    if (filterBy === 'pending') {
+      list = list.filter((b) => b.status === 'pending');
+    } else if (filterBy === 'accepted') {
+      list = list.filter((b) => ['accepted', 'confirmed', 'completed'].includes(b.status));
+    } else if (filterBy === 'kyc') {
+      list = list.filter((b) => b.profiles?.identity_verified);
+    }
+
+    list.sort((a, b) => {
+      if (sortBy === 'highest') return Number(b.bid_price_per_token) - Number(a.bid_price_per_token);
+      if (sortBy === 'lowest') return Number(a.bid_price_per_token) - Number(b.bid_price_per_token);
+      if (sortBy === 'newest') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      if (sortBy === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return 0;
+    });
+
+    return list;
+  }, [bids, filterBy, sortBy]);
 
   return (
     <div className="rounded-3xl border border-border bg-card overflow-hidden">
@@ -139,14 +163,49 @@ function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
       {/* Expanded bid list */}
       {expanded && (
         <div className="border-t border-border bg-background/40 px-5 py-4">
+          {/* Toolbar: Filter & Sort */}
+          {bids.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
+              <div className="flex items-center gap-2">
+                <Filter size={13} className="text-muted-foreground" />
+                <span className="text-xs font-semibold text-muted-foreground">Filter:</span>
+                <select
+                  value={filterBy}
+                  onChange={(e) => setFilterBy(e.target.value as any)}
+                  className="rounded-xl border border-border bg-card px-2.5 py-1 text-xs font-medium text-foreground outline-none transition focus:border-ring"
+                >
+                  <option value="all">All Bids ({bids.length})</option>
+                  <option value="pending">Pending Only ({bids.filter(b => b.status === 'pending').length})</option>
+                  <option value="accepted">Accepted Only ({bids.filter(b => ['accepted', 'confirmed', 'completed'].includes(b.status)).length})</option>
+                  <option value="kyc">KYC Verified Only ({bids.filter(b => b.profiles?.identity_verified).length})</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <ArrowUpDown size={13} className="text-muted-foreground" />
+                <span className="text-xs font-semibold text-muted-foreground">Sort:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="rounded-xl border border-border bg-card px-2.5 py-1 text-xs font-medium text-foreground outline-none transition focus:border-ring"
+                >
+                  <option value="highest">Highest Offer First</option>
+                  <option value="lowest">Lowest Offer First</option>
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                </select>
+              </div>
+            </div>
+          )}
+
           {bidsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 size={14} className="animate-spin" /> Loading bids…
             </div>
           ) : bidsError ? (
             <p className="text-sm text-destructive">{bidsError}</p>
-          ) : activeBids.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No bids yet on this listing.</p>
+          ) : filteredAndSortedBids.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No bids match your selected filter.</p>
           ) : (
             <div className="flex flex-col gap-2">
               {/* Ranked header */}
@@ -158,7 +217,7 @@ function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
                 <span>Action</span>
               </div>
 
-              {activeBids.map((bid, idx) => {
+              {filteredAndSortedBids.map((bid, idx) => {
                 const isAccepted = ['accepted', 'confirmed', 'completed'].includes(bid.status);
                 const isAccepting = accepting === bid.id;
                 const buyer = bid.profiles;
@@ -181,16 +240,28 @@ function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
                       <p className="text-sm font-semibold text-foreground">
                         {buyer?.display_name || buyer?.full_name || `${bid.buyer_wallet.slice(0, 6)}…${bid.buyer_wallet.slice(-4)}`}
                       </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {bid.status === 'pending'
-                          ? `Expires in ${timeLeft(bid.bid_expires_at) || 'soon'}`
-                          : bid.status === 'accepted'
-                          ? `Buyer has ${timeLeft(bid.accept_deadline) || '—'} to confirm`
-                          : bid.status === 'confirmed'
-                          ? 'Buyer is completing the on-chain tx…'
-                          : bid.status}
-                        {' '}· KYC: {buyer?.identity_verified ? '✅' : '⚠️'}
-                      </p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                        <span>
+                          {bid.status === 'pending'
+                            ? `Expires in ${timeLeft(bid.bid_expires_at) || 'soon'}`
+                            : bid.status === 'accepted'
+                            ? `Buyer has ${timeLeft(bid.accept_deadline) || '—'} to confirm`
+                            : bid.status === 'confirmed'
+                            ? 'Buyer is completing the on-chain tx…'
+                            : bid.status}
+                        </span>
+                        <span>·</span>
+                        {/* Standardized Lucide Icon for KYC Verification */}
+                        {buyer?.identity_verified ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-500 border border-emerald-500/20">
+                            <ShieldCheck size={10} /> KYC Verified
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-500 border border-amber-500/20">
+                            <AlertCircle size={10} /> KYC Unverified
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Quantity */}
@@ -224,13 +295,11 @@ function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
                 );
               })}
 
-
               {!listing.seller_signature && (
                 <div className="mt-2 flex items-start gap-2 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-500">
                   <AlertCircle size={13} className="mt-0.5 flex-shrink-0" />
                   <span>
-                    Your listing is not yet signed. You must sign it with MetaMask (via the Marketplace or Order Form) before you can accept bids.
-                    Once signed, the buyer can complete the on-chain <code>fillOrder()</code> transaction.
+                    You must sign your listing before you can accept bids. Check your wallet prompt or re-save your listing to attach an off-chain signature.
                   </span>
                 </div>
               )}
@@ -242,23 +311,23 @@ function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
   );
 }
 
-// ── Main Page ────────────────────────────────────────────────────
+// ── Main Page Component ──────────────────────────────────────────
 export default function MyListingsPage() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string>('');
+  const [userId, setUserId] = useState<string | null>(null);
 
   const loadListings = useCallback(async () => {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    setUserId(user.id);
-
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
-      const { data, error: dbErr } = await supabase
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      setUserId(user.id);
+
+      const { data, error: fetchErr } = await supabase
         .from('token_orders')
         .select(`
           id, campaign_id, price, quantity, quantity_remaining, quantity_filled,
@@ -269,10 +338,21 @@ export default function MyListingsPage() {
         .eq('side', 'sell')
         .order('created_at', { ascending: false });
 
-      if (dbErr) throw dbErr;
-      setListings((data as any) || []);
+      if (fetchErr) throw fetchErr;
+
+      const normalized: Listing[] = (data || []).map((row: any) => ({
+        ...row,
+        price: Number(row.price),
+        quantity: Number(row.quantity),
+        quantity_remaining: Number(row.quantity_remaining),
+        quantity_filled: Number(row.quantity_filled),
+        campaign: Array.isArray(row.campaigns) ? row.campaigns[0] : row.campaigns,
+      }));
+
+      setListings(normalized);
     } catch (err: any) {
       setError(err.message || 'Failed to load your listings');
+      toast.error(err.message || 'Failed to load your listings');
     } finally {
       setLoading(false);
     }
@@ -286,7 +366,7 @@ export default function MyListingsPage() {
       <div className="space-y-3">
         <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground font-semibold">Secondary Marketplace</div>
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-foreground">My Listings & Bids</h1>
+          <h1 className="text-3xl font-bold text-foreground">My Listings &amp; Bids</h1>
           <button
             onClick={loadListings}
             className="flex items-center gap-1.5 rounded-2xl border border-border px-3 py-2 text-sm text-muted-foreground transition hover:border-ring hover:text-foreground"
@@ -304,17 +384,19 @@ export default function MyListingsPage() {
           <Loader2 size={24} className="animate-spin text-muted-foreground" />
         </div>
       ) : error ? (
-        <div className="rounded-3xl border border-destructive/30 bg-destructive/10 p-6 text-destructive">{error}</div>
+        <div className="flex items-center gap-3 rounded-3xl border border-destructive/30 bg-destructive/10 p-6 text-destructive">
+          <AlertCircle size={18} className="flex-shrink-0" />
+          <span>{error}</span>
+        </div>
       ) : listings.length === 0 ? (
         <div className="rounded-3xl border border-border bg-card p-12 text-center">
-          <Clock size={36} className="mx-auto mb-3 text-muted-foreground" />
           <p className="font-semibold text-foreground">No sell listings yet</p>
-          <p className="mt-1 text-sm text-muted-foreground">Create a sell order in the Marketplace to start receiving bids.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Go to Marketplace or your Tokens page to list tokens for sale.</p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
           {listings.map((listing) => (
-            <ListingRow key={listing.id} listing={listing} userId={userId} />
+            <ListingRow key={listing.id} listing={listing} userId={userId || ''} />
           ))}
         </div>
       )}
