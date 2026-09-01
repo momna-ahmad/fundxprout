@@ -212,6 +212,21 @@ async function acceptBid(req, res) {
 
     if (updateErr) throw updateErr;
 
+    // ── Edge case: auto-cancel all OTHER pending bids on this listing ──
+    // This prevents other buyers from waiting on a listing that's already
+    // been committed to someone else, and avoids settlement conflicts.
+    const { error: cancelErr } = await supabaseAdmin
+      .from('token_bids')
+      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .eq('listing_id', bid.listing_id)
+      .eq('status', 'pending')
+      .neq('id', bidId); // Don't cancel the bid we just accepted
+
+    if (cancelErr) {
+      // Non-fatal: log but don't fail the request
+      console.warn('[acceptBid] Could not auto-cancel competing bids:', cancelErr.message);
+    }
+
     return res.json({
       bid: updatedBid,
       accept_deadline: acceptDeadline.toISOString(),

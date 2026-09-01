@@ -30,6 +30,20 @@ export default async function AdminDashboardPage() {
           </h1>
           <p className="text-gray-400">Manage manual verifications for users and businesses.</p>
         </div>
+        <div className="flex gap-3">
+          <Link
+            href="/admin-dashboard/campaigns"
+            className="px-4 py-2 rounded-xl bg-[#a78bfa]/10 hover:bg-[#a78bfa]/20 text-[#a78bfa] border border-[#a78bfa]/20 text-sm font-semibold transition flex items-center gap-2"
+          >
+            <FileText className="h-4 w-4" /> Campaigns
+          </Link>
+          <Link
+            href="/admin-dashboard/marketplace"
+            className="px-4 py-2 rounded-xl bg-[#a78bfa]/10 hover:bg-[#a78bfa]/20 text-[#a78bfa] border border-[#a78bfa]/20 text-sm font-semibold transition flex items-center gap-2"
+          >
+            <CheckCircle className="h-4 w-4" /> Marketplace
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

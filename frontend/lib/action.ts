@@ -609,3 +609,63 @@ export async function adminVerifyKYB(businessId: string) {
   revalidatePath("/admin-dashboard");
   return { success: true };
 }
+
+// ── Admin Campaign Actions ────────────────────────────────────────────────────
+
+export async function adminApproveCampaign(campaignId: number) {
+  const supabase = await createClient();
+  const adminUser = await checkAdmin(supabase);
+  if (!adminUser) return { error: "Unauthorized: Admins only" };
+
+  const { error } = await supabase
+    .from("campaigns")
+    .update({ status: "approved" })
+    .eq("id", campaignId);
+
+  if (error) return { error: error.message };
+
+  await logAdminAction(supabase, adminUser.id, "approve_campaign", "campaign", String(campaignId), "Admin approved campaign");
+  revalidatePath("/admin-dashboard/campaigns");
+  return { success: true };
+}
+
+export async function adminRejectCampaign(campaignId: number, reason: string) {
+  const supabase = await createClient();
+  const adminUser = await checkAdmin(supabase);
+  if (!adminUser) return { error: "Unauthorized: Admins only" };
+
+  const { error } = await supabase
+    .from("campaigns")
+    .update({ status: "rejected" })
+    .eq("id", campaignId);
+
+  if (error) return { error: error.message };
+
+  await logAdminAction(supabase, adminUser.id, "reject_campaign", "campaign", String(campaignId), reason || "Admin rejected campaign");
+  revalidatePath("/admin-dashboard/campaigns");
+  return { success: true };
+}
+
+export async function adminCancelTradeOrder(orderId: string) {
+  const supabase = await createClient();
+  const adminUser = await checkAdmin(supabase);
+  if (!adminUser) return { error: "Unauthorized: Admins only" };
+
+  const { error } = await supabase
+    .from("token_orders")
+    .update({ status: "cancelled" })
+    .eq("id", orderId);
+
+  if (error) return { error: error.message };
+
+  // Also cancel all pending bids on this order
+  await supabase
+    .from("token_bids")
+    .update({ status: "cancelled", updated_at: new Date().toISOString() })
+    .eq("listing_id", orderId)
+    .eq("status", "pending");
+
+  await logAdminAction(supabase, adminUser.id, "cancel_trade_order", "token_order", orderId, "Admin cancelled trade order");
+  revalidatePath("/admin-dashboard/marketplace");
+  return { success: true };
+}

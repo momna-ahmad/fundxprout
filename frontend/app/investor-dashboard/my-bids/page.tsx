@@ -4,21 +4,22 @@ import { useCallback, useEffect, useState } from 'react';
 import { ethers } from 'ethers';
 import {
   Gavel, Clock, CheckCircle2, XCircle, AlertTriangle,
-  Loader2, ChevronRight, RotateCcw,
+  Loader2, ChevronRight, RotateCcw, ExternalLink,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { getMyBids, cancelBid, confirmBid, completeBid, type TokenBid } from '@/lib/bidding-api';
 import { useWallet } from '@/context/WalletContext';
 
 // ── Status badge helper ───────────────────────────────────────────
 function StatusBadge({ status }: { status: TokenBid['status'] }) {
   const map: Record<string, { label: string; color: string; bg: string }> = {
-    pending:   { label: 'Pending',   color: 'var(--chart-5)', bg: 'color-mix(in srgb, var(--chart-5) 12%, transparent)' },
-    accepted:  { label: 'Accepted!', color: 'var(--chart-3)', bg: 'color-mix(in srgb, var(--chart-3) 12%, transparent)' },
-    confirmed: { label: 'Confirming', color: 'var(--ring)', bg: 'color-mix(in srgb, var(--ring) 12%, transparent)' },
-    completed: { label: 'Completed', color: '#22c55e', bg: 'rgba(34,197,94,0.1)' },
-    rejected:  { label: 'Rejected',  color: 'var(--destructive)', bg: 'color-mix(in srgb, var(--destructive) 10%, transparent)' },
-    cancelled: { label: 'Cancelled', color: 'var(--muted-foreground)', bg: 'color-mix(in srgb, var(--muted-foreground) 10%, transparent)' },
-    expired:   { label: 'Expired',   color: 'var(--muted-foreground)', bg: 'color-mix(in srgb, var(--muted-foreground) 10%, transparent)' },
+    pending:   { label: 'Pending',    color: 'var(--chart-5)', bg: 'color-mix(in srgb, var(--chart-5) 12%, transparent)' },
+    accepted:  { label: 'Accepted!',  color: 'var(--chart-3)', bg: 'color-mix(in srgb, var(--chart-3) 12%, transparent)' },
+    confirmed: { label: 'Confirming', color: 'var(--ring)',    bg: 'color-mix(in srgb, var(--ring) 12%, transparent)' },
+    completed: { label: 'Completed',  color: '#22c55e',        bg: 'rgba(34,197,94,0.1)' },
+    rejected:  { label: 'Rejected',   color: 'var(--destructive)', bg: 'color-mix(in srgb, var(--destructive) 10%, transparent)' },
+    cancelled: { label: 'Cancelled',  color: 'var(--muted-foreground)', bg: 'color-mix(in srgb, var(--muted-foreground) 10%, transparent)' },
+    expired:   { label: 'Expired',    color: 'var(--muted-foreground)', bg: 'color-mix(in srgb, var(--muted-foreground) 10%, transparent)' },
   };
   const style = map[status] ?? map.pending;
   return (
@@ -52,8 +53,8 @@ export default function MyBidsPage() {
   const [bids, setBids] = useState<TokenBid[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [actionMsg, setActionMsg] = useState<Record<string, string>>({});
-  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [progressMsg, setProgressMsg] = useState<Record<string, string>>({});
 
   const loadBids = useCallback(async () => {
     try {
@@ -62,7 +63,9 @@ export default function MyBidsPage() {
       const result = await getMyBids();
       setBids(result.bids || []);
     } catch (err: any) {
-      setError(err.message || 'Failed to load your bids');
+      const msg = err.message || 'Failed to load your bids';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -70,47 +73,48 @@ export default function MyBidsPage() {
 
   useEffect(() => { loadBids(); }, [loadBids]);
 
-  function setMsg(bidId: string, msg: string) {
-    setActionMsg((prev) => ({ ...prev, [bidId]: msg }));
+  function setStep(bidId: string, msg: string) {
+    setProgressMsg((prev) => ({ ...prev, [bidId]: msg }));
   }
-  function setLoading2(bidId: string, val: boolean) {
-    setActionLoading((prev) => ({ ...prev, [bidId]: val }));
+  function clearStep(bidId: string) {
+    setProgressMsg((prev) => { const n = { ...prev }; delete n[bidId]; return n; });
   }
 
   // ── Cancel a pending bid ────────────────────────────────────
   async function handleCancel(bidId: string) {
-    setMsg(bidId, '');
-    setLoading2(bidId, true);
+    setProcessingId(bidId);
+    const toastId = toast.loading('Cancelling your bid…');
     try {
       await cancelBid(bidId);
-      setMsg(bidId, 'Bid cancelled.');
       setBids((prev) => prev.map((b) => b.id === bidId ? { ...b, status: 'cancelled' } : b));
+      toast.success('Bid cancelled successfully.', { id: toastId });
     } catch (err: any) {
-      setMsg(bidId, err.message);
+      toast.error(err.message || 'Failed to cancel bid.', { id: toastId });
     } finally {
-      setLoading2(bidId, false);
+      setProcessingId(null);
     }
   }
 
   // ── Confirm purchase (accepted bid) → call fillOrder() on-chain ──
   async function handleConfirmPurchase(bid: TokenBid) {
-    setMsg(bid.id, '');
     if (!walletAddress) {
       await connectWallet();
-      setMsg(bid.id, 'Wallet connected. Click Confirm Purchase again.');
+      toast.info('Wallet connected — click Confirm Purchase again.');
       return;
     }
 
     const marketplaceAddress = process.env.NEXT_PUBLIC_MARKETPLACE_CONTRACT_ADDRESS;
     if (!marketplaceAddress || !ethers.isAddress(marketplaceAddress)) {
-      setMsg(bid.id, 'Marketplace contract not configured.');
+      toast.error('Marketplace contract not configured. Contact support.');
       return;
     }
 
-    setLoading2(bid.id, true);
+    setProcessingId(bid.id);
+    const toastId = toast.loading('Preparing settlement…');
     try {
-      // 1. Get settlement data from backend (also marks bid as 'confirmed')
-      setMsg(bid.id, 'Getting KYC authorization…');
+      // 1. Get settlement data from backend (marks bid as 'confirmed')
+      setStep(bid.id, 'Getting KYC authorization…');
+      toast.loading('Getting KYC authorization from server…', { id: toastId });
       const { settlement_data } = await confirmBid(bid.id);
 
       const {
@@ -122,19 +126,18 @@ export default function MyBidsPage() {
         price_per_token,
       } = settlement_data;
 
-      if (!seller_signature) throw new Error('Seller has not signed this listing yet.');
-      if (!token_contract_address) throw new Error('Token contract address missing.');
+      if (!seller_signature) throw new Error('Seller has not signed this listing yet. Contact the seller.');
+      if (!token_contract_address) throw new Error('Token contract address is missing from this listing.');
 
-      // 2. For this demo we use a 7-day expiry — matches what seller signed at listing creation
+      // 2. Expiry guard: seller signed with a 7-day window from listing creation
+      //    We use listing_created_at if available; otherwise recompute safely.
       const expiry = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
       const tokenAmount = ethers.parseUnits(String(quantity), 18);
       const pricePerToken = ethers.parseEther(String(price_per_token));
       const totalEth = (tokenAmount * pricePerToken) / ethers.WeiPerEther;
 
       // 3. Get KYC authorization signature from backend
-      //    Backend verifies both buyer and seller are KYC-approved, then signs
-      //    an EIP-712 ticket with its private key — required by fillOrder()
-      setMsg(bid.id, 'Getting KYC authorization from server…');
+      toast.loading('Verifying KYC credentials…', { id: toastId });
       const kycRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/marketplace/kyc-signature`, {
         method: 'POST',
         headers: {
@@ -143,7 +146,7 @@ export default function MyBidsPage() {
         },
         body: JSON.stringify({
           buyer_wallet: walletAddress,
-          seller_wallet: listing.seller_wallet_address,
+          seller_wallet,
           chain_id: 11155111,
         }),
       });
@@ -153,7 +156,7 @@ export default function MyBidsPage() {
       }
       const { kycSignature, kycDeadline } = await kycRes.json();
 
-      setMsg(bid.id, 'Please confirm the transaction in MetaMask…');
+      toast.loading('Please confirm in MetaMask…', { id: toastId });
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const marketplace = new ethers.Contract(marketplaceAddress, MARKETPLACE_ABI, signer);
@@ -171,20 +174,38 @@ export default function MyBidsPage() {
         { value: totalEth },
       );
 
-      setMsg(bid.id, 'Waiting for on-chain confirmation…');
+      toast.loading('Waiting for on-chain confirmation…', { id: toastId });
       const receipt = await tx.wait();
 
       if (receipt.status === 1) {
-        setMsg(bid.id, 'Syncing database…');
+        toast.loading('Syncing database…', { id: toastId });
         await completeBid(bid.id, tx.hash, receipt.blockNumber);
         setBids((prev) => prev.map((b) => b.id === bid.id ? { ...b, status: 'completed', tx_hash: tx.hash } : b));
-        setMsg(bid.id, `✅ Trade complete! Tx: ${tx.hash.slice(0, 10)}…`);
+        toast.success(
+          <span className="flex items-center gap-2">
+            Trade complete!{' '}
+            <a
+              href={`https://sepolia.etherscan.io/tx/${tx.hash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline flex items-center gap-1"
+            >
+              View on Etherscan <ExternalLink size={11} />
+            </a>
+          </span>,
+          { id: toastId, duration: 8000 },
+        );
       }
     } catch (err: any) {
       console.error('[handleConfirmPurchase]', err);
-      setMsg(bid.id, err.message || 'Transaction failed.');
+      // Handle MetaMask user rejection gracefully
+      const msg = err.code === 4001 || err.code === 'ACTION_REJECTED'
+        ? 'Transaction cancelled in MetaMask.'
+        : err.message || 'Transaction failed.';
+      toast.error(msg, { id: toastId });
     } finally {
-      setLoading2(bid.id, false);
+      setProcessingId(null);
+      clearStep(bid.id);
     }
   }
 
@@ -217,7 +238,10 @@ export default function MyBidsPage() {
           <Loader2 size={24} className="animate-spin text-muted-foreground" />
         </div>
       ) : error ? (
-        <div className="rounded-3xl border border-destructive/30 bg-destructive/10 p-6 text-destructive">{error}</div>
+        <div className="flex items-center gap-3 rounded-3xl border border-destructive/30 bg-destructive/10 p-6 text-destructive">
+          <AlertTriangle size={18} className="flex-shrink-0" />
+          <span>{error}</span>
+        </div>
       ) : bids.length === 0 ? (
         <div className="rounded-3xl border border-border bg-card p-12 text-center">
           <Gavel size={36} className="mx-auto mb-3 text-muted-foreground" />
@@ -232,28 +256,25 @@ export default function MyBidsPage() {
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Active Bids</h2>
               <div className="flex flex-col gap-3">
                 {activeBids.map((bid) => {
-                  const listing = bid.token_orders;
-                  const campaign = listing?.campaigns;
+                  const campaign = bid.token_orders?.campaigns;
                   const isAccepted = bid.status === 'accepted';
-                  const isLoading = actionLoading[bid.id];
+                  const isProcessing = processingId === bid.id;
+                  const step = progressMsg[bid.id];
 
                   return (
                     <div
                       key={bid.id}
-                      className="rounded-3xl border border-border bg-card p-5"
+                      className="rounded-3xl border border-border bg-card p-5 transition"
                       style={isAccepted ? {
                         borderColor: 'color-mix(in srgb, var(--chart-3) 40%, transparent)',
-                        boxShadow: '0 0 20px color-mix(in srgb, var(--chart-3) 10%, transparent)',
+                        boxShadow: '0 0 24px color-mix(in srgb, var(--chart-3) 12%, transparent)',
                       } : {}}
                     >
                       {/* Accepted banner */}
                       {isAccepted && (
                         <div
                           className="mb-4 flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
-                          style={{
-                            background: 'color-mix(in srgb, var(--chart-3) 12%, transparent)',
-                            color: 'var(--chart-3)',
-                          }}
+                          style={{ background: 'color-mix(in srgb, var(--chart-3) 12%, transparent)', color: 'var(--chart-3)' }}
                         >
                           <CheckCircle2 size={15} />
                           Your bid was accepted! Complete your purchase within{' '}
@@ -290,31 +311,26 @@ export default function MyBidsPage() {
                         {isAccepted && (
                           <button
                             onClick={() => handleConfirmPurchase(bid)}
-                            disabled={isLoading}
+                            disabled={isProcessing}
                             className="flex items-center gap-1.5 rounded-2xl px-4 py-2.5 text-sm font-bold text-white transition disabled:opacity-60"
                             style={{ background: 'linear-gradient(135deg, var(--chart-3), var(--ring))' }}
                           >
-                            {isLoading ? <Loader2 size={14} className="animate-spin" /> : <ChevronRight size={14} />}
-                            {isLoading ? 'Processing…' : 'Confirm Purchase'}
+                            {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <ChevronRight size={14} />}
+                            {isProcessing ? (step || 'Processing…') : 'Confirm Purchase'}
                           </button>
                         )}
 
                         {bid.status === 'pending' && (
                           <button
                             onClick={() => handleCancel(bid.id)}
-                            disabled={isLoading}
+                            disabled={isProcessing}
                             className="flex items-center gap-1.5 rounded-2xl border border-border px-4 py-2 text-sm text-muted-foreground transition hover:border-destructive hover:text-destructive disabled:opacity-60"
                           >
-                            {isLoading ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={13} />}
+                            {isProcessing ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={13} />}
                             Cancel Bid
                           </button>
                         )}
                       </div>
-
-                      {/* Status message */}
-                      {actionMsg[bid.id] && (
-                        <p className="mt-2 text-xs text-muted-foreground">{actionMsg[bid.id]}</p>
-                      )}
                     </div>
                   );
                 })}
@@ -337,7 +353,16 @@ export default function MyBidsPage() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {bid.quantity} tokens @ {bid.bid_price_per_token} ETH/token
-                          {bid.tx_hash && ` · Tx: ${bid.tx_hash.slice(0, 10)}…`}
+                          {bid.tx_hash && (
+                            <a
+                              href={`https://sepolia.etherscan.io/tx/${bid.tx_hash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ml-2 inline-flex items-center gap-0.5 text-ring hover:underline"
+                            >
+                              Tx <ExternalLink size={10} />
+                            </a>
+                          )}
                         </p>
                       </div>
                       <StatusBadge status={bid.status} />

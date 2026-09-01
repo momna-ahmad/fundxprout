@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { getListingBids, acceptBid, type TokenBid } from '@/lib/bidding-api';
+import { toast } from 'sonner';
 import {
   Loader2, ChevronDown, ChevronUp, CheckCircle2, Trophy,
   Clock, AlertCircle, RotateCcw,
@@ -51,7 +52,6 @@ function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
   const [bidsLoading, setBidsLoading] = useState(false);
   const [bidsError, setBidsError] = useState<string | null>(null);
   const [accepting, setAccepting] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
 
   async function loadBids() {
     setBidsLoading(true);
@@ -72,15 +72,14 @@ function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
   }
 
   async function handleAccept(bidId: string) {
-    setMsg(null);
     setAccepting(bidId);
+    const toastId = toast.loading('Accepting bid…');
     try {
       await acceptBid(bidId);
-      setMsg('Bid accepted! The buyer has 24 hours to confirm their purchase.');
-      // Refresh bids
+      toast.success('Bid accepted! The buyer has 24 hours to confirm their purchase.', { id: toastId, duration: 6000 });
       await loadBids();
     } catch (err: any) {
-      setMsg(err.message || 'Failed to accept bid.');
+      toast.error(err.message || 'Failed to accept bid.', { id: toastId });
     } finally {
       setAccepting(null);
     }
@@ -225,11 +224,6 @@ function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
                 );
               })}
 
-              {msg && (
-                <p className="mt-1 text-xs" style={{ color: msg.includes('accepted') ? 'var(--chart-3)' : 'var(--destructive)' }}>
-                  {msg}
-                </p>
-              )}
 
               {!listing.seller_signature && (
                 <div className="mt-2 flex items-start gap-2 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-500">

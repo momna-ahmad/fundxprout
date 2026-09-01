@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Gavel, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, Gavel, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useWallet } from '@/context/WalletContext';
 import { placeBid } from '@/lib/bidding-api';
 import type { MarketplaceSellOrder } from '@/lib/marketplace-api';
@@ -58,12 +59,15 @@ export default function PlaceBidModal({ order, onClose, onBidPlaced }: Props) {
         bid_expires_days: Number(expiryDays) || 7,
       });
       setSuccess(true);
+      toast.success('Bid placed! The seller will review and notify you if accepted.', { duration: 5000 });
       setTimeout(() => {
         onBidPlaced();
         onClose();
       }, 2000);
     } catch (err: any) {
-      setError(err.message || 'Failed to place bid. Please try again.');
+      const msg = err.message || 'Failed to place bid. Please try again.';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -210,10 +214,10 @@ export default function PlaceBidModal({ order, onClose, onBidPlaced }: Props) {
             <button
               type="submit"
               disabled={submitting}
-              className="mt-1 w-full rounded-2xl py-3 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-1 w-full rounded-2xl py-3 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2"
               style={{ background: 'linear-gradient(135deg, var(--ring), var(--chart-5))' }}
             >
-              {submitting ? 'Placing bid…' : 'Place Bid'}
+              {submitting ? <><Loader2 size={14} className="animate-spin" /> Placing bid…</> : 'Place Bid'}
             </button>
           </form>
         )}
