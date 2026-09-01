@@ -77,6 +77,12 @@ contract BusinessCampaign /*is Ownable*/ {
 
         function contribute() public payable onlyActive {
         require(msg.value > 0, "Contribution must be greater than zero.");
+
+        // ── Insert Cap Check Here ──
+        require(
+            startup.amountRaised + msg.value <= startup.fundingGoal, 
+            "Contribution exceeds the campaign funding goal."
+        );
         
         uint256 tokensToBuy = (msg.value / startup.pricePerToken) * 10**18;
         
