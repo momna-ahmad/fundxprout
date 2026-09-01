@@ -7,7 +7,7 @@ import CampaignFactoryJSON from "@/abis/CampaignFactory.json";
 //const CONTRACT_ADDRESS = "0x2FCA6AF6d0C9FF4a129fEF46bD4bc4eA2A0B25d0";
 
 //redeployed after erc 20 smart contract (18-7-2026)
-const CONTRACT_ADDRESS = "0x876daC31839C7aeD4fa742da1D10B4902099c673" ;
+const CONTRACT_ADDRESS = "0xC4212d50169B6De3C67977c5B75BE8e5cE0a29af" ;
 
 export async function launchBusinessCampaign(
   prevState: any,

@@ -171,6 +171,19 @@ export default function CampaignDetailPage() {
             passed: minInvestment === 0 || (amount >= minInvestment && !isNaN(amount))
         });
 
+        // ── Funding Goal Cap Check ──────────────────────────────────────
+        const fundingGoal = parseFloat(campaign?.funding_goal ?? "0");
+        const amountPledged = parseFloat(campaign?.amount_pledged ?? "0");
+        const remainingGoal = Math.max(0, fundingGoal - amountPledged);
+
+        checks.push({
+            label: remainingGoal > 0 
+                ? `Investment must be ≤ remaining goal (${remainingGoal.toFixed(4)} ETH)`
+                : "Campaign funding goal already met",
+            passed: remainingGoal > 0 && !isNaN(amount) && amount <= remainingGoal
+        });
+        // ────────────────────────────────────────────────────────────────
+
         // Campaign active check
         const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration ?? 30);
         checks.push({
