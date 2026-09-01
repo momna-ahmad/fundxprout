@@ -43,26 +43,29 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0d1221] flex flex-col items-center justify-center p-4 sm:p-6">
+    <div className="min-h-screen bg-[#0b0f19] flex flex-col items-center justify-center p-4 sm:p-6" style={{ color: '#f8fafc' }}>
       {/* Back button */}
       <div className="w-full max-w-md mb-6">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-xs font-semibold text-gray-400 hover:text-white transition"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition"
+          style={{ color: '#94a3b8' }}
         >
           <ArrowLeft size={14} /> Back to FundXProut
         </Link>
       </div>
 
       {/* Main Admin Card */}
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#161c2e] p-8 shadow-2xl backdrop-blur-xl">
+      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#151c2c] p-8 shadow-2xl backdrop-blur-xl">
         {/* Shield Icon Header */}
         <div className="flex flex-col items-center text-center mb-8">
           <div className="h-16 w-16 rounded-2xl bg-[#a78bfa]/10 border border-[#a78bfa]/20 flex items-center justify-center mb-4 text-[#a78bfa] shadow-inner">
             <ShieldCheck size={36} />
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight">Admin Portal Login</h1>
-          <p className="mt-1 text-xs text-gray-400">
+          <h1 className="text-2xl font-black tracking-tight" style={{ color: '#ffffff' }}>
+            Admin Portal Login
+          </h1>
+          <p className="mt-1.5 text-xs" style={{ color: '#94a3b8' }}>
             Authorized personnel only. Authenticate with master credentials and secret passcode.
           </p>
         </div>
@@ -71,36 +74,38 @@ export default function AdminLoginPage() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {/* Email */}
           <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-400">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>
               Admin Account Email
             </label>
             <div className="relative">
-              <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
+              <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="email"
                 required
                 placeholder="admin@fundxprout.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-[#0d1221] pl-11 pr-4 py-3 text-sm text-white placeholder-gray-600 outline-none focus:border-[#a78bfa] focus:ring-1 focus:ring-[#a78bfa] transition"
+                className="w-full rounded-2xl border border-white/15 bg-[#0b0f19] pl-11 pr-4 py-3 text-sm outline-none focus:border-[#a78bfa] focus:ring-1 focus:ring-[#a78bfa] transition"
+                style={{ color: '#ffffff', backgroundColor: '#0b0f19' }}
               />
             </div>
           </div>
 
           {/* Password */}
           <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-400">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>
               Account Password
             </label>
             <div className="relative">
-              <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
+              <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="password"
                 required
                 placeholder="••••••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-[#0d1221] pl-11 pr-4 py-3 text-sm text-white placeholder-gray-600 outline-none focus:border-[#a78bfa] focus:ring-1 focus:ring-[#a78bfa] transition"
+                className="w-full rounded-2xl border border-white/15 bg-[#0b0f19] pl-11 pr-4 py-3 text-sm outline-none focus:border-[#a78bfa] focus:ring-1 focus:ring-[#a78bfa] transition"
+                style={{ color: '#ffffff', backgroundColor: '#0b0f19' }}
               />
             </div>
           </div>
@@ -108,23 +113,24 @@ export default function AdminLoginPage() {
           {/* Admin Secret Key */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-[#a78bfa]">
+              <label className="block text-xs font-semibold uppercase tracking-wider" style={{ color: '#c084fc' }}>
                 Secret Admin Passcode
               </label>
             </div>
             <div className="relative">
-              <KeyRound size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#a78bfa]" />
+              <KeyRound size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-purple-400" />
               <input
                 type="password"
                 required
                 placeholder="Secret key (e.g. FXP_ADMIN_2026_SECRET)"
                 value={secretKey}
                 onChange={(e) => setSecretKey(e.target.value)}
-                className="w-full rounded-2xl border border-[#a78bfa]/30 bg-[#0d1221] pl-11 pr-4 py-3 text-sm text-white placeholder-gray-600 outline-none focus:border-[#a78bfa] focus:ring-2 focus:ring-[#a78bfa]/20 transition"
+                className="w-full rounded-2xl border border-[#a78bfa]/40 bg-[#0b0f19] pl-11 pr-4 py-3 text-sm outline-none focus:border-[#a78bfa] focus:ring-2 focus:ring-[#a78bfa]/20 transition"
+                style={{ color: '#ffffff', backgroundColor: '#0b0f19' }}
               />
             </div>
-            <p className="mt-1.5 text-[11px] text-gray-500">
-              Default secret key: <code className="text-[#a78bfa] font-mono px-1 py-0.5 rounded bg-white/5">FXP_ADMIN_2026_SECRET</code>
+            <p className="mt-1.5 text-[11px]" style={{ color: '#94a3b8' }}>
+              Default secret key: <code className="font-mono px-1.5 py-0.5 rounded bg-white/10" style={{ color: '#c084fc' }}>FXP_ADMIN_2026_SECRET</code>
             </p>
           </div>
 
@@ -132,8 +138,8 @@ export default function AdminLoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-3 w-full rounded-2xl py-3.5 text-sm font-bold text-white transition disabled:opacity-60 flex items-center justify-center gap-2 shadow-lg shadow-[#a78bfa]/10"
-            style={{ background: 'linear-gradient(135deg, #6f42c1, #a78bfa)' }}
+            className="mt-3 w-full rounded-2xl py-3.5 text-sm font-bold transition disabled:opacity-60 flex items-center justify-center gap-2 shadow-lg shadow-[#a78bfa]/20"
+            style={{ background: 'linear-gradient(135deg, #6f42c1, #a78bfa)', color: '#ffffff' }}
           >
             {loading ? (
               <>
@@ -146,8 +152,8 @@ export default function AdminLoginPage() {
         </form>
 
         {/* Footer info */}
-        <div className="mt-6 border-t border-white/5 pt-4 text-center">
-          <p className="text-[11px] text-gray-500">
+        <div className="mt-6 border-t border-white/10 pt-4 text-center">
+          <p className="text-[11px]" style={{ color: '#64748b' }}>
             FundXProut Governance &amp; Administration Security Subsystem
           </p>
         </div>

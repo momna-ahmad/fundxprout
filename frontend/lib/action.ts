@@ -680,17 +680,30 @@ export async function adminAuthenticateAction(email: string, secretKey: string, 
 
   let userToElevate = null;
 
-  // Case 1: Password provided -> Sign in first
+  // Case 1: Password provided -> Sign in or Auto-Register
   if (password && password.trim()) {
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password: password.trim(),
     });
 
-    if (error || !data.user) {
-      return { error: error?.message || "Authentication failed. Check your email and password." };
+    if (!signInErr && signInData?.user) {
+      userToElevate = signInData.user;
+    } else {
+      // If sign in fails, attempt sign up with secret key authorization
+      const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password.trim(),
+        options: {
+          data: { full_name: "Admin User" },
+        },
+      });
+
+      if (signUpErr || !signUpData.user) {
+        return { error: signUpErr?.message || signInErr?.message || "Authentication failed." };
+      }
+      userToElevate = signUpData.user;
     }
-    userToElevate = data.user;
   } else {
     // Case 2: Use currently logged in user
     const { data: { user } } = await supabase.auth.getUser();
