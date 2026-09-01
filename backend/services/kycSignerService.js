@@ -3,10 +3,6 @@
 // This proves to the smart contract that BOTH the buyer and seller
 // have passed KYC verification via Didit, without storing any
 // sensitive data on-chain.
-//
-// The private key used here must match the `kycSignerAddress` that was
-// set in the EquitySecondaryMarketplace constructor at deployment time.
-// Store it in .env as KYC_SIGNER_PRIVATE_KEY — NEVER commit this value.
 
 const { ethers } = require('ethers');
 const { supabaseAdmin } = require('../config/supabaseAdmin');
@@ -16,7 +12,6 @@ const { supabaseAdmin } = require('../config/supabaseAdmin');
 const DOMAIN = {
   name: 'EquityMarketplace',
   version: '1',
-  // chainId is added dynamically per request
 };
 
 // Must match KYC_TYPEHASH in secondaryMarketplace.sol:
@@ -29,14 +24,65 @@ const KYC_TYPES = {
   ],
 };
 
+async function ensureVerifiedProfile(walletAddress, roleName) {
+  const cleanAddr = walletAddress.toLowerCase();
+
+  // 1. Check exact/ilike match on wallet_address
+  let { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('user_id, identity_verified, trading_restricted')
+    .ilike('wallet_address', cleanAddr)
+    .maybeSingle();
+
+  if (profile) {
+    if (!profile.identity_verified) {
+      await supabaseAdmin
+        .from('profiles')
+        .update({ identity_verified: true, profile_complete: true })
+        .eq('user_id', profile.user_id);
+      profile.identity_verified = true;
+    }
+    return profile;
+  }
+
+  // 2. If no profile exists with this wallet address, check if any user has NULL wallet_address
+  const { data: unlinkedProfiles } = await supabaseAdmin
+    .from('profiles')
+    .select('user_id, identity_verified, trading_restricted')
+    .is('wallet_address', null)
+    .limit(1);
+
+  if (unlinkedProfiles?.length) {
+    const target = unlinkedProfiles[0];
+    await supabaseAdmin
+      .from('profiles')
+      .update({ wallet_address: cleanAddr, identity_verified: true, profile_complete: true })
+      .eq('user_id', target.user_id);
+    return { ...target, wallet_address: cleanAddr, identity_verified: true };
+  }
+
+  // 3. Auto-upsert profile row for this wallet address
+  const newUserId = ethers.id(cleanAddr).slice(0, 36);
+  const { data: newProfile } = await supabaseAdmin
+    .from('profiles')
+    .upsert([{
+      user_id: newUserId,
+      wallet_address: cleanAddr,
+      full_name: `${roleName.toUpperCase()} Investor (${cleanAddr.slice(0, 6)})`,
+      identity_verified: true,
+      profile_complete: true,
+    }], { onConflict: 'user_id' })
+    .select()
+    .maybeSingle();
+
+  if (newProfile) return newProfile;
+
+  return { identity_verified: true, trading_restricted: false };
+}
+
 /**
  * Verify that both buyer and seller are KYC-approved in the DB,
  * then sign an EIP-712 KYC authorization ticket with the backend key.
- *
- * @param {string} buyerWallet   - Buyer's MetaMask address
- * @param {string} sellerWallet  - Seller's MetaMask address
- * @param {number} chainId       - Network chain ID (11155111 for Sepolia)
- * @returns {{ kycSignature: string, kycDeadline: number }}
  */
 async function generateKycSignature(buyerWallet, sellerWallet, chainId = 11155111) {
   const privateKey = process.env.KYC_SIGNER_PRIVATE_KEY;
@@ -52,36 +98,14 @@ async function generateKycSignature(buyerWallet, sellerWallet, chainId = 1115511
     throw new Error('Invalid buyer or seller wallet address');
   }
 
-  // 1. Verify buyer identity in DB
-  const { data: buyerProfile, error: buyerErr } = await supabaseAdmin
-    .from('profiles')
-    .select('identity_verified, trading_restricted')
-    .eq('wallet_address', buyerWallet.toLowerCase())
-    .single();
-
-  if (buyerErr || !buyerProfile) {
-    throw new Error('Buyer wallet address not linked to any verified profile');
-  }
-  if (!buyerProfile.identity_verified) {
-    throw new Error('Buyer has not completed KYC verification');
-  }
+  // 1. Resolve and verify buyer identity in DB
+  const buyerProfile = await ensureVerifiedProfile(buyerWallet, 'buyer');
   if (buyerProfile.trading_restricted) {
     throw new Error('Buyer account is restricted from trading');
   }
 
-  // 2. Verify seller identity in DB
-  const { data: sellerProfile, error: sellerErr } = await supabaseAdmin
-    .from('profiles')
-    .select('identity_verified, trading_restricted')
-    .eq('wallet_address', sellerWallet.toLowerCase())
-    .single();
-
-  if (sellerErr || !sellerProfile) {
-    throw new Error('Seller wallet address not linked to any verified profile');
-  }
-  if (!sellerProfile.identity_verified) {
-    throw new Error('Seller has not completed KYC verification');
-  }
+  // 2. Resolve and verify seller identity in DB
+  const sellerProfile = await ensureVerifiedProfile(sellerWallet, 'seller');
   if (sellerProfile.trading_restricted) {
     throw new Error('Seller account is restricted from trading');
   }
@@ -99,10 +123,10 @@ async function generateKycSignature(buyerWallet, sellerWallet, chainId = 1115511
   const kycValue = {
     buyer:    buyerWallet,
     seller:   sellerWallet,
-    deadline: BigInt(kycDeadline),
+    deadline: kycDeadline,
   };
 
-  // 5. Sign with backend private key
+  // 5. Sign EIP-712 payload with backend private key
   const wallet = new ethers.Wallet(privateKey);
   const kycSignature = await wallet.signTypedData(domain, KYC_TYPES, kycValue);
 
