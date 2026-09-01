@@ -669,3 +669,54 @@ export async function adminCancelTradeOrder(orderId: string) {
   revalidatePath("/admin-dashboard/marketplace");
   return { success: true };
 }
+
+export async function adminAuthenticateAction(email: string, secretKey: string, password?: string) {
+  const supabase = await createClient();
+
+  const expectedSecret = process.env.ADMIN_SECRET_KEY || "FXP_ADMIN_2026_SECRET";
+  if (secretKey.trim() !== expectedSecret) {
+    return { error: "Invalid Admin Secret Key. Access denied." };
+  }
+
+  let userToElevate = null;
+
+  // Case 1: Password provided -> Sign in first
+  if (password && password.trim()) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password: password.trim(),
+    });
+
+    if (error || !data.user) {
+      return { error: error?.message || "Authentication failed. Check your email and password." };
+    }
+    userToElevate = data.user;
+  } else {
+    // Case 2: Use currently logged in user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { error: "Please enter your password or sign in first." };
+    }
+    userToElevate = user;
+  }
+
+  // Update profile role to 'admin'
+  const { error: updateError } = await supabase
+    .from("profiles")
+    .upsert([{
+      user_id: userToElevate.id,
+      role: "admin",
+      updated_at: new Date().toISOString(),
+    }], { onConflict: "user_id" });
+
+  if (updateError) {
+    console.error("[adminAuthenticateAction] Profile update error:", updateError);
+    return { error: "Failed to set admin role in database profile." };
+  }
+
+  await logAdminAction(supabase, userToElevate.id, "claim_admin_role", "profile", userToElevate.id, "Admin secret key claimed");
+
+  revalidatePath("/admin-dashboard");
+  return { success: true, redirectTo: "/admin-dashboard" };
+}
+
