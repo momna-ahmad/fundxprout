@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { getAllCampaigns } from "@/utils/supabase/getCampaigns";
 import { fetchInvestmentHistory as fetchHistoryUtil, logTransaction , recordClaimedToken} from "@/utils/investmentUtils";
-import { Target, Users, Clock, DollarSign, ExternalLink, TrendingUp , Filter } from "lucide-react";
+import { Target, Users, Clock, DollarSign, ExternalLink, TrendingUp , Filter, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import RiskBadge from "@/components/RiskBadge";
 import { ethers } from "ethers";
