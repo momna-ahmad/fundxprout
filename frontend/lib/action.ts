@@ -649,6 +649,75 @@ export async function adminRejectCampaign(campaignId: number, reason: string) {
   return { success: true };
 }
 
+export async function adminRevokeKYC(userId: string) {
+  const supabase = await createClient();
+  const adminUser = await checkAdmin(supabase);
+  if (!adminUser) return { error: "Unauthorized: Admins only" };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ identity_verified: false })
+    .eq("user_id", userId);
+
+  if (error) return { error: error.message };
+  await logAdminAction(supabase, adminUser.id, "revoke_kyc", "profile", userId, "Admin revoked KYC status");
+  revalidatePath("/admin-dashboard");
+  return { success: true };
+}
+
+export async function adminRevokeKYB(businessId: string) {
+  const supabase = await createClient();
+  const adminUser = await checkAdmin(supabase);
+  if (!adminUser) return { error: "Unauthorized: Admins only" };
+
+  const { error } = await supabase
+    .from("businesses")
+    .update({ kyb_verified: false })
+    .eq("id", businessId);
+
+  if (error) return { error: error.message };
+  await logAdminAction(supabase, adminUser.id, "revoke_kyb", "business", businessId, "Admin revoked KYB status");
+  revalidatePath("/admin-dashboard");
+  return { success: true };
+}
+
+export async function adminToggleSecondaryTrading(campaignId: number, enabled: boolean) {
+  const supabase = await createClient();
+  const adminUser = await checkAdmin(supabase);
+  if (!adminUser) return { error: "Unauthorized: Admins only" };
+
+  const { error } = await supabase
+    .from("campaigns")
+    .update({ secondary_trading_enabled: enabled })
+    .eq("id", campaignId);
+
+  if (error) return { error: error.message };
+  await logAdminAction(supabase, adminUser.id, "toggle_secondary_trading", "campaign", String(campaignId), `Secondary trading set to ${enabled}`);
+  revalidatePath("/admin-dashboard/campaigns");
+  return { success: true };
+}
+
+export async function adminTriggerRiskAnalysis(campaignId: number) {
+  const supabase = await createClient();
+  const adminUser = await checkAdmin(supabase);
+  if (!adminUser) return { error: "Unauthorized: Admins only" };
+
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/campaigns/${campaignId}/analyze`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      return { error: errJson.error || 'Failed to trigger AI risk analysis' };
+    }
+    await logAdminAction(supabase, adminUser.id, "trigger_risk_analysis", "campaign", String(campaignId), "Admin manually triggered AI Risk Assessment");
+    revalidatePath("/admin-dashboard/campaigns");
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message || 'Failed to connect to AI server' };
+  }
+}
+
 export async function adminCancelTradeOrder(orderId: string) {
   const supabase = await createClient();
   const adminUser = await checkAdmin(supabase);
