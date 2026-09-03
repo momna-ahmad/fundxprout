@@ -123,6 +123,26 @@ async function scorePendingCampaignsOnStartup() {
   }
 }
 
+app.post('/api/campaigns/:id/analyze', async (req, res) => {
+  try {
+    const campaignId = req.params.id;
+    console.log(`[risk API] Triggering manual AI risk analysis for campaign ${campaignId}...`);
+    await runRiskAssessmentForCampaign(campaignId);
+
+    const { data: updatedCampaign, error } = await supabase
+      .from('campaigns')
+      .select('*')
+      .eq('id', campaignId)
+      .single();
+
+    if (error) throw error;
+    return res.json({ success: true, campaign: updatedCampaign });
+  } catch (err) {
+    console.error('[risk API] Error analyzing campaign:', err);
+    return res.status(500).json({ error: err.message || 'Failed to run AI risk assessment' });
+  }
+});
+
 app.get('/', (req, res) => {
   res.send('FundXprout Backend Running');
 });

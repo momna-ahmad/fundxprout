@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AlertTriangle, CheckCircle2, ShieldAlert, Info, Activity, Clock, FileCheck2, ChevronDown, ChevronUp } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ShieldAlert, Info, Activity, Clock, FileCheck2, ChevronDown, ChevronUp, Loader2, Sparkles, RefreshCw } from "lucide-react";
 
 // Helper for the animated SVG Gauge
 const CircularGauge = ({ score }) => {
@@ -47,8 +47,33 @@ const CircularGauge = ({ score }) => {
   );
 };
 
-export default function RiskAssessmentPanel({ campaign }) {
+export default function RiskAssessmentPanel({ campaign: initialCampaign }) {
+  const [campaign, setCampaign] = useState(initialCampaign);
   const [expandedMetric, setExpandedMetric] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState("");
+
+  const handleAnalyze = async () => {
+    if (!campaign?.id) return;
+    setAnalyzing(true);
+    setAnalyzeError("");
+    try {
+      const res = await fetch(`http://localhost:5000/api/campaigns/${campaign.id}/analyze`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "AI Analysis failed");
+      if (data.campaign) {
+        setCampaign(data.campaign);
+      }
+    } catch (err) {
+      console.error(err);
+      setAnalyzeError(err.message || "Failed to trigger AI risk assessment.");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   if (!campaign || campaign.risk_score === null || campaign.risk_score === undefined) {
     return (
       <div className="bg-[#1a2030] rounded-2xl border border-white/5 p-6 mt-6">
@@ -56,12 +81,32 @@ export default function RiskAssessmentPanel({ campaign }) {
           <Activity className="w-5 h-5 text-[#a78bfa]" />
           AI Risk Assessment
         </h2>
-        <div className="flex flex-col items-center justify-center py-10 bg-[#121622] rounded-xl border border-white/5">
-          <Clock className="w-10 h-10 text-gray-400 mb-3 animate-pulse" />
-          <p className="text-gray-300 font-medium">Analysis Pending</p>
-          <p className="text-xs text-gray-500 mt-2 text-center max-w-xs">
-            Our AI model is currently retrieving and evaluating this campaign's pitch and financials.
-          </p>
+        <div className="flex flex-col items-center justify-center py-10 bg-[#121622] rounded-xl border border-white/5 p-6">
+          {analyzing ? (
+            <>
+              <Loader2 className="w-10 h-10 text-[#a78bfa] mb-3 animate-spin" />
+              <p className="text-white font-bold text-sm">Evaluating Pitch &amp; Financials with AI…</p>
+              <p className="text-xs text-gray-400 mt-1">Calling Gemini LLM &amp; Random Forest model</p>
+            </>
+          ) : (
+            <>
+              <Clock className="w-10 h-10 text-gray-400 mb-3 animate-pulse" />
+              <p className="text-gray-300 font-medium">Analysis Pending</p>
+              <p className="text-xs text-gray-500 mt-2 text-center max-w-xs mb-4">
+                Our AI model evaluates this campaign's pitch clarity, financials, and risk profile.
+              </p>
+              <button
+                onClick={handleAnalyze}
+                disabled={analyzing}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#6f42c1] to-[#a78bfa] hover:from-[#5a3599] hover:to-[#906ffa] text-white font-bold rounded-xl text-xs transition shadow-lg shadow-[#6f42c1]/20 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4" /> Run / Retry AI Analysis
+              </button>
+              {analyzeError && (
+                <p className="text-xs text-red-400 mt-3">{analyzeError}</p>
+              )}
+            </>
+          )}
         </div>
       </div>
     );
