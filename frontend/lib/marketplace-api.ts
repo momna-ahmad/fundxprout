@@ -134,6 +134,25 @@ export async function getOpenSellOrders(): Promise<{ orders: MarketplaceSellOrde
   return res.json();
 }
 
+export async function cancelSellOrder(orderId: string): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/api/marketplace/orders/${orderId}/cancel`, {
+    method: 'POST',
+    headers: await authHeaders(),
+  });
+  if (!res.ok) {
+    let errBody: any = null;
+    try { errBody = await res.json(); } catch { /* ignore */ }
+    throw new Error(errBody?.error || 'Failed to cancel order');
+  }
+  return res.json();
+}
+
+export async function getTokenAnalytics(campaignId: string) {
+  const res = await fetch(`${API_BASE}/api/marketplace/analytics/${campaignId}`);
+  if (!res.ok) throw new Error('Failed to load token analytics');
+  return res.json();
+}
+
 export async function getTradeHistory(campaignId: string) {
   const res = await fetch(`${API_BASE}/api/marketplace/trades/${campaignId}`);
   if (!res.ok) throw new Error('Failed to load trade history');

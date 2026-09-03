@@ -7,10 +7,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { getListingBids, acceptBid, type TokenBid } from '@/lib/bidding-api';
+import { cancelSellOrder } from '@/lib/marketplace-api';
 import { toast } from 'sonner';
 import {
   Loader2, ChevronDown, ChevronUp, CheckCircle2, Trophy,
-  Clock, AlertCircle, RotateCcw, ShieldCheck, ArrowUpDown, Filter,
+  Clock, AlertCircle, RotateCcw, ShieldCheck, ArrowUpDown, Filter, Trash2,
 } from 'lucide-react';
 
 type Listing = {
@@ -46,12 +47,13 @@ function timeLeft(iso: string | null) {
 }
 
 // ── One Listing Row with expandable bid list ─────────────────────
-function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
+function ListingRow({ listing, userId, onRefresh }: { listing: Listing; userId: string; onRefresh?: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const [bids, setBids] = useState<TokenBid[]>([]);
   const [bidsLoading, setBidsLoading] = useState(false);
   const [bidsError, setBidsError] = useState<string | null>(null);
   const [accepting, setAccepting] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   // Filter & Sort state for bids
   const [sortBy, setSortBy] = useState<'highest' | 'lowest' | 'newest' | 'oldest'>('highest');
@@ -89,6 +91,22 @@ function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
     }
   }
 
+  async function handleDelist(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delist this sell order? Any unfulfilled tokens will be released back to your available balance.')) return;
+    setCancelling(true);
+    const toastId = toast.loading('Delisting sell order…');
+    try {
+      await cancelSellOrder(listing.id);
+      toast.success('Sell listing delisted successfully.', { id: toastId });
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delist order.', { id: toastId });
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   const pendingBids = bids.filter((b) => b.status === 'pending');
 
   const filteredAndSortedBids = useMemo(() => {
@@ -113,13 +131,10 @@ function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
   }, [bids, filterBy, sortBy]);
 
   return (
-    <div className="rounded-3xl border border-border bg-card overflow-hidden">
-      {/* Listing header row */}
-      <button
-        onClick={handleToggle}
-        className="flex w-full items-center justify-between gap-4 p-5 text-left transition hover:bg-muted/20"
-      >
-        <div className="min-w-0 flex-1">
+    <div className="rounded-3xl border border-border bg-card overflow-hidden transition shadow-sm">
+      {/* Listing summary row */}
+      <div className="flex w-full items-center justify-between gap-4 p-5 text-left transition hover:bg-muted/20">
+        <div className="min-w-0 flex-1 cursor-pointer" onClick={handleToggle}>
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-semibold text-foreground truncate">
               {listing.campaign?.title || `Campaign #${listing.campaign_id}`}
@@ -148,6 +163,17 @@ function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
           </p>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
+          {['open', 'partially_filled'].includes(listing.status) && (
+            <button
+              onClick={handleDelist}
+              disabled={cancelling}
+              className="flex items-center gap-1 rounded-xl border border-destructive/30 bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive transition hover:bg-destructive hover:text-white disabled:opacity-50"
+              title="Delist this sell order"
+            >
+              {cancelling ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+              Delist
+            </button>
+          )}
           {pendingBids.length > 0 && !expanded && (
             <span
               className="rounded-xl px-2.5 py-1 text-xs font-bold"
@@ -156,9 +182,11 @@ function ListingRow({ listing, userId }: { listing: Listing; userId: string }) {
               {pendingBids.length} new bid{pendingBids.length > 1 ? 's' : ''}
             </span>
           )}
-          {expanded ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
+          <button onClick={handleToggle} className="p-1 text-muted-foreground hover:text-foreground">
+            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
         </div>
-      </button>
+      </div>
 
       {/* Expanded bid list */}
       {expanded && (
@@ -396,7 +424,7 @@ export default function MyListingsPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {listings.map((listing) => (
-            <ListingRow key={listing.id} listing={listing} userId={userId || ''} />
+            <ListingRow key={listing.id} listing={listing} userId={userId || ''} onRefresh={loadListings} />
           ))}
         </div>
       )}

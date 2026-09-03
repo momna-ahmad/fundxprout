@@ -188,11 +188,71 @@ async function getOpenSellOrders(req, res) {
       .filter((order) => order.campaign && (order.campaign.secondary_trading_enabled !== false || order.campaign.token_contract_address));
 
     return res.json({ orders: listings });
-
-    return res.json({ orders: listings });
   } catch (err) {
     console.error('[getOpenSellOrders] failed', err);
     return res.status(500).json({ error: 'Failed to load marketplace listings' });
+  }
+}
+
+async function cancelOrder(req, res) {
+  const investorId = req.investorId || req.user?.id;
+  const { orderId } = req.params;
+
+  try {
+    const { data: order, error } = await supabaseAdmin
+      .from('token_orders')
+      .select('*')
+      .eq('id', orderId)
+      .single();
+
+    if (error || !order) return res.status(404).json({ error: 'Order not found' });
+    if (order.investor_id !== investorId) return res.status(403).json({ error: 'Not your order' });
+    if (!['open', 'partially_filled'].includes(order.status)) {
+      return res.status(400).json({ error: 'Order cannot be cancelled' });
+    }
+
+    await supabaseAdmin.from('token_orders').update({ status: 'cancelled' }).eq('id', orderId);
+    await supabaseAdmin.from('token_bids').update({ status: 'cancelled' }).eq('listing_id', orderId).eq('status', 'pending');
+
+    return res.json({ success: true, message: 'Order delisted successfully' });
+  } catch (err) {
+    console.error('[cancelOrder] error:', err);
+    return res.status(500).json({ error: 'Failed to cancel order' });
+  }
+}
+
+async function getTokenAnalytics(req, res) {
+  try {
+    const { campaignId } = req.params;
+    const [{ data: campaign }, { data: trades }] = await Promise.all([
+      supabaseAdmin.from('campaigns').select('id, price_per_token, created_at').eq('id', campaignId).single(),
+      supabaseAdmin.from('token_trades').select('price, quantity, executed_at').eq('campaign_id', campaignId).order('executed_at', { ascending: true })
+    ]);
+
+    const basePrice = Number(campaign?.price_per_token || 0.001);
+    const history = (trades ?? []).map(t => ({
+      price: Number(t.price),
+      quantity: Number(t.quantity),
+      time: new Date(t.executed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }));
+
+    if (history.length === 0) {
+      history.push({ price: basePrice, quantity: 0, time: 'Launch' });
+    }
+
+    const latestPrice = history[history.length - 1].price;
+    const firstPrice = history[0].price;
+    const change24h = firstPrice > 0 ? ((latestPrice - firstPrice) / firstPrice) * 100 : 0;
+
+    return res.json({
+      basePrice,
+      latestPrice,
+      change24h: Number(change24h.toFixed(2)),
+      history
+    });
+  } catch (err) {
+    console.error('[getTokenAnalytics] error:', err);
+    return res.status(500).json({ error: 'Failed to fetch analytics' });
   }
 }
 
@@ -240,4 +300,4 @@ async function getHoldings(req, res) {
   return res.json(balances);
 }
 
-module.exports = { createOrder, getOrderBook, getOpenSellOrders, getTradeHistory, getHoldings };
+module.exports = { createOrder, getOrderBook, getOpenSellOrders, cancelOrder, getTokenAnalytics, getTradeHistory, getHoldings };
