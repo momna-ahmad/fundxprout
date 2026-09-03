@@ -27,7 +27,7 @@ export default function InvestorCampaignsPage() {
 
   const [activeFilter, setActiveFilter] = useState("all");
 
-  async function handleClaimTokens(campaignContractAddress, tokenContractAddress, tokenSymbol, investmentId, campaignId) {
+  async function handleClaimTokens(campaignContractAddress, tokenContractAddress, tokenSymbol, investmentIds, campaignId) {
   if (typeof window === "undefined" || !window.ethereum) {
     alert("Please install MetaMask!");
     return;
@@ -35,7 +35,7 @@ export default function InvestorCampaignsPage() {
 
   try {
     setClaimPending(campaignContractAddress);
-    console.log(investmentId);
+    console.log("Claiming for investment IDs:", investmentIds);
     await window.ethereum.request({ method: "eth_requestAccounts" });
     const provider = new ethers.BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
@@ -49,8 +49,24 @@ export default function InvestorCampaignsPage() {
     const tokensOwedWei = await campaignContract.tokenEscrowBalances(signer.getAddress());
 
     if (BigInt(tokensOwedWei) === BigInt(0)) {
-      alert("No escrowed tokens available to claim for this address.");
-      setClaimPending(null);
+      // Auto-sync database in case on-chain claim already succeeded earlier
+      if (user?.id) {
+        const campaignObj = campaigns.find(c => c.id === campaignId);
+        const pptEth = parseFloat(campaignObj?.price_per_token || "0.001") || 0.001;
+        const invObj = investmentHistory.find(i => i.campaign_id === campaignId);
+        const invAmt = parseFloat(invObj?.amount || "0") || 0;
+        const derivedTokens = pptEth > 0 ? invAmt / pptEth : 0;
+
+        await recordClaimedToken({
+          campaignId: campaignId,
+          investmentIds: investmentIds,
+          userId: user.id,
+          amount: Math.round(derivedTokens) || 1,
+          tokenSymbol: tokenSymbol,
+        });
+      }
+      alert("Tokens have already been claimed on-chain for this wallet. Dashboard updated!");
+      window.location.reload();
       return;
     }
 
@@ -66,17 +82,17 @@ export default function InvestorCampaignsPage() {
     if (user?.id) {
       await recordClaimedToken({
         campaignId: campaignId,
-        investmentId: investmentId,
+        investmentIds: investmentIds,
         userId: user.id,
         amount: claimedAmount,
         tokenSymbol: tokenSymbol,
       });
 
-      // Also log to transactions table if needed
+      // Also log to transactions table
       await logTransaction({
         userId: user.id,
         campaignId: campaignId,
-        referenceId: investmentId,
+        referenceId: Array.isArray(investmentIds) ? investmentIds[0] : investmentIds,
         type: "token_claim",
         txHash: tx.hash,
         quantity: claimedAmount,
@@ -495,8 +511,15 @@ export default function InvestorCampaignsPage() {
                     </div>
                   </div>
 
-                  {(inv.status === "completed" || inv.status ==="ongoing") && (<div className="px-5 pb-3">
-                    {isGoalReached && (
+                  <div className="px-5 pb-3">
+                    {inv.status === "claimed" ? (
+                      <button
+                        disabled
+                        className="w-full mb-3 py-2 px-4 rounded-lg text-xs font-bold text-green-400 bg-green-500/10 border border-green-500/20 flex items-center justify-center gap-2 cursor-default"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-green-400" /> Tokens Claimed ✓
+                      </button>
+                    ) : (inv.status === "completed" || inv.status === "ongoing") && isGoalReached ? (
                       <button
                         onClick={() =>
                           handleClaimTokens(
@@ -512,8 +535,8 @@ export default function InvestorCampaignsPage() {
                       >
                         {claimPending === campaign.contract_address ? "Claiming Tokens..." : "Claim Equity Tokens"}
                       </button>
-                    )}
-                  </div> )}
+                    ) : null}
+                  </div>
 
                   {!isGoalReached && (
                       <button
