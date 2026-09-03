@@ -64,6 +64,14 @@ async function createOrder(req, res) {
 
     if (insertErr) throw insertErr;
 
+    // Enable secondary trading on the campaign if an investor lists tokens for sell
+    if (side === 'sell') {
+      await supabaseAdmin
+        .from('campaigns')
+        .update({ secondary_trading_enabled: true })
+        .eq('id', campaign_id);
+    }
+
     const result = await processOrder({ ...dbOrder });
 
     return res.status(201).json({ order: result });
@@ -176,11 +184,10 @@ async function getOpenSellOrders(req, res) {
       .map((order) => ({
         ...order,
         campaign: campaignById.get(String(order.campaign_id)) ?? null,
-        //seller_wallet_address: sellerById.get(String(order.investor_id))?.wallet_address ?? null,
       }))
-      // A missing seller wallet prevents settlement, but do not hide the order:
-      // buyers should be able to see why it is temporarily unavailable.
-      .filter((order) => order.campaign?.secondary_trading_enabled && order.campaign?.token_contract_address);
+      .filter((order) => order.campaign && (order.campaign.secondary_trading_enabled !== false || order.campaign.token_contract_address));
+
+    return res.json({ orders: listings });
 
     return res.json({ orders: listings });
   } catch (err) {
