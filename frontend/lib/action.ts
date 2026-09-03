@@ -486,6 +486,7 @@ export async function saveCreatorProfile(profileData: any) {
     bank_statement_cid: profileData.bank_statement_cid ?? null,
     bank_statement_url: cidToUrl(profileData.bank_statement_cid),
     business_logo_url: profileData.business_logo_url ?? null,
+    avatar_url: profileData.avatar_url ?? null,
     // shafqaat — Mark profile complete if core KYC fields are filled
     profile_complete: !!(
       profileData.full_name &&

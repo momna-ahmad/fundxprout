@@ -1,5 +1,5 @@
 "use client";
-// shafqaat — Creator Profile page: KYC/KYB document upload + basic info
+// shafqaat — Creator Profile page: KYC/KYB document upload + basic info + Cloudinary images
 // Route: /profile — meets international standards (Kickstarter, GoFundMe, SECP, FBR)
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -10,6 +10,75 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import { saveCreatorProfile } from "@/lib/action";
 import { getMyProfile, calcProfileCompletion } from "@/utils/supabase/getProfile";
+import UserAvatar from "@/components/UserAvatar";
+
+// shafqaat — Cloudinary Image Upload widget (Profile Picture & Business Logo)
+function ImageUpload({ label, hint, currentUrl, onUploaded, isCircle = false }) {
+  const [uploading, setUploading] = useState(false);
+  const [url, setUrl] = useState(currentUrl || "");
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    if (currentUrl) setUrl(currentUrl);
+  }, [currentUrl]);
+
+  const handleChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true); setErr("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Upload failed");
+      setUrl(json.url);
+      onUploaded(json.url);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-300 mb-1 uppercase tracking-wider">
+        {label}
+      </label>
+      {hint && <p className="text-xs text-gray-600 mb-2">{hint}</p>}
+      <div className="border-2 border-dashed border-white/10 rounded-xl p-4 flex flex-col items-center justify-center text-center hover:border-[#6f42c1]/40 transition bg-[#0d1117]">
+        {uploading ? (
+          <div className="flex flex-col items-center gap-1.5 py-2">
+            <Loader2 className="h-6 w-6 text-[#a78bfa] animate-spin" />
+            <p className="text-xs text-gray-400 font-medium">Uploading to Cloudinary…</p>
+          </div>
+        ) : url ? (
+          <div className="flex flex-col items-center gap-2">
+            <div className={`relative overflow-hidden border border-white/20 bg-black/40 ${isCircle ? "w-20 h-20 rounded-full" : "w-24 h-24 rounded-xl"}`}>
+              <img src={url} alt={label} className="w-full h-full object-cover" />
+            </div>
+            <p className="text-xs text-green-400 font-semibold flex items-center gap-1">
+              <CheckCircle className="h-3.5 w-3.5" /> Uploaded to Cloudinary ✓
+            </p>
+            <label className="text-xs text-[#a78bfa] hover:underline cursor-pointer font-medium mt-0.5">
+              Change Image
+              <input type="file" accept="image/*" className="hidden" onChange={handleChange} />
+            </label>
+          </div>
+        ) : (
+          <label className="cursor-pointer flex flex-col items-center py-2">
+            <Camera className="h-6 w-6 text-gray-400 mb-1.5" />
+            <span className="text-[#a78bfa] text-xs font-semibold">Click to upload image</span>
+            <p className="text-[10px] text-gray-600 mt-0.5">PNG, JPG, WEBP up to 5MB</p>
+            <input type="file" accept="image/*" className="hidden" onChange={handleChange} />
+          </label>
+        )}
+      </div>
+      {err && <p className="flex items-center gap-1 text-xs text-red-400 mt-1"><AlertCircle className="h-3 w-3" />{err}</p>}
+    </div>
+  );
+}
 
 // shafqaat — IPFS document upload widget (reused from create-campaign pattern)
 function DocUpload({ fieldKey, label, hint, accept, currentUrl, onUploaded, required = false }) {
@@ -127,6 +196,7 @@ export default function ProfilePage() {
   const [form, setForm] = useState({
     full_name: "", display_name: "", bio: "", phone: "",
     country: "", city: "", website_url: "", linkedin_url: "",
+    avatar_url: "", business_logo_url: "",
   });
 
   // shafqaat — Load existing profile, handle URL return callbacks, and listen for cross-tab sync
@@ -173,7 +243,6 @@ export default function ProfilePage() {
             JSON.stringify({ type: kybParam === "complete" ? "kyb" : "kyc", timestamp: Date.now() })
           );
 
-          // If this tab was opened as a separate popup/child window by window.open, attempt to close it automatically
           if (window.opener && window.opener !== window) {
             setTimeout(() => {
               window.close();
@@ -197,6 +266,8 @@ export default function ProfilePage() {
           city: existing.city ?? "",
           website_url: existing.website_url ?? "",
           linkedin_url: existing.linkedin_url ?? "",
+          avatar_url: existing.avatar_url ?? "",
+          business_logo_url: existing.business_logo_url ?? "",
         });
       }
       setLoading(false);
@@ -229,7 +300,8 @@ export default function ProfilePage() {
       business_reg_cid: docCids.business_reg_cid || profile?.business_reg_cid || null,
       tax_cert_cid: docCids.tax_cert_cid || profile?.tax_cert_cid || null,
       bank_statement_cid: docCids.bank_statement_cid || profile?.bank_statement_cid || null,
-      business_logo_url: profile?.business_logo_url || null,
+      business_logo_url: form.business_logo_url || profile?.business_logo_url || null,
+      avatar_url: form.avatar_url || profile?.avatar_url || null,
     };
     const result = await saveCreatorProfile(payload);
     if (result?.error) { setError(result.error); }
@@ -242,7 +314,6 @@ export default function ProfilePage() {
   };
 
   const pollUntilVerified = async (type, attempts = 0) => {
-    // Try triggering backend API sync directly in case webhook had network lag
     try {
       if (userId) {
         await fetch("http://localhost:5000/api/didit/sync-status", {
@@ -301,16 +372,13 @@ export default function ProfilePage() {
         body: JSON.stringify({ userId }),
       });
       const data = await res.json();
-      if (!data.url) {
-        setVerifying(null);
-        setVerificationSuccessMsg("");
-        alert("Failed to start verification: " + (data.error || "Unknown error"));
-        return;
+
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || "Failed to create verification session");
       }
-      // Open verification in a new tab so user keeps their profile page open
+
       window.open(data.url, "_blank");
       setVerificationSuccessMsg(`Didit ${type.toUpperCase()} verification opened in a new tab! Complete verification on your phone or tab, and your status will automatically update here...`);
-      // Start background polling on profile page
       pollUntilVerified(type);
     } catch (err) {
       console.error(err);
@@ -325,9 +393,6 @@ export default function ProfilePage() {
   const isKybVerified = Array.isArray(profile?.businesses)
     ? !!profile?.businesses[0]?.kyb_verified
     : !!profile?.businesses?.kyb_verified;
-  const hasBusiness = Array.isArray(profile?.businesses)
-    ? profile?.businesses.length > 0
-    : !!profile?.businesses;
 
   if (loading) {
     return (
@@ -342,13 +407,24 @@ export default function ProfilePage() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
 
         {/* shafqaat — Header */}
-        <div className="flex items-center gap-4 mb-2">
-          <button onClick={() => router.push("/dashboard")} className="text-gray-400 hover:text-white transition">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <div>
-            <h1 className="text-3xl font-black text-white">Creator Profile</h1>
-            <p className="text-gray-400 text-sm">KYC/KYB verification — international crowdfunding standards</p>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-4">
+            <button onClick={() => router.push("/dashboard")} className="text-gray-400 hover:text-white transition">
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <div className="flex items-center gap-3">
+              <UserAvatar
+                src={form.avatar_url || profile?.avatar_url}
+                name={form.display_name || form.full_name || "User"}
+                size={44}
+              />
+              <div>
+                <h1 className="text-2xl font-black text-white">
+                  {form.display_name || form.full_name || "Profile Settings"}
+                </h1>
+                <p className="text-gray-400 text-xs">KYC/KYB verification &amp; profile management</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -386,7 +462,18 @@ export default function ProfilePage() {
         )}
 
         {/* ── Section 1: Basic Info ── */}
-        <Section icon={User} title="Basic Information" description="Your public creator identity">
+        <Section icon={User} title="Basic Information" description="Your public creator identity and profile picture">
+          {/* Profile Picture (Avatar) Upload */}
+          <div className="mb-4 pb-4 border-b border-white/10">
+            <ImageUpload
+              label="Profile Picture (Avatar)"
+              hint="Upload your personal profile photo — visible across dashboards and listings"
+              currentUrl={form.avatar_url || profile?.avatar_url}
+              onUploaded={(url) => setForm((prev) => ({ ...prev, avatar_url: url }))}
+              isCircle
+            />
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Full Legal Name" name="full_name" value={form.full_name} onChange={handleInput}
               placeholder="As on government ID" required hint="Must match your identity documents" />
@@ -474,14 +561,15 @@ export default function ProfilePage() {
               <DocUpload fieldKey="bank_statement_cid" label="Bank Statement (3 months)" required
                 hint="Shows financial activity — required by AML standards" accept=".pdf"
                 currentUrl={profile?.bank_statement_url} onUploaded={handleDocUploaded} />
-              {/* shafqaat — Business logo placeholder (Cloudinary upload coming in next sprint) */}
-              <div className="bg-[#0d1117] rounded-xl border border-white/5 p-4 flex items-center justify-center text-center">
-                <div>
-                  <Camera className="h-6 w-6 text-gray-600 mx-auto mb-2" />
-                  <p className="text-xs text-gray-500 font-semibold">Business Logo</p>
-                  <p className="text-[10px] text-gray-600 mt-1">Coming soon — Cloudinary image upload</p>
-                </div>
-              </div>
+              
+              {/* Business Logo Upload via Cloudinary */}
+              <ImageUpload
+                label="Business Logo"
+                hint="Company or startup logo displayed on your campaigns"
+                currentUrl={form.business_logo_url || profile?.business_logo_url}
+                onUploaded={(url) => setForm((prev) => ({ ...prev, business_logo_url: url }))}
+                isCircle={false}
+              />
             </div>
           </Section>
         )}

@@ -24,9 +24,9 @@ export default async function AdminLayout({ children }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#0d1221] text-white">
+    <div className="min-h-screen bg-[#181A2A] text-white">
       {/* Top Admin Navigation Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-[#161c2e]/90 backdrop-blur-md border-b border-white/10 px-6 py-3.5 flex items-center justify-between">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-[#181A2A]/95 backdrop-blur-md border-b border-white/10 px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-xl bg-[#a78bfa]/10 border border-[#a78bfa]/20 flex items-center justify-center text-[#a78bfa]">
             <ShieldCheck size={20} />

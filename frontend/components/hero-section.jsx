@@ -24,13 +24,13 @@ export default function HeroSection() {
 							</p>
 						</div>
 						<div className="flex-1 flex justify-end">
-							<div className="w-48 h-48 rounded-full bg-white p-3 flex items-center justify-center shadow-lg overflow-hidden">
+							<div className="w-64 h-64 rounded-full bg-white flex items-center justify-center overflow-hidden">
 								<Image
 									src="/b-logo.png"
 									alt="Mascot"
-									width={180}
-									height={180}
-									className="object-contain"
+									width={256}
+									height={256}
+									className="object-cover scale-[1.35]"
 								/>
 							</div>
 						</div>

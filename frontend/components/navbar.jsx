@@ -46,13 +46,13 @@ export default function Navbar() {
     <nav className="w-full bg-[#181A2A]/95 backdrop-blur-md px-6 md:px-12 py-4 flex items-center justify-between sticky top-0 z-50 border-b border-white/5">
       {/* Logo */}
       <Link href="/homepage" className="flex items-center gap-2.5">
-        <div className="w-10 h-10 rounded-full bg-white p-1 flex items-center justify-center shadow-sm overflow-hidden">
+        <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center overflow-hidden">
           <Image
             src="/b-logo.png"
             alt="FundXProut Logo"
-            width={32}
-            height={32}
-            className="object-contain"
+            width={40}
+            height={40}
+            className="object-cover scale-[1.35]"
           />
         </div>
         <span className="text-2xl font-bold text-white">FundXprout</span>
