@@ -203,15 +203,28 @@ export default function MyBidsPage() {
         ? 'Transaction cancelled in MetaMask.'
         : err.message || 'Transaction failed.';
       toast.error(msg, { id: toastId });
+      await loadBids();
     } finally {
       setProcessingId(null);
       clearStep(bid.id);
     }
   }
 
+  // Helper to check if deadline/expiry has passed
+  const isBidExpired = (b: any) => {
+    if (b.status === 'expired') return true;
+    if (['accepted', 'confirmed'].includes(b.status) && b.accept_deadline) {
+      return new Date(b.accept_deadline).getTime() < Date.now();
+    }
+    if (b.status === 'pending' && b.bid_expires_at) {
+      return new Date(b.bid_expires_at).getTime() < Date.now();
+    }
+    return false;
+  };
+
   // ── Render ───────────────────────────────────────────────────
-  const activeBids = bids.filter((b) => ['pending', 'accepted', 'confirmed'].includes(b.status));
-  const historicBids = bids.filter((b) => ['completed', 'rejected', 'cancelled', 'expired'].includes(b.status));
+  const activeBids = bids.filter((b) => ['pending', 'accepted', 'confirmed'].includes(b.status) && !isBidExpired(b));
+  const historicBids = bids.filter((b) => ['completed', 'rejected', 'cancelled', 'expired'].includes(b.status) || isBidExpired(b));
 
   return (
     <div className="flex flex-col gap-6">
