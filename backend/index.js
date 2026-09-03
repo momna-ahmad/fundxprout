@@ -143,11 +143,17 @@ app.post('/api/campaigns/:id/analyze', async (req, res) => {
   }
 });
 
+const http = require('http');
+const { initMarketplaceSocket } = require('./sockets/marketplaceSocket');
+
 app.get('/', (req, res) => {
   res.send('FundXprout Backend Running');
 });
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+initMarketplaceSocket(server);
+
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   scorePendingCampaignsOnStartup();
 });

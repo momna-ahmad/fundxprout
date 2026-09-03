@@ -307,6 +307,14 @@ function ListingRow({ listing, userId, onRefresh }: { listing: Listing; userId: 
                           style={{ color: 'var(--chart-3)', background: 'color-mix(in srgb, var(--chart-3) 12%, transparent)' }}>
                           <CheckCircle2 size={11} /> Accepted
                         </span>
+                      ) : (bid.status === 'expired' || (bid.status === 'pending' && new Date(bid.bid_expires_at) < new Date())) ? (
+                        <span className="flex items-center gap-1 rounded-xl px-2 py-1 text-[11px] font-bold text-muted-foreground border border-border bg-muted/40">
+                          Expired
+                        </span>
+                      ) : bid.status === 'rejected' ? (
+                        <span className="flex items-center gap-1 rounded-xl px-2 py-1 text-[11px] font-bold text-destructive border border-destructive/20 bg-destructive/10">
+                          Rejected
+                        </span>
                       ) : (
                         <button
                           onClick={() => handleAccept(bid.id)}
