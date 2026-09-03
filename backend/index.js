@@ -92,7 +92,7 @@ async function scorePendingCampaignsOnStartup() {
     const { data, error } = await supabase
       .from('campaigns')
       .select('id, title, risk_score')
-      .is('risk_score', 'null');
+      .is('risk_score', null);
 
     if (error) {
       console.error('[risk] Failed to load pending campaigns:', error.message);
