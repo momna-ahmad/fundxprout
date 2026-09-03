@@ -245,24 +245,24 @@ export default function RiskAssessmentPanel({ campaign: initialCampaign }) {
                 <div 
                   key={metric.key} 
                   onClick={() => setExpandedMetric(isExpanded ? null : metric.key)}
-                  className={`p-3 rounded-xl border transition-all duration-300 cursor-pointer ${
+                  className={`p-3.5 rounded-xl border transition-all duration-300 cursor-pointer ${
                     isExpanded 
-                      ? "bg-[#1f2638] border-white/10 shadow-lg" 
-                      : "bg-[#131926]/40 border-transparent hover:bg-[#1a2030]/50 hover:border-white/5"
+                      ? "col-span-1 sm:col-span-2 bg-[#1f2638] border-white/20 shadow-xl ring-1 ring-[#6f42c1]/30" 
+                      : "col-span-1 bg-[#131926]/40 border-transparent hover:bg-[#1a2030]/50 hover:border-white/5"
                   }`}
                 >
                   <div className="flex justify-between items-center text-xs font-medium text-gray-400 mb-1.5">
-                    <span className="flex items-center gap-1 text-gray-300 font-semibold">
+                    <span className="flex items-center gap-1 text-gray-300 font-semibold text-sm">
                       {metric.label}
                     </span>
                     <div className="flex items-center gap-2">
-                      <span className="text-gray-100 font-bold bg-[#121622] px-2 py-0.5 rounded text-[11px] border border-white/5">
+                      <span className="text-gray-100 font-bold bg-[#121622] px-2.5 py-0.5 rounded-md text-xs border border-white/10">
                         {val.toFixed(1)}
                       </span>
                       {isExpanded ? (
-                        <ChevronUp className="w-3.5 h-3.5 text-[#a78bfa] transition-transform" />
+                        <ChevronUp className="w-4 h-4 text-[#a78bfa] transition-transform" />
                       ) : (
-                        <ChevronDown className="w-3.5 h-3.5 text-gray-500 hover:text-gray-300 transition-transform" />
+                        <ChevronDown className="w-4 h-4 text-gray-500 hover:text-gray-300 transition-transform" />
                       )}
                     </div>
                   </div>
@@ -276,15 +276,17 @@ export default function RiskAssessmentPanel({ campaign: initialCampaign }) {
 
                   <div 
                     className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                      isExpanded ? "max-h-40 opacity-100 mt-3" : "max-h-0 opacity-0 pointer-events-none"
+                      isExpanded ? "max-h-[500px] opacity-100 mt-3" : "max-h-0 opacity-0 pointer-events-none"
                     }`}
                   >
-                    <div className="p-3 rounded-lg bg-[#0f121d]/90 border border-white/5 text-[11px] text-gray-300 leading-relaxed font-normal">
-                      <div className="font-bold text-[#a78bfa] mb-1 text-[10px] uppercase tracking-wider flex items-center gap-1">
-                        <FileCheck2 className="w-3 h-3" />
+                    <div className="p-4 rounded-xl bg-[#0f121d] border border-white/10 text-xs text-gray-200 leading-relaxed font-normal shadow-inner">
+                      <div className="font-bold text-[#a78bfa] mb-1.5 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                        <FileCheck2 className="w-4 h-4" />
                         AI Analysis Reasoning
                       </div>
-                      {campaign.ai_reasons?.[metric.key] || "No detailed reasoning provided for this score."}
+                      <p className="text-gray-300 text-xs leading-relaxed">
+                        {campaign.ai_reasons?.[metric.key] || "No detailed reasoning provided for this score."}
+                      </p>
                     </div>
                   </div>
                 </div>
