@@ -5,10 +5,12 @@ import { useActionState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { launchBusinessCampaign } from "@/lib/launchCampaign";
 import { saveDraftCampaign } from "@/lib/action";
+import CampaignStatusButton from "@/components/campaign-status-button";
+import CampaignDocUpload from "@/components/campaign-doc-upload";
 import { getMyProfile } from "@/utils/supabase/getProfile";
 import {
-  Upload, Target, Calendar, DollarSign,
-  Loader2, CheckCircle, FileText, AlertCircle, Coins
+  Upload, Calendar, DollarSign,
+  Loader2, CheckCircle, Coins
 } from "lucide-react";
 import Image from "next/image";
 
@@ -22,7 +24,10 @@ function getInitialFormState(draftCampaign) {
       "",
     duration: draftCampaign?.duration ?? "",
     category: draftCampaign?.category ?? "",
-    image: "null",
+    tokenSymbol:  draftCampaign?.token_symbol ?? draftCampaign?.tokenSymbol ?? "",
+    pricePerToken: draftCampaign?.price_per_token ?? draftCampaign?.pricePerToken ?? "",
+    valuation: draftCampaign?.valuation ?? "",
+
   };
 }
 
@@ -65,95 +70,7 @@ const CAMPAIGN_DOCS = [
   },
 ];
 
-// ── Single document upload widget ──────────────────────────────────────────
-export function DocUpload({ docKey, label, hint, accept, required, onUploaded }) {
-  const [cid, setCid] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setUploading(true);
-    setError("");
-    setCid("");
-
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("name", `${docKey}-${file.name}`);
-
-      const res = await fetch("/api/ipfs-upload", { method: "POST", body: fd });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Upload failed");
-
-      setCid(json.cid);
-      onUploaded(docKey, json.cid);   // notify parent
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <div>
-      <label className="block text-xs font-semibold text-gray-300 mb-1 uppercase tracking-wider">
-        {label}
-      </label>
-      <p className="text-xs text-gray-500 mb-2">{hint}</p>
-
-      <div className="border-2 border-dashed border-white/10 rounded-xl p-5 text-center hover:border-[#6f42c1]/50 transition bg-[#0d1117]">
-        {uploading ? (
-          <div className="flex flex-col items-center gap-1">
-            <Loader2 className="h-6 w-6 text-[#a78bfa] animate-spin" />
-            <p className="text-xs text-gray-400">Uploading to IPFS…</p>
-          </div>
-        ) : cid ? (
-          <div className="flex flex-col items-center gap-1">
-            <CheckCircle className="h-6 w-6 text-green-400" />
-            <p className="text-xs text-green-400 font-medium">Stored on IPFS</p>
-            <p className="text-[10px] text-gray-600 font-mono break-all">{cid}</p>
-            <label
-              htmlFor={`doc-${docKey}`}
-              className="text-xs text-[#a78bfa] cursor-pointer mt-1"
-            >
-              Replace file
-            </label>
-          </div>
-        ) : (
-          <label htmlFor={`doc-${docKey}`} className="cursor-pointer">
-            <FileText className="h-7 w-7 text-gray-600 mx-auto mb-2" />
-            <span className="text-[#a78bfa] text-sm font-semibold hover:text-white transition">
-              Click to upload
-            </span>
-            <p className="text-xs text-gray-600 mt-1">
-              {accept.replace(/,/g, " / ").replace(/image\/\*/g, "images")}
-            </p>
-          </label>
-        )}
-
-        <input
-          data-testid="file-input"
-          id={`doc-${docKey}`}
-          type="file"
-          accept={accept}
-          className="hidden"
-          onChange={handleChange}
-        />
-      </div>
-
-      {error && (
-        <p className="flex items-center gap-1 text-xs text-red-400 mt-1">
-          <AlertCircle className="h-3 w-3" /> {error}
-        </p>
-      )}
-
-      {/* Hidden input so FormData picks up the CID */}
-      <input type="hidden" name={docKey} value={cid} />
-    </div>
-  );
-}
+export { default as DocUpload } from "@/components/campaign-doc-upload";
 
 export function CreateCampaignForm() {
   const router = useRouter();
@@ -194,8 +111,15 @@ export function CreateCampaignForm() {
     duration: searchParams.get("duration") ?? "",
     category: searchParams.get("category") ?? "",
     image_url: searchParams.get("image_url") ?? "",
-    tokenSymbol: searchParams.get("tokenSymbol") ?? "",
-    pricePerToken: searchParams.get("pricePerToken") ?? "",
+    pricePerToken: searchParams.get("price_per_token") ?? "",
+    valuation: searchParams.get("valuation") ?? "",
+    token_symbol: searchParams.get("token_symbol") ?? "",
+    status: searchParams.get("status") ?? "draft",
+    pitch_deck_cid: searchParams.get("pitch_deck_cid") ?? "",
+    business_plan_cid: searchParams.get("business_plan_cid") ?? "",
+    financials_cid: searchParams.get("financials_cid") ?? "",
+    use_of_funds_cid: searchParams.get("use_of_funds_cid") ?? "",
+    product_demo_cid: searchParams.get("product_demo_cid") ?? "",
   };
 }, [searchParams]);
 
@@ -205,11 +129,11 @@ export function CreateCampaignForm() {
 
   // Track CIDs from each doc widget
   const [docCids, setDocCids] = useState({
-    pitch_deck_cid: "",
-    business_plan_cid: "",
-    financials_cid: "",
-    use_of_funds_cid: "",
-    product_demo_cid: "",
+    pitch_deck_cid: draftCampaign?.pitch_deck_cid ?? "",
+    business_plan_cid: draftCampaign?.business_plan_cid ?? "",
+    financials_cid: draftCampaign?.financials_cid ?? "",
+    use_of_funds_cid: draftCampaign?.use_of_funds_cid ?? "",
+    product_demo_cid: draftCampaign?.product_demo_cid ?? "",
   });
 
   // Campaign cover image (Cloudinary — unchanged from before)
@@ -222,6 +146,13 @@ export function CreateCampaignForm() {
   useEffect(() => {
     setFormData(getInitialFormState(draftCampaign));
     setImageUrl(draftCampaign?.image_url ?? "");
+    setDocCids({
+      pitch_deck_cid: draftCampaign?.pitch_deck_cid ?? "",
+      business_plan_cid: draftCampaign?.business_plan_cid ?? "",
+      financials_cid: draftCampaign?.financials_cid ?? "",
+      use_of_funds_cid: draftCampaign?.use_of_funds_cid ?? "",
+      product_demo_cid: draftCampaign?.product_demo_cid ?? "",
+    });
   }, [draftCampaign]);
 
   useEffect(() => {
@@ -298,6 +229,7 @@ export function CreateCampaignForm() {
         productDemoCid: docCids.product_demo_cid,
         tokenSymbol: formData.tokenSymbol,
         pricePerToken: formData.pricePerToken,
+        valuation: formData.valuation,
       });
 
       if (result.error) {
@@ -317,6 +249,26 @@ export function CreateCampaignForm() {
   const requiredDocsMissing = CAMPAIGN_DOCS.filter(
     (d) => d.required && !docCids[d.key]
   );
+
+  const requiredCampaignFields = [
+    formData.title,
+    formData.description,
+    formData.goal,
+    formData.duration,
+    formData.category,
+    formData.tokenSymbol,
+    formData.pricePerToken,
+    formData.valuation,
+    imageUrl,
+    ...CAMPAIGN_DOCS.filter((doc) => doc.required).map((doc) => docCids[doc.key]),
+  ];
+  const completedFields = requiredCampaignFields.filter(
+    (value) => value !== null && value !== undefined && String(value).trim() !== "",
+  ).length;
+  const campaignCompletion = Math.round(
+    (completedFields / requiredCampaignFields.length) * 100,
+  );
+  const isCampaignComplete = campaignCompletion === 100;
 
   const categories = [
     "Technology", "Art", "Music", "Film", "Games",
@@ -410,6 +362,18 @@ export function CreateCampaignForm() {
 
             <div>
               <label className="block text-xs font-semibold text-gray-300 mb-2 uppercase tracking-wider">
+                Pre-launch Business Valuation (ETH) *
+              </label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                <input type="number" name="valuation" value={formData.valuation || ""}
+                  onChange={handleInputChange} className={inputClass + " pl-10"}
+                  placeholder="e.g. 25" step="any" min="0" required />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-2 uppercase tracking-wider">
                 Category *
               </label>
               <select name="category" value={formData.category}
@@ -497,7 +461,7 @@ export function CreateCampaignForm() {
 
               <div className="space-y-5">
                 {CAMPAIGN_DOCS.map((doc) => (
-                  <DocUpload
+                  <CampaignDocUpload
                     key={doc.key}
                     docKey={doc.key}
                     label={doc.label}
@@ -505,6 +469,7 @@ export function CreateCampaignForm() {
                     accept={doc.accept}
                     required={doc.required}
                     onUploaded={handleDocUploaded}
+                    formData={docCids}
                   />
                 ))}
               </div>
@@ -517,16 +482,26 @@ export function CreateCampaignForm() {
               </div>
             )}
 
+            {draftCampaign?.status === "draft" && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>Campaign information complete</span>
+                  <span>{campaignCompletion}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                  <div className="h-full bg-[#037dd6] transition-all" style={{ width: `${campaignCompletion}%` }} />
+                </div>
+              </div>
+            )}
+
             {/* ── Submit ─────────────────────────────────────── */}
             <div className="flex gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={isPending || imageUploading || requiredDocsMissing.length > 0}
-                className="flex-1 bg-[#6f42c1] hover:bg-[#5a3599] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-full transition flex items-center justify-center gap-2 text-sm"
-              >
-                <Target className="h-4 w-4" />
-                {isPending ? "Creating on Blockchain…" : "Launch Campaign"}
-              </button>
+              <CampaignStatusButton
+                status={draftCampaign?.status}
+                campaignId={draftCampaign?.id}
+                isComplete={!imageUploading && isCampaignComplete}
+                isPending={isPending}
+              />
               <button
                 type="button"
                 onClick={handleSaveDraft}

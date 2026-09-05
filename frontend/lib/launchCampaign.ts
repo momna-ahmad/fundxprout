@@ -1,6 +1,6 @@
 // frontend/lib/launchCampaign.ts
 import { ethers } from "ethers";
-import { saveCampaignToDb } from "./action";
+import { getCampaignForLaunch, saveCampaignToDb } from "./action";
 import CampaignFactoryJSON from "@/abis/CampaignFactory.json";
 
 // ⚠️ Hafsa has Updated this after redeploying CampaignFactory with the new event
@@ -23,6 +23,18 @@ export async function launchBusinessCampaign(
   const category = formData.get("category") as string;
   const tokenSymbol = formData.get("tokenSymbol") as string; 
   const pricePerToken = formData.get("pricePerToken") as string;
+  const campaignId = formData.get("campaign_id") as string;
+  const valuation = formData.get("valuation") as string;
+
+  if (!campaignId) {
+    return { error: "Submit this campaign for review and wait for approval before launching." };
+  }
+
+  const campaign = await getCampaignForLaunch(campaignId);
+  if (campaign.error) return { error: campaign.error };
+  if (campaign.status !== "approved") {
+    return { error: "Campaign must be approved before it can be launched." };
+  }
 
   const imageUrl = (formData.get("image_url") as string) ?? "";
   const pitchDeckCid = (formData.get("pitch_deck_cid") as string) ?? "";
@@ -119,7 +131,9 @@ export async function launchBusinessCampaign(
       financialsCid,
       useOfFundsCid,
       productDemoCid,
-      deadline: deadlineIso
+      deadline: deadlineIso,
+      campaignId,
+      valuation,
     });
 
     if (dbResult.error) return { error: dbResult.error };

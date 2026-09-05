@@ -14,6 +14,7 @@ function normalizeCampaign(raw: any) {
         image_url: raw.image_url || raw.image_hash || null,
         transaction_hash: raw.transaction_hash || raw.tx_hash || null,
         price_per_token: raw.price_per_token || "0",
+        valuation: raw.valuation ?? null,
         contract_address: raw.contract_address,
         created_at: raw.created_at,
         owner: raw.owner || raw.owner_wallet,

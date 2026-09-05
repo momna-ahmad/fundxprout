@@ -313,6 +313,7 @@ export async function saveCampaignToDb(formData: any) {
     category: formData.category,
     owner: user.id,
     status: "launched",
+    valuation: formData.valuation ?? null,
     transaction_hash: formData.txHash,
     contract_address: formData.contractAddress , 
     token_contract_address: formData.tokenContractAddress ,
@@ -337,11 +338,18 @@ export async function saveCampaignToDb(formData: any) {
     JSON.stringify(row, null, 2),
   );
 
-  const { data, error } = await supabase
-    .from("campaigns")
-    .insert([row])
-    .select()
-    .single();
+  const campaignQuery = formData.campaignId
+    ? supabase
+        .from("campaigns")
+        .update(row)
+        .eq("id", formData.campaignId)
+        .eq("owner", user.id)
+        .eq("status", "approved")
+        .select()
+        .single()
+    : supabase.from("campaigns").insert([row]).select().single();
+
+  const { data, error } = await campaignQuery;
 
   if (error) {
     console.error("[saveCampaignToDb] Supabase error:", error.message);
@@ -379,19 +387,20 @@ export async function saveDraftCampaign(draftData: any) {
     category: draftData.category,
     owner: user.id,
     image_url: draftData.imageUrl ?? null,
-    status: "draft", // Mark as draft
-    // ── IPFS CIDs (optional for drafts) ─────────────
-    // pitch_deck_cid: draftData.pitchDeckCid ?? null,
-    // business_plan_cid: draftData.businessPlanCid ?? null,
-    // financials_cid: draftData.financialsCid ?? null,
-    // use_of_funds_cid: draftData.useOfFundsCid ?? null,
-    // product_demo_cid: draftData.productDemoCid ?? null,
-    // ── IPFS gateway URLs ─────────────────────────
-    // pitch_deck_url: cidToUrl(draftData.pitchDeckCid),
-    // business_plan_url: cidToUrl(draftData.businessPlanCid),
-    // financials_url: cidToUrl(draftData.financialsCid),
-    // use_of_funds_url: cidToUrl(draftData.useOfFundsCid),
-    // product_demo_url: cidToUrl(draftData.productDemoCid),
+    token_symbol: draftData.tokenSymbol?.trim() || null,
+    price_per_token: draftData.pricePerToken || null,
+    valuation: draftData.valuation || null,
+    status: "draft",
+    pitch_deck_cid: draftData.pitchDeckCid ?? null,
+    business_plan_cid: draftData.businessPlanCid ?? null,
+    financials_cid: draftData.financialsCid ?? null,
+    use_of_funds_cid: draftData.useOfFundsCid ?? null,
+    product_demo_cid: draftData.productDemoCid ?? null,
+    pitch_deck_url: cidToUrl(draftData.pitchDeckCid),
+    business_plan_url: cidToUrl(draftData.businessPlanCid),
+    financials_url: cidToUrl(draftData.financialsCid),
+    use_of_funds_url: cidToUrl(draftData.useOfFundsCid),
+    product_demo_url: cidToUrl(draftData.productDemoCid),
   };
 
   // When editing an existing draft, update that row instead of inserting a new one
@@ -405,7 +414,8 @@ export async function saveDraftCampaign(draftData: any) {
       .from("campaigns")
       .update(row)
       .eq("id", draftData.campaignId)
-      .eq("owner", user.id);
+      .eq("owner", user.id)
+      .eq("status", "draft");
 
     if (error) {
       console.error("[saveDraftCampaign] Supabase update error:", error.message);
@@ -440,6 +450,52 @@ export async function saveDraftCampaign(draftData: any) {
 
   console.log("[saveDraftCampaign] Saved draft campaign id:", data?.id);
   return { success: true, campaignId: data?.id };
+}
+
+export async function submitCampaignForReview(campaignId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: "Unauthorized" };
+  if (!campaignId) return { error: "Campaign ID is required" };
+
+  const { data, error } = await supabase
+    .from("campaigns")
+    .update({ status: "in_review" })
+    .eq("id", campaignId)
+    .eq("owner", user.id)
+    .eq("status", "draft")
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  if (!data) return { error: "Only an owned draft campaign can be submitted for review." };
+
+  revalidatePath("/dashboard");
+  revalidatePath("/create-campaign");
+  return { success: true };
+}
+
+export async function getCampaignForLaunch(campaignId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: "Unauthorized" };
+
+  const { data, error } = await supabase
+    .from("campaigns")
+    .select("status")
+    .eq("id", campaignId)
+    .eq("owner", user.id)
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  if (!data) return { error: "Campaign not found." };
+  return { status: data.status };
 }
 
 export async function saveCreatorProfile(profileData: any) {
@@ -607,5 +663,60 @@ export async function adminVerifyKYB(businessId: string) {
   await logAdminAction(supabase, adminUser.id, "verify_kyb", "business", businessId, "Admin manually approved KYB");
   
   revalidatePath("/admin-dashboard");
+  return { success: true };
+}
+
+export async function adminReviewCampaign(
+  campaignId: string,
+  decision: "approve" | "adjust" | "reject",
+  adjustedValuation?: string,
+) {
+  const supabase = await createClient();
+  const adminUser = await checkAdmin(supabase);
+  if (!adminUser) return { error: "Unauthorized: Admins only" };
+  if (!campaignId) return { error: "Campaign ID is required" };
+
+  if (decision === "adjust") {
+    const parsedValuation = Number(adjustedValuation);
+    if (!adjustedValuation || !Number.isFinite(parsedValuation) || parsedValuation <= 0) {
+      return { error: "Enter a valuation greater than zero before adjusting the cap." };
+    }
+  }
+
+  const update = {
+    ...(decision === "reject" ? { status: "rejected" } : { status: "approved" }),
+    ...(decision === "adjust" ? { valuation: Number(adjustedValuation) } : {}),
+  };
+
+  const { data, error } = await supabase
+    .from("campaigns")
+    .update(update)
+    .eq("id", campaignId)
+    .eq("status", "in_review")
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  if (!data) return { error: "Only campaigns awaiting review can be changed." };
+
+  const action = decision === "approve"
+    ? "approved"
+    : decision === "adjust"
+      ? "approved_override"
+      : "rejected";
+  await logAdminAction(
+    supabase,
+    adminUser.id,
+    action,
+    "campaign",
+    campaignId,
+    decision === "adjust"
+      ? `Admin adjusted campaign valuation cap to ${adjustedValuation}`
+      : `Admin ${decision}d campaign valuation`,
+  );
+
+  revalidatePath("/admin/audit-log");
+  revalidatePath(`/campaigns/${campaignId}`);
+  revalidatePath("/dashboard");
   return { success: true };
 }

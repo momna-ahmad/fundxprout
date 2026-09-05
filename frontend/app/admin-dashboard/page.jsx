@@ -30,6 +30,15 @@ export default async function AdminDashboardPage() {
           </h1>
           <p className="text-gray-400">Manage manual verifications for users and businesses.</p>
         </div>
+        <nav className="flex items-center gap-2" aria-label="Admin navigation">
+          <Link
+            href="/admin/audit-log"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/5 text-sm font-semibold transition"
+          >
+            <FileText className="h-4 w-4" />
+            Audit Log
+          </Link>
+        </nav>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

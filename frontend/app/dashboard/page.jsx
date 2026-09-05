@@ -78,6 +78,8 @@ function calcDaysLeft(createdAt, durationDays) {
 function getStatusStyle(status) {
   const statusMap = {
     draft: { bg: "bg-yellow-500/20", text: "text-yellow-400", label: "Draft" },
+    in_review: { bg: "bg-blue-500/20", text: "text-blue-400", label: "In Review" },
+    approved: { bg: "bg-green-500/20", text: "text-green-400", label: "Approved" },
     launched: { bg: "bg-[#28a745]/20", text: "text-[#28a745]", label: "Launched" },
     ended: { bg: "bg-gray-500/20", text: "text-gray-400", label: "Ended" },
     // completed: { bg: "bg-blue-500/20", text: "text-blue-400", label: "Completed" },
@@ -95,7 +97,16 @@ function buildDraftEditHref(campaign) {
     goal: String(campaign.funding_goal ?? ""),
     duration: String(campaign.duration ?? ""),
     category: String(campaign.category ?? ""),
+    price_per_token: String(campaign.price_per_token ?? ""),
     image_url: String(campaign.image_url ?? ""),
+    status: String(campaign.status ?? "draft"),
+    valuation: String(campaign.valuation ?? ""),
+    token_symbol: String(campaign.token_symbol ?? ""),
+    pitch_deck_cid: String(campaign.pitch_deck_cid ?? ""),
+    business_plan_cid: String(campaign.business_plan_cid ?? ""),
+    financials_cid: String(campaign.financials_cid ?? ""),
+    use_of_funds_cid: String(campaign.use_of_funds_cid ?? ""),
+    product_demo_cid: String(campaign.product_demo_cid ?? ""),
   });
 
   return `/create-campaign?${params.toString()}`;
@@ -454,13 +465,13 @@ export default function DashboardPage() {
                             </button>
                           )}
 
-                          {campaign.status?.toLowerCase() === "draft" && (
+                          {["draft", "approved"].includes(campaign.status?.toLowerCase()) && (
                             <Link
                               href={buildDraftEditHref(campaign)}
                               className="flex items-center gap-1.5 text-yellow-400 hover:text-yellow-300 text-xs font-medium transition-colors"
                             >
                               <Edit2 className="h-3.5 w-3.5" />
-                              Edit Draft
+                              {campaign.status?.toLowerCase() === "approved" ? "Launch Campaign" : "Edit Draft"}
                             </Link>
                           )}
                           <Link
@@ -595,12 +606,12 @@ export default function DashboardPage() {
                             </td>
                             <td className="py-4 px-4">
                               <div className="flex gap-2">
-                                {campaign.status?.toLowerCase() === "draft" && (
+                                {["draft", "approved"].includes(campaign.status?.toLowerCase()) && (
                                   <Link
                                     href={buildDraftEditHref(campaign)}
                                     className="text-yellow-400 hover:text-yellow-300 text-xs font-medium transition-colors"
                                   >
-                                    Edit
+                                    {campaign.status?.toLowerCase() === "approved" ? "Launch" : "Edit"}
                                   </Link>
                                 )}
                                 <Link

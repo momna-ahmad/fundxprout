@@ -21,6 +21,7 @@ import {
     getInvestmentsByCampaign,
 } from "@/utils/investmentUtils";
 import RiskAssessmentPanel from "@/components/RiskAssessmentPanel";
+import CampaignReview from "@/components/admin/campaign-review";
 import { logTransaction } from "@/utils/investmentUtils";
 
 // shafqaat — Helper: calculate days left from created_at + duration
@@ -439,6 +440,10 @@ export default function CampaignDetailPage() {
                                     ))}
                                 </div>
                             </div>
+                        )}
+
+                        {campaign.status?.toLowerCase() === "in_review" && (
+                            <CampaignReview campaign={campaign} />
                         )}
 
                         {/* AI Risk Assessment Panel */}
