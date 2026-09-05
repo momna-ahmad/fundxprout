@@ -1,5 +1,6 @@
 import { io, type Socket } from 'socket.io-client';
 import { useEffect, useState } from 'react';
+import { getOrderBook } from '@/lib/marketplace-api';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -20,6 +21,19 @@ export function useOrderBook(campaignId: string | undefined) {
   useEffect(() => {
     if (!campaignId || typeof window === 'undefined') return;
 
+    // 1. Fetch initial HTTP snapshot
+    getOrderBook(campaignId)
+      .then((data) => {
+        if (data && (data.bids || data.asks)) {
+          setBook({
+            bids: data.bids || [],
+            asks: data.asks || [],
+          });
+        }
+      })
+      .catch((err) => console.warn('[useOrderBook] HTTP snapshot fetch warning:', err));
+
+    // 2. Connect WebSocket for live updates
     const socket: Socket = io(`${SOCKET_URL}/marketplace`, {
       autoConnect: false,
       transports: ['websocket'],

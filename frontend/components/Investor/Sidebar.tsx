@@ -1,21 +1,29 @@
 // components/Investor/Sidebar.tsx
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Wallet, Briefcase, Coins,
   ArrowLeftRight, Settings, LogOut, Sprout, UserCircle, Store,
+  Gavel, ClipboardList,
 } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
 
+import UserAvatar from '@/components/UserAvatar';
+import { getMyProfile } from '@/utils/supabase/getProfile';
+import { useEffect, useState } from 'react';
+
 const navItems = [
   { href: '/investor-dashboard/overview',      label: 'Overview',      icon: LayoutDashboard },
   { href: '/investor-dashboard/portfolio',     label: 'Portfolio',     icon: Wallet          },
-  { href: '/investor-dashboard/campaigns',     label: 'Investments',     icon: Briefcase       },
+  { href: '/investor-dashboard/campaigns',     label: 'Investments',   icon: Briefcase       },
   { href: '/investor-dashboard/tokens',        label: 'My Tokens',     icon: Coins           },
-  { href: '/investor-dashboard/marketplace',    label: 'Marketplace',   icon: Store           },
+  { href: '/investor-dashboard/marketplace',   label: 'Marketplace',   icon: Store           },
+  { href: '/investor-dashboard/my-bids',       label: 'My Bids',       icon: Gavel           },
+  { href: '/investor-dashboard/my-listings',   label: 'My Listings',   icon: ClipboardList   },
   { href: '/investor-dashboard/transactions',  label: 'Transactions',  icon: ArrowLeftRight  },
   { href: '/investor-dashboard/settings',      label: 'Settings',      icon: Settings        },
 ];
@@ -28,6 +36,13 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router   = useRouter();
   const { walletAddress, network, connectWallet, isConnecting } = useWallet();
+  const [profile, setProfile] = useState<any>(null);
+
+  useEffect(() => {
+    getMyProfile().then((p) => {
+      if (p) setProfile(p);
+    });
+  }, []);
 
   const networkOk = network === 11155111;
 
@@ -43,14 +58,14 @@ export default function Sidebar() {
       {/* ── Logo ── */}
       <div className="px-[18px] pt-5 pb-4 border-b border-sidebar-border">
         <div className="flex items-center gap-2.5">
-          <div
-            className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center flex-shrink-0"
-            style={{
-              background: 'linear-gradient(135deg, var(--ring), var(--chart-5))',
-              boxShadow:  '0 4px 14px color-mix(in srgb, var(--ring) 45%, transparent)',
-            }}
-          >
-            <Sprout size={17} color="#fff" />
+          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center overflow-hidden flex-shrink-0">
+            <Image
+              src="/b-logo.png"
+              alt="FundXProut Logo"
+              width={40}
+              height={40}
+              className="object-cover scale-[1.35]"
+            />
           </div>
           <div>
             <div className="font-extrabold text-[14px] leading-tight text-sidebar-foreground tracking-tight">
@@ -147,22 +162,21 @@ export default function Sidebar() {
         )}
 
         {/* Profile card */}
-        <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-sidebar-accent border border-sidebar-border">
-          <div
-            className="w-[30px] h-[30px] rounded-full flex items-center justify-center flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg, var(--ring), var(--chart-5))' }}
-          >
-            <UserCircle size={16} color="#fff" />
-          </div>
+        <Link href="/profile" className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-sidebar-accent border border-sidebar-border hover:border-sidebar-ring transition">
+          <UserAvatar
+            src={profile?.avatar_url}
+            name={profile?.display_name || profile?.full_name}
+            size={32}
+          />
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-bold leading-tight text-sidebar-foreground truncate">
-              {walletAddress ? truncateAddress(walletAddress) : 'Not Connected'}
+              {profile?.display_name || profile?.full_name || (walletAddress ? truncateAddress(walletAddress) : 'My Profile')}
             </div>
-            <div className="text-[10px] text-muted-foreground">
-              {network === 11155111 ? 'Sepolia Testnet' : walletAddress ? `Chain ${network}` : 'MetaMask'}
+            <div className="text-[10px] text-muted-foreground truncate">
+              {profile?.role === 'owner' ? 'Business Owner' : profile?.role === 'admin' ? 'Administrator' : walletAddress ? truncateAddress(walletAddress) : 'Investor'}
             </div>
           </div>
-        </div>
+        </Link>
 
         {/* Sign out */}
         <button

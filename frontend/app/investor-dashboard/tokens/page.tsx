@@ -120,11 +120,12 @@ export default function TokensPage() {
 
               {/* Sparkline */}
               <div className="mb-5">
-                <div className="text-[11px] text-muted-foreground mb-2 font-semibold">Price — Last 12 periods</div>
+                <div className="text-[11px] text-muted-foreground mb-2 font-semibold">Price History (Real Trade Analytics)</div>
                 <ResponsiveContainer width="100%" height={56}>
-                  <LineChart data={(token.priceHistory || []).map((v: number, idx: number) => ({ v, idx }))}>
+                  <LineChart data={(token.priceHistory || []).map((item: any, idx: number) => typeof item === 'object' ? { v: Number(item.price.toFixed(4)), time: item.time } : { v: item, time: `P${idx+1}` })}>
                     <Tooltip
                       formatter={(v: any) => [`$${v}`, 'Price']}
+                      labelFormatter={(label: any, payload: any) => payload?.[0]?.payload?.time || label}
                       contentStyle={{
                         background:   'var(--card)',
                         border:       '1px solid var(--border)',

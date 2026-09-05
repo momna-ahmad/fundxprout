@@ -60,6 +60,8 @@ export async function updateProfile(fields: {
     country?: string;
     website_url?: string;
     wallet_address?: string;
+    avatar_url?: string;
+    business_logo_url?: string;
 }) {
     const supabase = createClient();
 

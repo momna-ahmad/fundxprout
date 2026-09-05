@@ -66,11 +66,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setUser(authUser);
 
+        // Admins bypass owner/investor role selection completely
+        if (authUser.user_metadata?.is_admin === true) {
+          setLoading(false);
+          isSyncing = false;
+          return;
+        }
+
         const { data: profile, error: profileError } = await supabase
           .from("profiles")
-          .select("user_id")
+          .select("user_id, role")
           .eq("user_id", authUser.id)
           .single();
+
+        if (profile?.role === "admin") {
+          setLoading(false);
+          isSyncing = false;
+          return;
+        }
 
         // No profile row in profiles table -> role selection form.
         if (profileError?.code === "PGRST116") {

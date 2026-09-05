@@ -23,7 +23,9 @@ app.use(express.json()); // Parses JSON data
 app.use('/api/campaigns', campaignRoutes);
 const marketplaceRoutes = require('./routes/marketplaceRoutes');
 const walletRoutes = require('./routes/walletRoutes');
+const biddingRoutes = require('./routes/biddingRoutes'); // Auction-style bidding system
 app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/marketplace', biddingRoutes); // Bidding routes share the /api/marketplace prefix
 app.use('/api/wallet', walletRoutes);
 
 // Root Check
