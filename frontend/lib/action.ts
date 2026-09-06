@@ -910,6 +910,8 @@ export async function adminReviewCampaign(
   campaignId: string,
   decision: "approve" | "adjust" | "reject",
   adjustedValuation?: string,
+  rejectionReason?: string,
+  internalNotes?: string,
 ) {
   const supabase = await createClient();
   const adminUser = await checkAdmin(supabase);
@@ -923,16 +925,19 @@ export async function adminReviewCampaign(
     }
   }
 
+  if (decision === "reject" && !rejectionReason?.trim()) {
+    return { error: "A rejection reason is required." };
+  }
+
   const update = {
     ...(decision === "reject" ? { status: "rejected" } : { status: "approved" }),
-    ...(decision === "adjust" ? { valuation: Number(adjustedValuation) } : {}),
+    ...(decision === "adjust" ? { status:"adjusted" , valuation: Number(adjustedValuation) } : {}),
   };
 
   const { data, error } = await supabase
     .from("campaigns")
     .update(update)
     .eq("id", campaignId)
-    .eq("status", "in_review")
     .select("id")
     .maybeSingle();
 
@@ -955,7 +960,19 @@ export async function adminReviewCampaign(
       : `Admin ${decision}d campaign valuation`,
   );
 
-  revalidatePath("/admin/audit-log");
+  // 2. Insert immutable audit trail into campaign_reviews
+const { error: reviewError } = await supabase
+  .from('campaign_reviews')
+  .insert({
+    campaign_id: campaignId,
+    admin_id: adminUser.id,
+    action: action,
+    rejection_reason: decision === "reject" ? rejectionReason?.trim() || null : null,
+    internal_notes: internalNotes?.trim() || null,
+    //valuation_verified: verifiedValuation,
+  });
+
+  revalidatePath("/admin-dashboard/audit-log");
   revalidatePath(`/campaigns/${campaignId}`);
   revalidatePath("/dashboard");
   return { success: true };

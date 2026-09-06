@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CheckCircle, ExternalLink, Loader2, Pencil, XCircle } from "lucide-react";
 import { adminReviewCampaign } from "@/lib/action";
 import { useRouter } from "next/navigation";
+import RejectCampaignModal from "@/components/admin/reject-campaign-modal";
 
 export default function CampaignReviewActions({
   campaignId,
@@ -16,10 +17,15 @@ export default function CampaignReviewActions({
 }) {
   const [adjustedValuation, setAdjustedValuation] = useState(String(valuation ?? ""));
   const [pendingDecision, setPendingDecision] = useState<"approve" | "adjust" | "reject" | null>(null);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
 
-  const handleDecision = async (decision: "approve" | "adjust" | "reject") => {
+  const handleDecision = async (
+    decision: "approve" | "adjust" | "reject",
+    rejectionReason = "",
+    internalNotes = "",
+  ) => {
     if (decision === "adjust" && (!adjustedValuation.trim() || Number(adjustedValuation) <= 0)) {
       setError("Enter a valuation greater than zero before adjusting the cap.");
       return;
@@ -28,13 +34,20 @@ export default function CampaignReviewActions({
     setPendingDecision(decision);
     setError("");
     try {
-      const result = await adminReviewCampaign(campaignId, decision, adjustedValuation);
+      const result = await adminReviewCampaign(
+        campaignId,
+        decision,
+        adjustedValuation,
+        rejectionReason,
+        internalNotes,
+      );
 
       if (result.error) {
         setError(result.error);
         return;
       }
-      router.push("/admin/audit-log")
+      setIsRejectModalOpen(false);
+      router.push("/admin-dashboard/audit-log")
       
     } catch (err) {
       console.error("Failed to update campaign review:", err);
@@ -69,7 +82,10 @@ export default function CampaignReviewActions({
         </button>
         <button
           type="button"
-          onClick={() => handleDecision("reject")}
+          onClick={() => {
+            setError("");
+            setIsRejectModalOpen(true);
+          }}
           disabled={pendingDecision !== null}
           aria-busy={pendingDecision === "reject"}
           className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 disabled:opacity-50 text-xs font-semibold"
@@ -103,6 +119,16 @@ export default function CampaignReviewActions({
       </div>
 
       {error && <p className="text-xs text-red-400">{error}</p>}
+
+      <RejectCampaignModal
+        key={isRejectModalOpen ? "open" : "closed"}
+        open={isRejectModalOpen}
+        pending={pendingDecision === "reject"}
+        onClose={() => setIsRejectModalOpen(false)}
+        onSubmit={(rejectionReason, internalNotes) =>
+          handleDecision("reject", rejectionReason, internalNotes)
+        }
+      />
     </div>
   );
 }

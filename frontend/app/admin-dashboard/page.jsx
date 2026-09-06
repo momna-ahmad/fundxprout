@@ -31,7 +31,7 @@ export default async function AdminDashboardPage() {
         </div>
         <div className="flex gap-3 flex-wrap">
           <Link
-            href="/admin-dashboard/campaigns"
+            href="/admin-dashboard/audit-log"
             className="px-4 py-2 rounded-xl bg-[#a78bfa]/10 hover:bg-[#a78bfa]/20 text-[#a78bfa] border border-[#a78bfa]/20 text-sm font-semibold transition flex items-center gap-2"
           >
             <FileText className="h-4 w-4" /> Campaign Moderation
@@ -43,15 +43,6 @@ export default async function AdminDashboardPage() {
             <Activity className="h-4 w-4" /> Marketplace Orders
           </Link>
         </div>
-        <nav className="flex items-center gap-2" aria-label="Admin navigation">
-          <Link
-            href="/admin/audit-log"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/5 text-sm font-semibold transition"
-          >
-            <FileText className="h-4 w-4" />
-            Audit Log
-          </Link>
-        </nav>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

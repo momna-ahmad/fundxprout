@@ -27,6 +27,7 @@ import { getMyProfile, calcProfileCompletion } from "@/utils/supabase/getProfile
 import Navbar from "@/components/navbar";
 import { ethers } from "ethers";
 import BusinessCampaignJSON from "@/abis/BusinessCampaign.json";
+import CampaignReviewInfo from "@/components/campaign-review-info";
 
 const ITEMS_PER_PAGE = 6; // shafqaat — campaigns per page in My Campaigns tab
 
@@ -82,6 +83,7 @@ function getStatusStyle(status) {
     approved: { bg: "bg-green-500/20", text: "text-green-400", label: "Approved" },
     launched: { bg: "bg-[#28a745]/20", text: "text-[#28a745]", label: "Launched" },
     ended: { bg: "bg-gray-500/20", text: "text-gray-400", label: "Ended" },
+    rejected: { bg: "bg-red-500/20", text: "text-red-500", label: "Rejected" },
     // completed: { bg: "bg-blue-500/20", text: "text-blue-400", label: "Completed" },
     // cancelled: { bg: "bg-red-500/20", text: "text-red-400", label: "Cancelled" },
   };
@@ -381,13 +383,16 @@ export default function DashboardPage() {
                           <h3 className="text-base font-bold text-white">
                             {campaign.title}
                           </h3>
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              statusStyle.bg
-                            } ${statusStyle.text}`}
-                          >
-                            {statusStyle.label}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                statusStyle.bg
+                              } ${statusStyle.text}`}
+                            >
+                              {statusStyle.label}
+                            </span>
+                            <CampaignReviewInfo review={campaign.campaign_review} />
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
@@ -596,13 +601,16 @@ export default function DashboardPage() {
                               {daysLeft > 0 ? `${daysLeft}d` : "Ended"}
                             </td>
                             <td className="py-4 px-4">
-                              <span
-                                className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                  statusStyle.bg
-                                } ${statusStyle.text}`}
-                              >
-                                {statusStyle.label}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                    statusStyle.bg
+                                  } ${statusStyle.text}`}
+                                >
+                                  {statusStyle.label}
+                                </span>
+                                <CampaignReviewInfo review={campaign.campaign_review} />
+                              </div>
                             </td>
                             <td className="py-4 px-4">
                               <div className="flex gap-2">

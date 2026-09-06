@@ -49,7 +49,6 @@ export default async function AuditLogPage() {
             <tr className="text-left text-xs text-gray-500 uppercase tracking-wide border-b border-white/5">
               <th className="p-4 font-medium">Timestamp</th>
               <th className="p-4 font-medium">Company</th>
-              <th className="p-4 font-medium">Admin</th>
               <th className="p-4 font-medium">Calculated → Approved</th>
               <th className="p-4 font-medium">Funding Goal</th>
               <th className="p-4 font-medium">Actions</th>
@@ -69,12 +68,11 @@ export default async function AuditLogPage() {
                       {campaign.created_at ? new Date(campaign.created_at).toLocaleString() : "—"}
                     </td>
                     <td className="p-4 text-white font-medium">{campaign.title}</td>
-                    <td className="p-4 text-gray-400 font-mono text-xs">{campaign.owner}</td>
                     <td className="p-4 text-gray-400">{campaign.valuation ?? "—"}</td>
                     <td className="p-4 text-gray-400">{campaign.funding_goal ?? "—"}</td>
                     <td className="p-4 text-gray-400">
                     <Link
-                      href={`/admin/audit-log/detail/${campaign.id}?ownerId=${encodeURIComponent(campaign.owner)}`}
+                      href={`/admin-dashboard/audit-log/detail/${campaign.id}?ownerId=${encodeURIComponent(campaign.owner)}`}
                       className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/5 text-sm font-semibold transition"
                       >
                         View
