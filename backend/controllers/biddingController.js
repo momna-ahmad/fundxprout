@@ -5,6 +5,7 @@
 
 const { supabaseAdmin } = require('../config/supabaseAdmin');
 const { ethers } = require('ethers');
+const { createNotification } = require('../services/notificationService');
 
 // ─────────────────────────────────────────────
 // POST /api/marketplace/bids
@@ -95,6 +96,18 @@ async function placeBid(req, res) {
       .single();
 
     if (insertErr) throw insertErr;
+
+    // Notify the seller that a new bid arrived on their listing
+    const { data: campaign } = await supabaseAdmin
+      .from('campaigns').select('title').eq('id', listing.campaign_id).single();
+    await createNotification({
+      userId: listing.investor_id,
+      type: 'bid_received',
+      title: 'New Bid Received',
+      message: `Someone placed a bid of ${bid_price_per_token} ETH/token on your "${campaign?.title || 'listing'}" listing.`,
+      link: '/investor-dashboard/my-listings',
+      metadata: { bid_id: bid.id, listing_id: listing_id, campaign_id: listing.campaign_id },
+    });
 
     return res.status(201).json({ bid, message: 'Bid placed successfully. The seller will be notified.' });
   } catch (err) {
@@ -227,6 +240,18 @@ async function acceptBid(req, res) {
       console.warn('[acceptBid] Could not auto-cancel competing bids:', cancelErr.message);
     }
 
+    // Notify the buyer their bid was accepted
+    const { data: campData } = await supabaseAdmin
+      .from('campaigns').select('title').eq('id', bid.campaign_id).single();
+    await createNotification({
+      userId: bid.buyer_id,
+      type: 'bid_accepted',
+      title: 'Your Bid Was Accepted',
+      message: `Your offer on "${campData?.title || 'a listing'}" was accepted. You have 24 hours to confirm the purchase.`,
+      link: '/investor-dashboard/my-bids',
+      metadata: { bid_id: bidId, campaign_id: bid.campaign_id },
+    });
+
     return res.json({
       bid: updatedBid,
       accept_deadline: acceptDeadline.toISOString(),
@@ -273,6 +298,22 @@ async function cancelBid(req, res) {
       .single();
 
     if (updateErr) throw updateErr;
+
+    // Notify the seller that the buyer withdrew their bid
+    const { data: orderData } = await supabaseAdmin
+      .from('token_orders').select('investor_id, campaign_id').eq('id', bid.listing_id).single();
+    if (orderData) {
+      const { data: campData } = await supabaseAdmin
+        .from('campaigns').select('title').eq('id', orderData.campaign_id).single();
+      await createNotification({
+        userId: orderData.investor_id,
+        type: 'bid_cancelled',
+        title: 'A Buyer Withdrew Their Bid',
+        message: `A buyer cancelled their bid on your "${campData?.title || 'listing'}" listing.`,
+        link: '/investor-dashboard/my-listings',
+        metadata: { bid_id: bidId, campaign_id: orderData.campaign_id },
+      });
+    }
 
     return res.json({ bid: updatedBid, message: 'Bid cancelled successfully.' });
   } catch (err) {
@@ -486,6 +527,34 @@ async function completeBid(req, res) {
         .eq('id', bid.listing_id);
     }
 
+    // Notify both buyer and seller the trade is done on-chain
+    const { data: orderData } = await supabaseAdmin
+      .from('token_orders').select('investor_id, campaign_id').eq('id', bid.listing_id).single();
+    const { data: campData } = await supabaseAdmin
+      .from('campaigns').select('title').eq('id', bid.campaign_id).single();
+    const campaignTitle = campData?.title || 'a campaign';
+
+    await Promise.all([
+      // Buyer notification
+      createNotification({
+        userId: bid.buyer_id,
+        type: 'trade_completed',
+        title: 'Trade Completed',
+        message: `Your token purchase from "${campaignTitle}" is complete. View on Etherscan: ${tx_hash.slice(0, 12)}...`,
+        link: '/investor-dashboard/my-bids',
+        metadata: { bid_id: bidId, tx_hash, campaign_id: bid.campaign_id },
+      }),
+      // Seller notification
+      orderData ? createNotification({
+        userId: orderData.investor_id,
+        type: 'trade_completed',
+        title: 'Your Tokens Were Sold',
+        message: `Your token sale for "${campaignTitle}" settled on-chain. Funds are in your wallet.`,
+        link: '/investor-dashboard/my-listings',
+        metadata: { bid_id: bidId, tx_hash, campaign_id: bid.campaign_id },
+      }) : Promise.resolve(),
+    ]);
+
     return res.json({ message: 'Trade completed successfully!', tx_hash });
   } catch (err) {
     console.error('[completeBid] error:', err);
@@ -516,10 +585,67 @@ async function getKycSignature(req, res) {
   }
 }
 
+// ─────────────────────────────────────────────
+// POST /api/marketplace/bids/:bidId/reject
+// Seller rejects a pending bid
+// ─────────────────────────────────────────────
+async function rejectBid(req, res) {
+  const sellerId = req.user?.id;
+  const { bidId } = req.params;
+
+  try {
+    const { data: bid, error: bidErr } = await supabaseAdmin
+      .from('token_bids')
+      .select(`
+        id, listing_id, buyer_id, bid_price_per_token, quantity, status, campaign_id,
+        token_orders:listing_id ( investor_id )
+      `)
+      .eq('id', bidId)
+      .single();
+
+    if (bidErr || !bid) {
+      return res.status(404).json({ error: 'Bid not found' });
+    }
+    if (bid.token_orders?.investor_id !== sellerId) {
+      return res.status(403).json({ error: 'You are not the seller for this listing' });
+    }
+    if (bid.status !== 'pending') {
+      return res.status(400).json({ error: `Cannot reject a bid with status: ${bid.status}` });
+    }
+
+    const { data: updatedBid, error: updateErr } = await supabaseAdmin
+      .from('token_bids')
+      .update({ status: 'rejected', updated_at: new Date().toISOString() })
+      .eq('id', bidId)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    // Notify the buyer that their bid was rejected
+    const { data: campData } = await supabaseAdmin
+      .from('campaigns').select('title').eq('id', bid.campaign_id).single();
+    await createNotification({
+      userId: bid.buyer_id,
+      type: 'bid_rejected',
+      title: 'Bid Rejected',
+      message: `Your offer of ${bid.bid_price_per_token} ETH/token on "${campData?.title || 'a listing'}" was rejected by the seller.`,
+      link: '/investor-dashboard/my-bids',
+      metadata: { bid_id: bidId, campaign_id: bid.campaign_id },
+    });
+
+    return res.json({ bid: updatedBid, message: 'Bid rejected successfully.' });
+  } catch (err) {
+    console.error('[rejectBid] error:', err);
+    return res.status(500).json({ error: 'Failed to reject bid' });
+  }
+}
+
 module.exports = {
   placeBid,
   getListingBids,
   acceptBid,
+  rejectBid,
   cancelBid,
   getMyBids,
   signListing,
@@ -527,3 +653,4 @@ module.exports = {
   completeBid,
   getKycSignature,
 };
+

@@ -6,6 +6,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme-provider';
 import { useWallet } from '@/context/WalletContext';
+import { useNotifications } from '@/hooks/useNotifications';
+import NotificationDrawer from '@/components/NotificationDrawer';
 
 // ── Page title map ───────────────────────────────────────────────────
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
@@ -30,6 +32,10 @@ export default function Navbar() {
 
   // ── Wallet (from WalletProvider in dashboard layout) ──
   const { walletAddress, network, isConnecting, connectWallet } = useWallet();
+
+  // ── Real-Time Notifications ──
+  const [notifOpen, setNotifOpen] = useState(false);
+  const { notifications, unreadCount, markAllRead, markOneRead } = useNotifications();
 
   const [copied, setCopied] = useState(false);
 
@@ -118,13 +124,32 @@ export default function Navbar() {
         </button>
 
         {/* ── Notifications ── */}
-        <button className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-muted border border-border text-muted-foreground hover:bg-card hover:text-foreground hover:border-ring transition-all duration-200 cursor-pointer">
-          <Bell size={15} />
-          <span
-            className="absolute top-[7px] right-[7px] w-1.5 h-1.5 rounded-full border border-background"
-            style={{ background: 'var(--ring)', boxShadow: '0 0 5px var(--ring)' }}
-          />
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setNotifOpen((v) => !v)}
+            title="Notifications"
+            aria-label="Notifications"
+            className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-muted border border-border text-muted-foreground hover:bg-card hover:text-foreground hover:border-ring transition-all duration-200 cursor-pointer"
+          >
+            <Bell size={15} />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-violet-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {notifOpen && (
+            <NotificationDrawer
+              notifications={notifications}
+              unreadCount={unreadCount}
+              onClose={() => setNotifOpen(false)}
+              onMarkAllRead={markAllRead}
+              onMarkOneRead={markOneRead}
+            />
+          )}
+        </div>
+
 
         {/* ── Wallet pill / Connect button ── */}
         {walletAddress ? (

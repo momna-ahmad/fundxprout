@@ -9,6 +9,7 @@ const {
   placeBid,
   getListingBids,
   acceptBid,
+  rejectBid,
   cancelBid,
   getMyBids,
   signListing,
@@ -24,6 +25,7 @@ router.post('/bids/:bidId/cancel', authenticate, cancelBid);             // Canc
 router.post('/bids/:bidId/confirm', authenticate, confirmBid);           // Confirm accepted bid → get settlement data
 router.post('/bids/:bidId/complete', authenticate, completeBid);         // Mark bid complete after on-chain tx succeeds
 router.post('/bids/:bidId/accept', authenticate, acceptBid);             // Accept a bid (shortcut for buyer-side too)
+router.post('/bids/:bidId/reject', authenticate, rejectBid);             // Reject a bid
 
 // ── KYC signature — REQUIRED for on-chain fillOrder() settlement ─────────────
 router.post('/kyc-signature', authenticate, getKycSignature);            // Backend signs KYC ticket for fillOrder()
@@ -34,3 +36,4 @@ router.post('/listings/:listingId/accept-bid/:bidId', authenticate, acceptBid); 
 router.post('/listings/:listingId/sign', authenticate, signListing);     // Store EIP-712 seller signature
 
 module.exports = router;
+

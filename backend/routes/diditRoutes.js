@@ -69,6 +69,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     }
 
     const isApproved = status === 'Approved' || decision === 'Approved' || status === 'Completed';
+    const isDeclined = status === 'Declined' || status === 'Rejected' || decision === 'Declined' || decision === 'Rejected';
 
     if (session_id) {
       await supabaseAdmin
@@ -81,15 +82,50 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         .eq('didit_session_id', session_id);
     }
 
+    const { createNotification } = require('../services/notificationService');
+
     if (isApproved && entityId) {
       if (sessionKind === 'KYC') {
         console.log(`[Didit Webhook] Marking identity_verified = true for user: ${entityId}`);
         await supabaseAdmin.from('profiles').update({ identity_verified: true }).eq('user_id', entityId);
+        
+        await createNotification({
+          userId: entityId,
+          type: 'kyc_status',
+          title: 'Identity Verified',
+          message: 'Your KYC identity verification has been approved! You can now participate in primary campaigns and secondary trading.',
+          link: '/dashboard/profile'
+        });
       } else if (sessionKind === 'KYB') {
         console.log(`[Didit Webhook] Marking kyb_verified = true for business/owner: ${entityId}`);
         await supabaseAdmin.from('businesses').update({ kyb_verified: true }).eq('id', entityId);
         await supabaseAdmin.from('businesses').update({ kyb_verified: true }).eq('owner_id', entityId);
+
+        let targetOwnerId = entityId;
+        const { data: b } = await supabaseAdmin.from('businesses').select('owner_id').or(`id.eq.${entityId},owner_id.eq.${entityId}`).maybeSingle();
+        if (b?.owner_id) targetOwnerId = b.owner_id;
+
+        await createNotification({
+          userId: targetOwnerId,
+          type: 'kyb_status',
+          title: 'Business Verified',
+          message: 'Your KYB business verification has been approved! You can now launch fundraising campaigns.',
+          link: '/dashboard/profile'
+        });
       }
+    } else if (isDeclined && entityId) {
+      let targetUserId = entityId;
+      if (sessionKind === 'KYB') {
+        const { data: b } = await supabaseAdmin.from('businesses').select('owner_id').or(`id.eq.${entityId},owner_id.eq.${entityId}`).maybeSingle();
+        if (b?.owner_id) targetUserId = b.owner_id;
+      }
+      await createNotification({
+        userId: targetUserId,
+        type: sessionKind === 'KYC' ? 'kyc_status' : 'kyb_status',
+        title: `${sessionKind || 'Verification'} Update`,
+        message: `Your ${sessionKind || 'verification'} process could not be approved. Please check your submitted documents.`,
+        link: '/dashboard/profile'
+      });
     }
 
     res.json({ received: true });
@@ -97,6 +133,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     console.error("Webhook error:", error);
     res.status(500).json({ error: error.message });
   }
+
 });
 
 // We need to parse json for the following routes

@@ -38,6 +38,9 @@ const biddingRoutes = require('./routes/biddingRoutes'); // Auction-style biddin
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/marketplace', biddingRoutes); // Bidding routes share the /api/marketplace prefix
 
+const notificationRoutes = require('./routes/notificationRoutes');
+app.use('/api/notifications', notificationRoutes);
+
 
 function runRiskAssessmentForCampaign(campaignId) {
   return new Promise((resolve, reject) => {
