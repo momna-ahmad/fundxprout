@@ -91,27 +91,7 @@ function getStatusStyle(status) {
 }
 
 function buildDraftEditHref(campaign) {
-  const params = new URLSearchParams({
-    idedit: "true",
-    campaignId: String(campaign.id ?? ""),
-    title: String(campaign.title ?? ""),
-    description: String(campaign.description ?? ""),
-    goal: String(campaign.funding_goal ?? ""),
-    duration: String(campaign.duration ?? ""),
-    category: String(campaign.category ?? ""),
-    price_per_token: String(campaign.price_per_token ?? ""),
-    image_url: String(campaign.image_url ?? ""),
-    status: String(campaign.status ?? "draft"),
-    valuation: String(campaign.valuation ?? ""),
-    token_symbol: String(campaign.token_symbol ?? ""),
-    pitch_deck_cid: String(campaign.pitch_deck_cid ?? ""),
-    business_plan_cid: String(campaign.business_plan_cid ?? ""),
-    financials_cid: String(campaign.financials_cid ?? ""),
-    use_of_funds_cid: String(campaign.use_of_funds_cid ?? ""),
-    product_demo_cid: String(campaign.product_demo_cid ?? ""),
-  });
-
-  return `/create-campaign?${params.toString()}`;
+  return `/create-campaign?campaignId=${encodeURIComponent(String(campaign.id ?? ""))}`;
 }
 
 export default function DashboardPage() {

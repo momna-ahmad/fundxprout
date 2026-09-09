@@ -1,6 +1,6 @@
 // frontend/app/create-campaign/page.js
 "use client";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useActionState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { launchBusinessCampaign } from "@/lib/launchCampaign";
@@ -8,6 +8,7 @@ import { saveDraftCampaign } from "@/lib/action";
 import CampaignStatusButton from "@/components/campaign-status-button";
 import CampaignDocUpload from "@/components/campaign-doc-upload";
 import { getMyProfile } from "@/utils/supabase/getProfile";
+import { getCampaignById } from "@/utils/supabase/getCampaigns";
 import {
   Upload, Calendar, DollarSign,
   Loader2, CheckCircle, Coins
@@ -80,8 +81,11 @@ export function CreateCampaignForm() {
   );
 
   const searchParams = useSearchParams();
+  const campaignId = searchParams.get("campaignId");
 
   const [checkingKyb, setCheckingKyb] = useState(true);
+  const [draftCampaign, setDraftCampaign] = useState(null);
+  const [campaignLoading, setCampaignLoading] = useState(Boolean(campaignId));
 
   useEffect(() => {
     async function checkBusinessVerification() {
@@ -97,31 +101,37 @@ export function CreateCampaignForm() {
     checkBusinessVerification();
   }, [router]);
 
-  const draftCampaign = useMemo(() => {
-  const isEditMode = searchParams.get("idedit") === "true";
-  const campaignId = searchParams.get("campaignId");
+  useEffect(() => {
+    if (!campaignId) {
+      setDraftCampaign(null);
+      setCampaignLoading(false);
+      return;
+    }
 
-  if (!isEditMode || !campaignId) return null;
+    let cancelled = false;
 
-  return {
-    id: campaignId,
-    title: searchParams.get("title") ?? "",
-    description: searchParams.get("description") ?? "",
-    funding_goal: searchParams.get("goal") ?? "",
-    duration: searchParams.get("duration") ?? "",
-    category: searchParams.get("category") ?? "",
-    image_url: searchParams.get("image_url") ?? "",
-    pricePerToken: searchParams.get("price_per_token") ?? "",
-    valuation: searchParams.get("valuation") ?? "",
-    token_symbol: searchParams.get("token_symbol") ?? "",
-    status: searchParams.get("status") ?? "draft",
-    pitch_deck_cid: searchParams.get("pitch_deck_cid") ?? "",
-    business_plan_cid: searchParams.get("business_plan_cid") ?? "",
-    financials_cid: searchParams.get("financials_cid") ?? "",
-    use_of_funds_cid: searchParams.get("use_of_funds_cid") ?? "",
-    product_demo_cid: searchParams.get("product_demo_cid") ?? "",
-  };
-}, [searchParams]);
+    async function loadCampaign() {
+      setCampaignLoading(true);
+      const campaign = await getCampaignById(campaignId);
+
+      if (cancelled) return;
+
+      if (!campaign) {
+        alert("Campaign could not be found.");
+        router.push("/dashboard");
+        return;
+      }
+
+      setDraftCampaign(campaign);
+      setCampaignLoading(false);
+    }
+
+    loadCampaign();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [campaignId, router]);
 
   const [formData, setFormData] = useState(() =>
     getInitialFormState(draftCampaign),
@@ -278,11 +288,11 @@ export function CreateCampaignForm() {
   const inputClass =
     "w-full px-4 py-3 bg-[#0d1117] border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#6f42c1] focus:border-transparent transition text-sm";
 
-  if (checkingKyb) {
+  if (checkingKyb || campaignLoading) {
     return (
       <div className="min-h-screen bg-[#181A2A] py-8 pt-24 flex flex-col items-center justify-center text-gray-400">
         <Loader2 className="h-8 w-8 animate-spin mb-4 text-[#a78bfa]" />
-        <p>Checking Business Verification Status...</p>
+        <p>{campaignLoading ? "Loading Campaign..." : "Checking Business Verification Status..."}</p>
       </div>
     );
   }
