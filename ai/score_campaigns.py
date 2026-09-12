@@ -76,7 +76,7 @@ ENGINEERED_FEATURES = [
 # 4. LLM scoring prompt
 # ─────────────────────────────────────────────────────────────────────────────
 SCORING_PROMPT = """You are an expert venture capital analyst evaluating crowdfunding campaigns.
-Analyze the campaign below and rate it on 8 dimensions from 1 (worst) to 10 (best).
+Analyze the campaign below. Rate it on 8 dimensions from 1 (worst) to 10 (best), and provide a concise 1-2 sentence explanation/reasoning of why you assigned that specific rating for each dimension.
 
 Dimensions:
 - problem_statement   : Does it clearly define a real, important problem?
@@ -93,17 +93,38 @@ Campaign Category : {category}
 Campaign Description:
 {description}
 
-Respond with ONLY a valid JSON object. No markdown, no explanation, no extra text.
-Example format:
-{{"problem_statement": 7, "proof_of_capability": 5, "idea_clarity": 8, "differentiation": 6, "gtm_strategy": 4, "business_model": 7, "vagueness": 3, "credibility": 6}}"""
+Respond with ONLY a valid JSON object matching the schema below. No markdown formatting, no prefix/suffix text, no explanations outside of the JSON.
+Schema:
+{{
+  "scores": {{
+    "problem_statement": 7,
+    "proof_of_capability": 5,
+    "idea_clarity": 8,
+    "differentiation": 6,
+    "gtm_strategy": 4,
+    "business_model": 7,
+    "vagueness": 3,
+    "credibility": 6
+  }},
+  "reasons": {{
+    "problem_statement": "Concise reasoning for the problem statement score...",
+    "proof_of_capability": "Concise reasoning for the proof of capability score...",
+    "idea_clarity": "Concise reasoning for the idea clarity score...",
+    "differentiation": "Concise reasoning for the differentiation score...",
+    "gtm_strategy": "Concise reasoning for the gtm strategy score...",
+    "business_model": "Concise reasoning for the business model score...",
+    "vagueness": "Concise reasoning for the vagueness score...",
+    "credibility": "Concise reasoning for the credibility score..."
+  }}
+}}"""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. LLM Clients
 # ─────────────────────────────────────────────────────────────────────────────
 
-def score_with_gemini(title: str, description: str, category: str) -> dict | None:
-    """Call Gemini Flash and parse JSON response. Returns dict or None on failure."""
+def score_with_gemini(title: str, description: str, category: str) -> tuple[dict, dict] | None:
+    """Call Gemini Flash and parse JSON response. Returns (scores, reasons) or None on failure."""
     try:
         from google import genai
         client = genai.Client(api_key=GEMINI_API_KEY)
@@ -119,21 +140,30 @@ def score_with_gemini(title: str, description: str, category: str) -> dict | Non
         raw = response.text.strip()
         # Strip markdown code fences if present (```json ... ```)
         raw = re.sub(r"```json\s*|\s*```", "", raw).strip()
-        scores = json.loads(raw)
+        data = json.loads(raw)
+        
+        scores = data.get("scores", {})
+        reasons = data.get("reasons", {})
+        
         # Validate — all 8 keys must be present and numeric
         for key in LLM_FEATURES:
             if key not in scores:
-                raise ValueError(f"Missing key: {key}")
+                raise ValueError(f"Missing score key: {key}")
             scores[key] = float(scores[key])
+            
+        for key in LLM_FEATURES:
+            if key not in reasons or not reasons[key]:
+                reasons[key] = "No specific reasoning provided."
+                
         print(f"  [OK] Gemini scored: {scores}")
-        return scores
+        return scores, reasons
     except Exception as e:
         print(f"  [WARN] Gemini failed: {e}")
         return None
 
 
-def score_with_groq(title: str, description: str, category: str) -> dict | None:
-    """Call Groq (Llama 3.3) and parse JSON response. Returns dict or None on failure."""
+def score_with_groq(title: str, description: str, category: str) -> tuple[dict, dict] | None:
+    """Call Groq (Llama 3.3) and parse JSON response. Returns (scores, reasons) or None on failure."""
     try:
         from groq import Groq
         client = Groq(api_key=GROQ_API_KEY)
@@ -149,19 +179,28 @@ def score_with_groq(title: str, description: str, category: str) -> dict | None:
         )
         raw = response.choices[0].message.content.strip()
         raw = re.sub(r"```json\s*|\s*```", "", raw).strip()
-        scores = json.loads(raw)
+        data = json.loads(raw)
+        
+        scores = data.get("scores", {})
+        reasons = data.get("reasons", {})
+        
         for key in LLM_FEATURES:
             if key not in scores:
-                raise ValueError(f"Missing key: {key}")
+                raise ValueError(f"Missing score key: {key}")
             scores[key] = float(scores[key])
+            
+        for key in LLM_FEATURES:
+            if key not in reasons or not reasons[key]:
+                reasons[key] = "No specific reasoning provided."
+                
         print(f"  [OK] Groq scored: {scores}")
-        return scores
+        return scores, reasons
     except Exception as e:
         print(f"  [WARN] Groq failed: {e}")
         return None
 
 
-def get_llm_scores(title: str, description: str, category: str) -> dict:
+def get_llm_scores(title: str, description: str, category: str) -> tuple[dict, dict]:
     """
     3-tier fallback:
       1. Gemini Flash (free, primary)
@@ -170,19 +209,21 @@ def get_llm_scores(title: str, description: str, category: str) -> dict:
     """
     # Attempt 1: Gemini
     if GEMINI_API_KEY:
-        scores = score_with_gemini(title, description, category)
-        if scores:
-            return scores
+        res = score_with_gemini(title, description, category)
+        if res:
+            return res
 
     # Attempt 2: Groq
     if GROQ_API_KEY:
-        scores = score_with_groq(title, description, category)
-        if scores:
-            return scores
+        res = score_with_groq(title, description, category)
+        if res:
+            return res
 
     # Attempt 3: Defaults
     print("  [WARN] All LLMs unavailable - using neutral defaults (5.0)")
-    return {k: 5.0 for k in LLM_FEATURES}
+    default_scores = {k: 5.0 for k in LLM_FEATURES}
+    default_reasons = {k: "Default assessment given due to LLM api timeout or limit." for k in LLM_FEATURES}
+    return default_scores, default_reasons
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -298,7 +339,7 @@ def main():
     # Select both base LLM columns (from edge function) AND meta/engineered fields
     query = supabase.table("campaigns").select(
         "id, title, description, category, funding_goal, duration, "
-        "created_at, product_demo_url, risk_score, "
+        "created_at, product_demo_url, risk_score, ai_reasons, "
         "problem_statement, proof_of_capability, idea_clarity, "
         "differentiation, gtm_strategy, business_model, vagueness, credibility"
     )
@@ -341,13 +382,16 @@ def main():
                 for k in LLM_FEATURES
             }
             has_existing = all(existing.get(k) is not None for k in LLM_FEATURES)
+            existing_reasons = campaign.get("ai_reasons")
+            has_existing_reasons = isinstance(existing_reasons, dict) and len(existing_reasons) > 0
 
-            if has_existing:
+            if has_existing and has_existing_reasons:
                 llm_scores = {k: float(existing[k]) for k in LLM_FEATURES}
-                print(f"  [OK] Using existing edge-function scores: {llm_scores}")
+                llm_reasons = existing_reasons
+                print(f"  [OK] Using existing scores and reasons from database.")
             else:
-                print("  [LLM] Base scores null - calling Gemini/Groq...")
-                llm_scores = get_llm_scores(
+                print("  [LLM] Missing scores or reasons - calling Gemini/Groq...")
+                llm_scores, llm_reasons = get_llm_scores(
                     title       = title,
                     description = campaign.get("description") or "",
                     category    = campaign.get("category") or "Other",
@@ -379,11 +423,11 @@ def main():
             update_payload = {
                 "risk_score":       risk_score,
                 "ai_prep_time_days": float(prep_days),
+                "ai_reasons":        llm_reasons,
             }
 
-            # If base LLM columns were null (edge function didn't run),
-            # write our Gemini scores to the canonical base columns too
-            if not has_existing:
+            # If we fetched new scores/reasons, write the scores to individual columns too
+            if not (has_existing and has_existing_reasons):
                 update_payload.update({
                     "problem_statement":   llm_scores["problem_statement"],
                     "proof_of_capability": llm_scores["proof_of_capability"],

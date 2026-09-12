@@ -31,6 +31,14 @@ const walletRoutes = require('./routes/walletRoutes');
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/wallet', walletRoutes);
 
+// Marketplace and wallet APIs must be mounted here because npm start runs index.js.
+
+
+const biddingRoutes = require('./routes/biddingRoutes'); // Auction-style bidding system
+app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/marketplace', biddingRoutes); // Bidding routes share the /api/marketplace prefix
+
+
 function runRiskAssessmentForCampaign(campaignId) {
   return new Promise((resolve, reject) => {
     const scriptPath = path.resolve(__dirname, '..', 'ai', 'score_campaigns.py');
@@ -84,7 +92,7 @@ async function scorePendingCampaignsOnStartup() {
     const { data, error } = await supabase
       .from('campaigns')
       .select('id, title, risk_score')
-      .is('risk_score', 'null');
+      .is('risk_score', null);
 
     if (error) {
       console.error('[risk] Failed to load pending campaigns:', error.message);
@@ -115,11 +123,37 @@ async function scorePendingCampaignsOnStartup() {
   }
 }
 
+app.post('/api/campaigns/:id/analyze', async (req, res) => {
+  try {
+    const campaignId = req.params.id;
+    console.log(`[risk API] Triggering manual AI risk analysis for campaign ${campaignId}...`);
+    await runRiskAssessmentForCampaign(campaignId);
+
+    const { data: updatedCampaign, error } = await supabase
+      .from('campaigns')
+      .select('*')
+      .eq('id', campaignId)
+      .single();
+
+    if (error) throw error;
+    return res.json({ success: true, campaign: updatedCampaign });
+  } catch (err) {
+    console.error('[risk API] Error analyzing campaign:', err);
+    return res.status(500).json({ error: err.message || 'Failed to run AI risk assessment' });
+  }
+});
+
+const http = require('http');
+const { initMarketplaceSocket } = require('./sockets/marketplaceSocket');
+
 app.get('/', (req, res) => {
   res.send('FundXprout Backend Running');
 });
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+initMarketplaceSocket(server);
+
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   scorePendingCampaignsOnStartup();
 });

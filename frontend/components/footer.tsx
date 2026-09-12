@@ -9,11 +9,12 @@ export default function Footer() {
 					<div className="flex flex-col md:flex-row items-start gap-8">
 						{/* Logo + Name */}
 						<div className="flex items-center gap-3 mb-6 md:mb-0">
-							<div className="w-14 h-14 relative">
+							<div className="w-12 h-12 rounded-full bg-white p-1 flex items-center justify-center shadow-md overflow-hidden">
 								<Image
-									src="/logo.png"
+									src="/b-logo.png"
 									alt="FundXProut Logo"
-									fill
+									width={40}
+									height={40}
 									className="object-contain"
 								/>
 							</div>

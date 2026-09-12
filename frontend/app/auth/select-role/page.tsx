@@ -6,11 +6,20 @@ const normalizeRole = (role: string | null | undefined) => {
   const value = (role || "").trim().toLowerCase();
   if (value === "owner" || value === "business_owner") return "owner";
   if (value === "investor") return "investor";
+  if (value === "admin") return "admin";
   return null;
 };
 
-const getRoleRedirect = (role: "owner" | "investor") =>
-  role === "owner" ? "/dashboard" : "/investor-dashboard";
+const getRoleRedirect = (role: "owner" | "investor" | "admin") => {
+  console.log("ROLE" , role)
+  if(role === "owner")
+     return "/dashboard"
+    else if( role === "investor" )
+       return "/investor-dashboard";
+      else if( role === "admin" ) {
+        return "/admin-dashboard" ;
+      }
+};
 
 const deriveFullName = (user: any, profileFullName?: string | null) => {
   if (profileFullName && profileFullName.trim()) return profileFullName.trim();
@@ -42,8 +51,9 @@ export default async function SelectRolePage() {
     .single();
 
   const role = normalizeRole(profile?.role);
+  console.log("User role:", role);
   if (role) {
-    redirect(getRoleRedirect(role));
+    redirect(getRoleRedirect(role) || "/");
   }
 
   const fullName = deriveFullName(user, profile?.full_name);

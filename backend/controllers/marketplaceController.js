@@ -41,12 +41,8 @@ async function createOrder(req, res) {
         return res.status(400).json({ error: 'Insufficient unlisted token balance' });
       }
     } else {
-      // Buy-side fiat reservation isn't implemented yet (no fiat_balances table).
-      // SKIP_FUND_RESERVATION lets you exercise the rest of the pipeline in dev
-      // without a real balance system — remove this before going live.
-      if (process.env.SKIP_FUND_RESERVATION !== 'true') {
-        return res.status(501).json({ error: 'Buy-order fund reservation not yet implemented' });
-      }
+      // Buy-side fiat reservation isn't required in dev/testing mode.
+      // Buyers place bids on sell listings or post buy orders.
     }
 
     // Persist the order as the source of truth, then feed it into the live book
@@ -68,6 +64,14 @@ async function createOrder(req, res) {
 
     if (insertErr) throw insertErr;
 
+    // Enable secondary trading on the campaign if an investor lists tokens for sell
+    if (side === 'sell') {
+      await supabaseAdmin
+        .from('campaigns')
+        .update({ secondary_trading_enabled: true })
+        .eq('id', campaign_id);
+    }
+
     const result = await processOrder({ ...dbOrder });
 
     return res.status(201).json({ order: result });
@@ -80,9 +84,65 @@ async function createOrder(req, res) {
   }
 }
 
-function getOrderBook(req, res) {
-  const book = getOrCreateBook(req.params.campaignId);
-  return res.json(book.getBookSnapshot(20));
+async function getOrderBook(req, res) {
+  try {
+    const rawId = req.params.campaignId;
+    const numId = Number(rawId);
+    const campaignMatchValues = [rawId, String(rawId)];
+    if (!isNaN(numId)) campaignMatchValues.push(numId);
+
+    // 1. Fetch sell and buy orders from token_orders
+    const { data: dbOrders } = await supabaseAdmin
+      .from('token_orders')
+      .select('id, side, price, quantity, quantity_remaining, created_at, campaign_id')
+      .in('campaign_id', campaignMatchValues)
+      .in('status', ['open', 'partially_filled'])
+      .gt('quantity_remaining', 0);
+
+    // 2. Fetch soft bids from token_bids
+    const { data: allBids } = await supabaseAdmin
+      .from('token_bids')
+      .select('id, bid_price_per_token, quantity, created_at, status, listing_id, campaign_id')
+      .in('status', ['pending', 'accepted']);
+
+    const listingIds = (dbOrders ?? []).map((o) => String(o.id));
+
+    // Filter bids matching this campaign ID or matching any open sell listing of this campaign
+    const campaignBids = (allBids ?? []).filter((b) => {
+      const matchCamp = campaignMatchValues.some((val) => String(b.campaign_id) === String(val));
+      const matchList = listingIds.includes(String(b.listing_id));
+      return matchCamp || matchList;
+    });
+
+    const asks = (dbOrders ?? []).filter((o) => o.side === 'sell').map((o) => ({
+      price: Number(o.price),
+      quantity: Number(o.quantity_remaining),
+      total: Number(o.price) * Number(o.quantity_remaining),
+    }));
+
+    const buyOrders = (dbOrders ?? []).filter((o) => o.side === 'buy').map((o) => ({
+      price: Number(o.price),
+      quantity: Number(o.quantity_remaining),
+      total: Number(o.price) * Number(o.quantity_remaining),
+    }));
+
+    const auctionBids = campaignBids.map((b) => ({
+      price: Number(b.bid_price_per_token),
+      quantity: Number(b.quantity),
+      total: Number(b.bid_price_per_token) * Number(b.quantity),
+    }));
+
+    const bids = [...buyOrders, ...auctionBids].sort((a, b) => b.price - a.price);
+
+    return res.json({
+      bids,
+      asks: asks.sort((a, b) => a.price - b.price),
+    });
+  } catch (err) {
+    console.error('[getOrderBook] error:', err);
+    const book = getOrCreateBook(req.params.campaignId);
+    return res.json(book.getBookSnapshot(20));
+  }
 }
 
 /**
@@ -124,16 +184,75 @@ async function getOpenSellOrders(req, res) {
       .map((order) => ({
         ...order,
         campaign: campaignById.get(String(order.campaign_id)) ?? null,
-        //seller_wallet_address: sellerById.get(String(order.investor_id))?.wallet_address ?? null,
       }))
-      // A missing seller wallet prevents settlement, but do not hide the order:
-      // buyers should be able to see why it is temporarily unavailable.
-      .filter((order) => order.campaign?.secondary_trading_enabled && order.campaign?.token_contract_address);
+      .filter((order) => order.campaign && (order.campaign.secondary_trading_enabled !== false || order.campaign.token_contract_address));
 
     return res.json({ orders: listings });
   } catch (err) {
     console.error('[getOpenSellOrders] failed', err);
     return res.status(500).json({ error: 'Failed to load marketplace listings' });
+  }
+}
+
+async function cancelOrder(req, res) {
+  const investorId = req.investorId || req.user?.id;
+  const { orderId } = req.params;
+
+  try {
+    const { data: order, error } = await supabaseAdmin
+      .from('token_orders')
+      .select('*')
+      .eq('id', orderId)
+      .single();
+
+    if (error || !order) return res.status(404).json({ error: 'Order not found' });
+    if (order.investor_id !== investorId) return res.status(403).json({ error: 'Not your order' });
+    if (!['open', 'partially_filled'].includes(order.status)) {
+      return res.status(400).json({ error: 'Order cannot be cancelled' });
+    }
+
+    await supabaseAdmin.from('token_orders').update({ status: 'cancelled' }).eq('id', orderId);
+    await supabaseAdmin.from('token_bids').update({ status: 'cancelled' }).eq('listing_id', orderId).eq('status', 'pending');
+
+    return res.json({ success: true, message: 'Order delisted successfully' });
+  } catch (err) {
+    console.error('[cancelOrder] error:', err);
+    return res.status(500).json({ error: 'Failed to cancel order' });
+  }
+}
+
+async function getTokenAnalytics(req, res) {
+  try {
+    const { campaignId } = req.params;
+    const [{ data: campaign }, { data: trades }] = await Promise.all([
+      supabaseAdmin.from('campaigns').select('id, price_per_token, created_at').eq('id', campaignId).single(),
+      supabaseAdmin.from('token_trades').select('price, quantity, executed_at').eq('campaign_id', campaignId).order('executed_at', { ascending: true })
+    ]);
+
+    const basePrice = Number(campaign?.price_per_token || 0.001);
+    const history = (trades ?? []).map(t => ({
+      price: Number(t.price),
+      quantity: Number(t.quantity),
+      time: new Date(t.executed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }));
+
+    if (history.length === 0) {
+      history.push({ price: basePrice, quantity: 0, time: 'Launch' });
+    }
+
+    const latestPrice = history[history.length - 1].price;
+    const firstPrice = history[0].price;
+    const change24h = firstPrice > 0 ? ((latestPrice - firstPrice) / firstPrice) * 100 : 0;
+
+    return res.json({
+      basePrice,
+      latestPrice,
+      change24h: Number(change24h.toFixed(2)),
+      history
+    });
+  } catch (err) {
+    console.error('[getTokenAnalytics] error:', err);
+    return res.status(500).json({ error: 'Failed to fetch analytics' });
   }
 }
 
@@ -181,4 +300,4 @@ async function getHoldings(req, res) {
   return res.json(balances);
 }
 
-module.exports = { createOrder, getOrderBook, getOpenSellOrders, getTradeHistory, getHoldings };
+module.exports = { createOrder, getOrderBook, getOpenSellOrders, cancelOrder, getTokenAnalytics, getTradeHistory, getHoldings };

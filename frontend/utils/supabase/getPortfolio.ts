@@ -187,7 +187,13 @@ export async function getUserTokenHoldings() {
     // 2. Fetch live ETH/USD price for fiat value calculation
     const ethPrice = await getEthPrice();
 
-    // 3. Group token holdings by campaign_id
+    // 3. Fetch trade history for campaigns
+    const campaignIds = Array.from(new Set((userTokens ?? []).map(t => t.campaign_id)));
+    const { data: allTrades } = campaignIds.length > 0
+      ? await supabase.from("token_trades").select("campaign_id, price, executed_at").in("campaign_id", campaignIds).order("executed_at", { ascending: true })
+      : { data: [] };
+
+    // 4. Group token holdings by campaign_id
     const holdingsMap = new Map<string, any>();
 
     (userTokens ?? []).forEach((tokenRecord) => {
@@ -199,10 +205,25 @@ export async function getUserTokenHoldings() {
       const campaignTitle = campaign?.title || "Unknown";
       const symbol = tokenRecord.token_symbol || campaign?.token_symbol || campaignTitle.split(" ")[0].toUpperCase();
       
-      // price_per_token is in ETH -> convert to USD
       const pptEth = parseFloat(campaign?.price_per_token || "0.001") || 0.001;
       const pricePerTokenUsd = pptEth * ethPrice;
       const tokenAmount = parseFloat(tokenRecord.amount || "0") || 0;
+
+      // Extract real trades for this campaign
+      const campTrades = (allTrades ?? []).filter(t => String(t.campaign_id) === campaignId);
+      const priceHistory = campTrades.map(t => ({
+        price: Number(t.price) * ethPrice,
+        priceEth: Number(t.price),
+        time: new Date(t.executed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }));
+
+      if (priceHistory.length === 0) {
+        priceHistory.push({ price: pricePerTokenUsd, priceEth: pptEth, time: 'Launch' });
+      }
+
+      const latestPrice = priceHistory[priceHistory.length - 1].price;
+      const firstPrice = priceHistory[0].price;
+      const realChange24h = firstPrice > 0 ? ((latestPrice - firstPrice) / firstPrice) * 100 : 0;
 
       if (!holdingsMap.has(campaignId)) {
         holdingsMap.set(campaignId, {
@@ -211,13 +232,13 @@ export async function getUserTokenHoldings() {
           symbol: symbol,
           contractAddress: campaign?.contract_address,
           balance: 0,
-          price: pricePerTokenUsd,   // USD per token
+          price: latestPrice,       // USD per token
           priceEth: pptEth,          // ETH per token
           ethPrice,                  // Live ETH/USD rate
           value: 0,
-          change24h: (Math.random() - 0.5) * 20, // UI mock metric
+          change24h: Number(realChange24h.toFixed(2)),
           color: generateColorForToken(campaignId),
-          priceHistory: generateMockPriceHistory(),
+          priceHistory,
           campaignId,
           totalInvested: 0,
         });
