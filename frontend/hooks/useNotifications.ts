@@ -41,9 +41,10 @@ export function useNotifications() {
     } catch { /* silent */ }
   }, []);
 
-  // Connect socket and join private room
+  // Connect socket and Supabase Realtime subscription
   useEffect(() => {
     let userId: string | null = null;
+    let channel: any = null;
 
     const connect = async () => {
       const supabase = createClient();
@@ -53,6 +54,7 @@ export function useNotifications() {
 
       await fetchNotifications();
 
+      // 1. Socket.IO connection
       const socket: Socket = io(`${API_BASE}/notifications`, {
         transports: ['websocket'],
         autoConnect: false,
@@ -62,11 +64,36 @@ export function useNotifications() {
       socket.emit('joinUserRoom', userId);
 
       socket.on('newNotification', (notification: AppNotification) => {
-        setNotifications((prev) => [notification, ...prev]);
+        setNotifications((prev) => {
+          if (prev.some((n) => n.id === notification.id)) return prev;
+          return [notification, ...prev];
+        });
         setUnreadCount((prev) => prev + 1);
       });
 
       socketRef.current = socket;
+
+      // 2. Supabase Realtime DB Trigger subscription
+      channel = supabase
+        .channel(`user_notifications_${userId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            const newNotif = payload.new as AppNotification;
+            setNotifications((prev) => {
+              if (prev.some((n) => n.id === newNotif.id)) return prev;
+              return [newNotif, ...prev];
+            });
+            setUnreadCount((prev) => prev + 1);
+          }
+        )
+        .subscribe();
     };
 
     connect();
@@ -77,8 +104,13 @@ export function useNotifications() {
         socketRef.current.disconnect();
         socketRef.current = null;
       }
+      if (channel) {
+        const supabase = createClient();
+        supabase.removeChannel(channel);
+      }
     };
   }, [fetchNotifications]);
+
 
   const markAllRead = useCallback(async () => {
     try {
