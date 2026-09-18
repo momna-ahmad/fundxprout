@@ -97,17 +97,31 @@ async function placeBid(req, res) {
 
     if (insertErr) throw insertErr;
 
-    // Notify the seller that a new bid arrived on their listing
+    // Notify both seller and buyer
     const { data: campaign } = await supabaseAdmin
       .from('campaigns').select('title').eq('id', listing.campaign_id).single();
-    await createNotification({
-      userId: listing.investor_id,
-      type: 'bid_received',
-      title: 'New Bid Received',
-      message: `Someone placed a bid of ${bid_price_per_token} ETH/token on your "${campaign?.title || 'listing'}" listing.`,
-      link: '/investor-dashboard/my-listings',
-      metadata: { bid_id: bid.id, listing_id: listing_id, campaign_id: listing.campaign_id },
-    });
+    const campaignTitle = campaign?.title || 'a listing';
+
+    await Promise.all([
+      // Seller notification
+      createNotification({
+        userId: listing.investor_id,
+        type: 'bid_received',
+        title: 'New Bid Received',
+        message: `Someone placed a bid of ${bid_price_per_token} ETH/token on your "${campaignTitle}" listing.`,
+        link: '/investor-dashboard/my-listings',
+        metadata: { bid_id: bid.id, listing_id: listing_id, campaign_id: listing.campaign_id },
+      }),
+      // Buyer confirmation notification
+      createNotification({
+        userId: buyerId,
+        type: 'bid_received',
+        title: 'Bid Placed Successfully',
+        message: `Congratulations! Your offer of ${bid_price_per_token} ETH/token on "${campaignTitle}" has been placed successfully.`,
+        link: '/investor-dashboard/my-bids',
+        metadata: { bid_id: bid.id, listing_id: listing_id, campaign_id: listing.campaign_id },
+      }),
+    ]);
 
     return res.status(201).json({ bid, message: 'Bid placed successfully. The seller will be notified.' });
   } catch (err) {
@@ -115,6 +129,7 @@ async function placeBid(req, res) {
     return res.status(500).json({ error: 'Failed to place bid' });
   }
 }
+
 
 // ─────────────────────────────────────────────
 // GET /api/marketplace/listings/:listingId/bids
@@ -299,21 +314,31 @@ async function cancelBid(req, res) {
 
     if (updateErr) throw updateErr;
 
-    // Notify the seller that the buyer withdrew their bid
+    // Notify both buyer and seller
     const { data: orderData } = await supabaseAdmin
       .from('token_orders').select('investor_id, campaign_id').eq('id', bid.listing_id).single();
-    if (orderData) {
-      const { data: campData } = await supabaseAdmin
-        .from('campaigns').select('title').eq('id', orderData.campaign_id).single();
-      await createNotification({
+    const { data: campData } = await supabaseAdmin
+      .from('campaigns').select('title').eq('id', orderData?.campaign_id || bid.campaign_id).single();
+    const campaignTitle = campData?.title || 'a listing';
+
+    await Promise.all([
+      orderData ? createNotification({
         userId: orderData.investor_id,
         type: 'bid_cancelled',
         title: 'A Buyer Withdrew Their Bid',
-        message: `A buyer cancelled their bid on your "${campData?.title || 'listing'}" listing.`,
+        message: `A buyer cancelled their bid on your "${campaignTitle}" listing.`,
         link: '/investor-dashboard/my-listings',
         metadata: { bid_id: bidId, campaign_id: orderData.campaign_id },
-      });
-    }
+      }) : Promise.resolve(),
+      createNotification({
+        userId: buyerId,
+        type: 'bid_cancelled',
+        title: 'Bid Cancelled',
+        message: `Your bid on "${campaignTitle}" has been cancelled.`,
+        link: '/investor-dashboard/my-bids',
+        metadata: { bid_id: bidId },
+      }),
+    ]);
 
     return res.json({ bid: updatedBid, message: 'Bid cancelled successfully.' });
   } catch (err) {
@@ -321,6 +346,7 @@ async function cancelBid(req, res) {
     return res.status(500).json({ error: 'Failed to cancel bid' });
   }
 }
+
 
 // ─────────────────────────────────────────────
 // GET /api/marketplace/bids/my

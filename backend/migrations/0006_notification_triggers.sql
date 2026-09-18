@@ -33,7 +33,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ─────────────────────────────────────────────────────────────
--- 2. Trigger on Campaign Status & Funding Milestones
+-- 2. Trigger on Campaign Status, Funding & AI Risk Assessment
 -- ─────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.fn_trg_campaign_notifications()
 RETURNS trigger AS $$
@@ -93,6 +93,19 @@ BEGIN
     );
   END IF;
 
+  -- AI Risk Score Updated (Notify Founder)
+  IF (OLD.risk_score IS NULL AND NEW.risk_score IS NOT NULL) OR 
+     (OLD.risk_score IS DISTINCT FROM NEW.risk_score AND NEW.risk_score IS NOT NULL) THEN
+    PERFORM public.fn_create_notification(
+      NEW.owner,
+      'campaign_approved',
+      'AI Risk Assessment Score Ready',
+      'Your campaign "' || COALESCE(NEW.title, 'Equity Raising') || '" was analyzed by AI with a Risk Score of ' || ROUND(NEW.risk_score::numeric, 2) || '/10.',
+      '/dashboard',
+      jsonb_build_object('campaign_id', NEW.id, 'risk_score', NEW.risk_score)
+    );
+  END IF;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -104,7 +117,39 @@ CREATE TRIGGER trg_campaign_notifications
   EXECUTE FUNCTION public.fn_trg_campaign_notifications();
 
 -- ─────────────────────────────────────────────────────────────
--- 3. Trigger on Investments / Pledges
+-- 3. Trigger on Token Orders (Sell Listing Created)
+-- ─────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.fn_trg_token_order_notifications()
+RETURNS trigger AS $$
+DECLARE
+  v_title text;
+BEGIN
+  IF (TG_OP = 'INSERT') THEN
+    SELECT title INTO v_title FROM public.campaigns WHERE id = NEW.campaign_id;
+
+    IF NEW.side = 'sell' THEN
+      PERFORM public.fn_create_notification(
+        NEW.investor_id,
+        'bid_received',
+        'Sell Order Listed Successfully',
+        'You successfully listed ' || NEW.quantity || ' tokens of "' || COALESCE(v_title, 'a campaign') || '" for sale at ' || NEW.price || ' ETH/token.',
+        '/investor-dashboard/my-listings',
+        jsonb_build_object('order_id', NEW.id, 'campaign_id', NEW.campaign_id, 'price', NEW.price, 'quantity', NEW.quantity)
+      );
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trg_token_order_notifications ON public.token_orders;
+CREATE TRIGGER trg_token_order_notifications
+  AFTER INSERT ON public.token_orders
+  FOR EACH ROW
+  EXECUTE FUNCTION public.fn_trg_token_order_notifications();
+
+-- ─────────────────────────────────────────────────────────────
+-- 4. Trigger on Investments / Pledges (Notifies Founder AND Investor)
 -- ─────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.fn_trg_investment_notifications()
 RETURNS trigger AS $$
@@ -116,6 +161,7 @@ BEGIN
   FROM public.campaigns
   WHERE id = NEW.campaign_id;
 
+  -- Notify Campaign Founder
   IF v_owner IS NOT NULL THEN
     PERFORM public.fn_create_notification(
       v_owner,
@@ -124,6 +170,18 @@ BEGIN
       'An investor pledged ' || NEW.amount || ' ETH to your campaign "' || COALESCE(v_title, 'Equity Raising') || '".',
       '/dashboard',
       jsonb_build_object('campaign_id', NEW.campaign_id, 'amount', NEW.amount, 'investor_id', NEW.investor_id)
+    );
+  END IF;
+
+  -- Notify Investor (Pledger)
+  IF NEW.investor_id IS NOT NULL THEN
+    PERFORM public.fn_create_notification(
+      NEW.investor_id,
+      'trade_completed',
+      'Investment Successful',
+      'You successfully pledged ' || NEW.amount || ' ETH to "' || COALESCE(v_title, 'Equity Raising') || '".',
+      '/investor-dashboard/portfolio',
+      jsonb_build_object('campaign_id', NEW.campaign_id, 'amount', NEW.amount, 'tx_hash', NEW.transaction_hash)
     );
   END IF;
 
@@ -138,7 +196,7 @@ CREATE TRIGGER trg_investment_notifications
   EXECUTE FUNCTION public.fn_trg_investment_notifications();
 
 -- ─────────────────────────────────────────────────────────────
--- 4. Trigger on Secondary Market Bids & Offers
+-- 5. Trigger on Secondary Market Bids & Offers (Both Buyer & Seller)
 -- ─────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.fn_trg_token_bid_notifications()
 RETURNS trigger AS $$
@@ -149,15 +207,28 @@ BEGIN
   SELECT title INTO v_title FROM public.campaigns WHERE id = NEW.campaign_id;
   SELECT investor_id INTO v_seller FROM public.token_orders WHERE id = NEW.listing_id;
 
-  -- New Bid Placed
+  -- New Bid / Offer Placed
   IF (TG_OP = 'INSERT') THEN
+    -- Notify Listing Seller (Investor receiving the bid)
     IF v_seller IS NOT NULL THEN
       PERFORM public.fn_create_notification(
         v_seller,
         'bid_received',
-        'New Bid Received',
-        'Someone placed a bid of ' || NEW.bid_price_per_token || ' ETH/token on your "' || COALESCE(v_title, 'listing') || '" listing.',
+        'New Offer Received on Your Listing',
+        'Someone placed a bid of ' || NEW.bid_price_per_token || ' ETH/token for ' || NEW.quantity || ' tokens on your "' || COALESCE(v_title, 'listing') || '" listing.',
         '/investor-dashboard/my-listings',
+        jsonb_build_object('bid_id', NEW.id, 'listing_id', NEW.listing_id, 'campaign_id', NEW.campaign_id)
+      );
+    END IF;
+
+    -- Notify Buyer (Investor who placed the bid)
+    IF NEW.buyer_id IS NOT NULL THEN
+      PERFORM public.fn_create_notification(
+        NEW.buyer_id,
+        'bid_received',
+        'Bid Placed Successfully',
+        'Congratulations! Your offer of ' || NEW.bid_price_per_token || ' ETH/token on "' || COALESCE(v_title, 'listing') || '" was placed successfully.',
+        '/investor-dashboard/my-bids',
         jsonb_build_object('bid_id', NEW.id, 'listing_id', NEW.listing_id, 'campaign_id', NEW.campaign_id)
       );
     END IF;
@@ -179,6 +250,36 @@ BEGIN
         'bid_rejected',
         'Bid Rejected',
         'Your offer of ' || NEW.bid_price_per_token || ' ETH/token on "' || COALESCE(v_title, 'a listing') || '" was rejected by the seller.',
+        '/investor-dashboard/my-bids',
+        jsonb_build_object('bid_id', NEW.id, 'campaign_id', NEW.campaign_id)
+      );
+    ELSIF (NEW.status = 'cancelled') THEN
+      -- Notify Buyer
+      PERFORM public.fn_create_notification(
+        NEW.buyer_id,
+        'bid_cancelled',
+        'Bid Cancelled',
+        'Your bid on "' || COALESCE(v_title, 'a listing') || '" has been cancelled.',
+        '/investor-dashboard/my-bids',
+        jsonb_build_object('bid_id', NEW.id, 'campaign_id', NEW.campaign_id)
+      );
+      -- Notify Seller
+      IF v_seller IS NOT NULL THEN
+        PERFORM public.fn_create_notification(
+          v_seller,
+          'bid_cancelled',
+          'A Buyer Withdrew Their Bid',
+          'A buyer cancelled their bid of ' || NEW.bid_price_per_token || ' ETH/token on your "' || COALESCE(v_title, 'listing') || '" listing.',
+          '/investor-dashboard/my-listings',
+          jsonb_build_object('bid_id', NEW.id, 'campaign_id', NEW.campaign_id)
+        );
+      END IF;
+    ELSIF (NEW.status = 'expired') THEN
+      PERFORM public.fn_create_notification(
+        NEW.buyer_id,
+        'bid_rejected',
+        'Bid Expired',
+        'Your bid of ' || NEW.bid_price_per_token || ' ETH/token on "' || COALESCE(v_title, 'a listing') || '" has expired.',
         '/investor-dashboard/my-bids',
         jsonb_build_object('bid_id', NEW.id, 'campaign_id', NEW.campaign_id)
       );
@@ -217,7 +318,7 @@ CREATE TRIGGER trg_token_bid_notifications
   EXECUTE FUNCTION public.fn_trg_token_bid_notifications();
 
 -- ─────────────────────────────────────────────────────────────
--- 5. Trigger on Verification Status (KYC & KYB)
+-- 6. Trigger on Verification Status (KYC & KYB)
 -- ─────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.fn_trg_profile_kyc_notifications()
 RETURNS trigger AS $$
@@ -266,7 +367,7 @@ CREATE TRIGGER trg_business_kyb_notifications
   EXECUTE FUNCTION public.fn_trg_business_kyb_notifications();
 
 -- ─────────────────────────────────────────────────────────────
--- 6. Trigger on Admin Action Logs
+-- 7. Trigger on Admin Action Logs
 -- ─────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.fn_trg_admin_action_notifications()
 RETURNS trigger AS $$
@@ -308,7 +409,7 @@ CREATE TRIGGER trg_admin_action_notifications
   EXECUTE FUNCTION public.fn_trg_admin_action_notifications();
 
 -- ─────────────────────────────────────────────────────────────
--- 7. Enable Supabase Realtime for Notifications Table
+-- 8. Enable Supabase Realtime for Notifications Table
 -- ─────────────────────────────────────────────────────────────
 DO $$
 BEGIN

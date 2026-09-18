@@ -74,6 +74,23 @@ async function createOrder(req, res) {
 
     const result = await processOrder({ ...dbOrder });
 
+    // Send success notification to order creator
+    const { data: campaign } = await supabaseAdmin
+      .from('campaigns').select('title').eq('id', campaign_id).single();
+    const campaignTitle = campaign?.title || 'a campaign';
+
+    const { createNotification } = require('../services/notificationService');
+    await createNotification({
+      userId: investorId,
+      type: 'bid_received',
+      title: side === 'sell' ? 'Sell Order Listed Successfully' : 'Order Placed Successfully',
+      message: side === 'sell'
+        ? `You successfully listed ${quantity} tokens of "${campaignTitle}" for sale at ${price} ETH/token.`
+        : `Your order for ${quantity} tokens of "${campaignTitle}" at ${price} ETH/token has been placed.`,
+      link: side === 'sell' ? '/investor-dashboard/my-listings' : '/investor-dashboard/my-bids',
+      metadata: { order_id: dbOrder.id, campaign_id, price, quantity },
+    });
+
     return res.status(201).json({ order: result });
   } catch (err) {
     if (err instanceof ValidationError) {
@@ -83,6 +100,7 @@ async function createOrder(req, res) {
     return res.status(500).json({ error: 'Failed to place order' });
   }
 }
+
 
 async function getOrderBook(req, res) {
   try {

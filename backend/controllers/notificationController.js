@@ -3,16 +3,17 @@
 
 const { supabaseAdmin } = require('../config/supabaseAdmin');
 
-// GET /api/notifications — fetch latest 30 notifications for the logged-in user
+// GET /api/notifications — fetch notifications for the logged-in user (up to 100)
 async function getNotifications(req, res) {
   const userId = req.user?.id;
+  const limit = Math.min(parseInt(req.query.limit || '100'), 200);
   try {
     const { data, error } = await supabaseAdmin
       .from('notifications')
       .select('id, type, title, message, link, is_read, metadata, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
-      .limit(30);
+      .limit(limit);
 
     if (error) throw error;
     const unreadCount = (data || []).filter((n) => !n.is_read).length;
@@ -22,6 +23,7 @@ async function getNotifications(req, res) {
     return res.status(500).json({ error: 'Failed to load notifications' });
   }
 }
+
 
 // POST /api/notifications/:id/read — mark one as read
 async function markOneRead(req, res) {

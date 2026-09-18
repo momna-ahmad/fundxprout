@@ -31,9 +31,10 @@ export function useNotifications() {
       const token = sessionData.session?.access_token;
       if (!token) return;
 
-      const res = await fetch(`${API_BASE}/api/notifications`, {
+      const res = await fetch(`${API_BASE}/api/notifications?limit=100`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+
       if (!res.ok) return;
       const { notifications: data, unreadCount: count } = await res.json();
       setNotifications(data || []);
