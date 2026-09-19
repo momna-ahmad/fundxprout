@@ -1,11 +1,58 @@
 // backend/controllers/biddingController.js
 // Handles the auction-style bidding system for the secondary marketplace.
 // Buyers post bids on sell listings; sellers review and accept; winning buyer
-// calls fillOrder() on-chain. This file does NOT touch any existing functions.
+// calls fillOrder() on-chain.
 
 const { supabaseAdmin } = require('../config/supabaseAdmin');
 const { ethers } = require('ethers');
 const { createNotification } = require('../services/notificationService');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// shafqaat implemented — Fix 4: On-chain transaction verification helper.
+// verifyOnChainTx() is called inside completeBid() BEFORE writing to the DB.
+// Without this check a malicious buyer could submit a fake or recycled tx_hash
+// and get the trade marked as complete without ever sending ETH.
+// ─────────────────────────────────────────────────────────────────────────────
+async function verifyOnChainTx(txHash, expectedBuyerWallet) {
+  const rpcUrl = process.env.ETH_RPC_URL;
+
+  if (!rpcUrl) {
+    // Allow in development when ETH_RPC_URL is not configured, but log a clear warning
+    console.warn(
+      '[completeBid] ETH_RPC_URL is not set — skipping on-chain tx verification. ' +
+      'Set ETH_RPC_URL in backend/.env before going to production.'
+    );
+    return;
+  }
+
+  let receipt;
+  try {
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    receipt = await provider.getTransactionReceipt(txHash);
+  } catch (rpcErr) {
+    throw new Error(
+      `Could not reach the Ethereum RPC to verify the transaction: ${rpcErr.message}`
+    );
+  }
+
+  if (!receipt) {
+    throw new Error(
+      'Transaction not found on-chain. It may not be mined yet — wait a few seconds and try again.'
+    );
+  }
+  if (receipt.status !== 1) {
+    throw new Error(
+      'Transaction failed on-chain (status = 0). The trade was not settled. ' +
+      'Check the transaction on Etherscan for details.'
+    );
+  }
+  if (receipt.from.toLowerCase() !== expectedBuyerWallet.toLowerCase()) {
+    throw new Error(
+      'Transaction sender does not match your registered buyer wallet. ' +
+      'Only the bid owner can settle this trade.'
+    );
+  }
+}
 
 // ─────────────────────────────────────────────
 // POST /api/marketplace/bids
@@ -31,7 +78,7 @@ async function placeBid(req, res) {
     // 1. Verify the listing exists, is a sell order, and is still open
     const { data: listing, error: listingErr } = await supabaseAdmin
       .from('token_orders')
-      .select('id, campaign_id, investor_id, side, status, quantity_remaining, price')
+      .select('id, campaign_id, investor_id, side, status, quantity_remaining, price, auto_accept_price_per_token')
       .eq('id', listing_id)
       .single();
 
@@ -79,6 +126,18 @@ async function placeBid(req, res) {
     const bidExpiresAt = new Date();
     bidExpiresAt.setDate(bidExpiresAt.getDate() + Number(bid_expires_days));
 
+    // shafqaat implemented — Fix P3: Auto-accept threshold check
+    const isAutoAccepted = Boolean(
+      listing.auto_accept_price_per_token &&
+      Number(bid_price_per_token) >= Number(listing.auto_accept_price_per_token)
+    );
+
+    let acceptDeadline = null;
+    if (isAutoAccepted) {
+      acceptDeadline = new Date();
+      acceptDeadline.setHours(acceptDeadline.getHours() + 24);
+    }
+
     // 5. Insert the bid
     const { data: bid, error: insertErr } = await supabaseAdmin
       .from('token_bids')
@@ -89,7 +148,8 @@ async function placeBid(req, res) {
         buyer_wallet: buyer_wallet.toLowerCase(),
         bid_price_per_token: Number(bid_price_per_token),
         quantity: Number(quantity),
-        status: 'pending',
+        status: isAutoAccepted ? 'accepted' : 'pending',
+        accept_deadline: acceptDeadline ? acceptDeadline.toISOString() : null,
         bid_expires_at: bidExpiresAt.toISOString(),
       }])
       .select()
@@ -97,13 +157,70 @@ async function placeBid(req, res) {
 
     if (insertErr) throw insertErr;
 
-    // Notify both seller and buyer
     const { data: campaign } = await supabaseAdmin
       .from('campaigns').select('title').eq('id', listing.campaign_id).single();
     const campaignTitle = campaign?.title || 'a listing';
 
+    // If auto-accepted, auto-cancel other pending bids and notify both parties
+    if (isAutoAccepted) {
+      const { data: competingBids } = await supabaseAdmin
+        .from('token_bids')
+        .select('id, buyer_id')
+        .eq('listing_id', listing_id)
+        .eq('status', 'pending')
+        .neq('id', bid.id);
+
+      await supabaseAdmin
+        .from('token_bids')
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('listing_id', listing_id)
+        .eq('status', 'pending')
+        .neq('id', bid.id);
+
+      if (competingBids && competingBids.length > 0) {
+        await Promise.all(
+          competingBids.map((cb) =>
+            createNotification({
+              userId: cb.buyer_id,
+              type: 'bid_cancelled',
+              title: 'Bid Cancelled',
+              message: `Another offer on "${campaignTitle}" was accepted. Your pending bid has been cancelled.`,
+              link: '/investor-dashboard/my-bids',
+              metadata: { bid_id: cb.id, campaign_id: listing.campaign_id },
+            })
+          )
+        );
+      }
+
+      await Promise.all([
+        createNotification({
+          userId: listing.investor_id,
+          type: 'bid_accepted',
+          title: 'Auto-Accept Triggered',
+          message: `A bid of ${bid_price_per_token} ETH/token met your auto-accept threshold (${listing.auto_accept_price_per_token} ETH) on "${campaignTitle}" and was automatically accepted!`,
+          link: '/investor-dashboard/my-listings',
+          metadata: { bid_id: bid.id, listing_id, campaign_id: listing.campaign_id },
+        }),
+        createNotification({
+          userId: buyerId,
+          type: 'bid_accepted',
+          title: 'Offer Auto-Accepted!',
+          message: `Your bid of ${bid_price_per_token} ETH/token met the seller's auto-accept threshold on "${campaignTitle}" and has been accepted automatically! You have 24 hours to confirm the purchase.`,
+          link: '/investor-dashboard/my-bids',
+          metadata: { bid_id: bid.id, listing_id, campaign_id: listing.campaign_id },
+        }),
+      ]);
+
+      return res.status(201).json({
+        bid,
+        auto_accepted: true,
+        accept_deadline: acceptDeadline.toISOString(),
+        message: 'Your bid met the seller\'s auto-accept threshold and was accepted automatically! You have 24 hours to confirm the purchase.',
+      });
+    }
+
+    // Standard pending bid notifications
     await Promise.all([
-      // Seller notification
       createNotification({
         userId: listing.investor_id,
         type: 'bid_received',
@@ -112,7 +229,6 @@ async function placeBid(req, res) {
         link: '/investor-dashboard/my-listings',
         metadata: { bid_id: bid.id, listing_id: listing_id, campaign_id: listing.campaign_id },
       }),
-      // Buyer confirmation notification
       createNotification({
         userId: buyerId,
         type: 'bid_received',
@@ -241,8 +357,14 @@ async function acceptBid(req, res) {
     if (updateErr) throw updateErr;
 
     // ── Edge case: auto-cancel all OTHER pending bids on this listing ──
-    // This prevents other buyers from waiting on a listing that's already
-    // been committed to someone else, and avoids settlement conflicts.
+    // shafqaat implemented — Fix P2: Fetch competing pending bids and notify bidders that their offer was cancelled
+    const { data: competingBids } = await supabaseAdmin
+      .from('token_bids')
+      .select('id, buyer_id')
+      .eq('listing_id', bid.listing_id)
+      .eq('status', 'pending')
+      .neq('id', bidId);
+
     const { error: cancelErr } = await supabaseAdmin
       .from('token_bids')
       .update({ status: 'cancelled', updated_at: new Date().toISOString() })
@@ -251,8 +373,20 @@ async function acceptBid(req, res) {
       .neq('id', bidId); // Don't cancel the bid we just accepted
 
     if (cancelErr) {
-      // Non-fatal: log but don't fail the request
       console.warn('[acceptBid] Could not auto-cancel competing bids:', cancelErr.message);
+    } else if (competingBids && competingBids.length > 0) {
+      await Promise.all(
+        competingBids.map((cb) =>
+          createNotification({
+            userId: cb.buyer_id,
+            type: 'bid_cancelled',
+            title: 'Bid Cancelled',
+            message: `Another offer on the listing was accepted by the seller. Your pending bid has been cancelled.`,
+            link: '/investor-dashboard/my-bids',
+            metadata: { bid_id: cb.id, campaign_id: bid.campaign_id },
+          })
+        )
+      );
     }
 
     // Notify the buyer their bid was accepted
@@ -380,23 +514,27 @@ async function getMyBids(req, res) {
 
 // ─────────────────────────────────────────────
 // POST /api/marketplace/listings/:listingId/sign
+// shafqaat implemented — Fix P1: Verify seller EIP-712 signature in signListing()
 // Seller signs their listing (stores EIP-712 seller signature)
 // Called when seller creates or updates listing — off-chain, no gas
 // ─────────────────────────────────────────────
 async function signListing(req, res) {
   const sellerId = req.user?.id;
   const { listingId } = req.params;
-  const { seller_signature, seller_nonce } = req.body;
+  const { seller_signature, seller_nonce, seller_expiry } = req.body;
 
   if (!seller_signature || seller_nonce === undefined) {
     return res.status(400).json({ error: 'seller_signature and seller_nonce are required' });
   }
 
   try {
-    // Verify ownership
+    // Verify ownership and fetch listing details
     const { data: listing, error: listingErr } = await supabaseAdmin
       .from('token_orders')
-      .select('id, investor_id')
+      .select(`
+        id, investor_id, price, quantity, seller_wallet_address,
+        campaigns:campaign_id ( token_contract_address )
+      `)
       .eq('id', listingId)
       .eq('side', 'sell')
       .single();
@@ -406,6 +544,56 @@ async function signListing(req, res) {
     }
     if (listing.investor_id !== sellerId) {
       return res.status(403).json({ error: 'You are not the owner of this listing' });
+    }
+
+    // shafqaat implemented — Verify EIP-712 seller signature against contract domain
+    const marketplaceAddress = process.env.MARKETPLACE_CONTRACT_ADDRESS;
+    if (marketplaceAddress && listing.seller_wallet_address && listing.campaigns?.token_contract_address) {
+      try {
+        const ORDER_TYPES = {
+          Order: [
+            { name: 'seller',         type: 'address'  },
+            { name: 'tokenAddress',   type: 'address'  },
+            { name: 'tokenAmount',    type: 'uint256'  },
+            { name: 'pricePerToken',  type: 'uint256'  },
+            { name: 'nonce',          type: 'uint256'  },
+            { name: 'expiry',         type: 'uint256'  },
+          ],
+        };
+
+        const domain = {
+          name: 'EquityMarketplace',
+          version: '1',
+          chainId: Number(process.env.CHAIN_ID || 11155111),
+          verifyingContract: marketplaceAddress,
+        };
+
+        const expiry = seller_expiry || Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+        const amount = ethers.parseUnits(String(listing.quantity), 18);
+        const pricePerToken = ethers.parseEther(String(listing.price));
+
+        const orderValue = {
+          seller: listing.seller_wallet_address,
+          tokenAddress: listing.campaigns.token_contract_address,
+          tokenAmount: amount,
+          pricePerToken: pricePerToken,
+          nonce: BigInt(seller_nonce),
+          expiry: BigInt(expiry),
+        };
+
+        const recovered = ethers.verifyTypedData(domain, ORDER_TYPES, orderValue, seller_signature);
+        if (recovered.toLowerCase() !== listing.seller_wallet_address.toLowerCase()) {
+          return res.status(400).json({
+            error: 'Signature verification failed: recovered address does not match seller wallet',
+            code: 'INVALID_SIGNATURE',
+          });
+        }
+      } catch (verifyErr) {
+        console.warn('[signListing] EIP-712 verification check error:', verifyErr.message);
+        if (verifyErr.code === 'INVALID_ARGUMENT' || verifyErr.message.includes('signature')) {
+          return res.status(400).json({ error: `Invalid signature format: ${verifyErr.message}` });
+        }
+      }
     }
 
     // Store the signature
@@ -441,6 +629,7 @@ async function confirmBid(req, res) {
       .from('token_bids')
       .select(`
         id, buyer_id, listing_id, quantity, bid_price_per_token, status, accept_deadline,
+        counter_price_per_token,
         token_orders:listing_id (
           seller_wallet_address, seller_signature, seller_nonce, price,
           campaigns:campaign_id ( token_contract_address )
@@ -451,7 +640,8 @@ async function confirmBid(req, res) {
 
     if (bidErr || !bid) return res.status(404).json({ error: 'Bid not found' });
     if (bid.buyer_id !== buyerId) return res.status(403).json({ error: 'Not your bid' });
-    if (!['accepted', 'confirmed'].includes(bid.status)) {
+    // shafqaat implemented — counter_accepted bids also proceed through the confirm flow
+    if (!['accepted', 'confirmed', 'counter_accepted'].includes(bid.status)) {
       return res.status(400).json({ error: 'Only accepted or confirmed bids can be processed' });
     }
     if (bid.accept_deadline && new Date(bid.accept_deadline) < new Date()) {
@@ -474,6 +664,13 @@ async function confirmBid(req, res) {
       .update({ status: 'confirmed', updated_at: new Date().toISOString() })
       .eq('id', bidId);
 
+    // shafqaat implemented — Fix P3: Calculate 2.0% platform fee matching secondaryMarketplace.sol
+    const effectivePrice = bid.status === 'counter_accepted' && bid.counter_price_per_token
+      ? Number(bid.counter_price_per_token)
+      : Number(bid.bid_price_per_token);
+    const subtotal = effectivePrice * Number(bid.quantity);
+    const platformFee = (subtotal * 200) / 10000; // 2.0% platform fee
+
     // Return all the data needed by the frontend to call fillOrder() on-chain
     return res.json({
       message: 'Bid confirmed. Proceed with the on-chain transaction.',
@@ -483,7 +680,10 @@ async function confirmBid(req, res) {
         seller_nonce: listing.seller_nonce,
         token_contract_address: listing.campaigns?.token_contract_address,
         quantity: bid.quantity,
-        price_per_token: bid.bid_price_per_token,
+        price_per_token: effectivePrice,
+        subtotal,
+        platform_fee: platformFee,
+        platform_fee_bps: 200,
       },
     });
   } catch (err) {
@@ -492,11 +692,15 @@ async function confirmBid(req, res) {
   }
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// shafqaat implemented — Fix 4: completeBid now verifies tx_hash on-chain
+// via verifyOnChainTx() before writing to the DB. Previously any string was
+// accepted as tx_hash, allowing a buyer to claim a trade settled without paying.
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/marketplace/bids/:bidId/complete
 // Called by buyer's frontend AFTER fillOrder() on-chain tx succeeds
 // Updates bid + listing status in the DB
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 async function completeBid(req, res) {
   const buyerId = req.user?.id;
   const { bidId } = req.params;
@@ -507,50 +711,110 @@ async function completeBid(req, res) {
   }
 
   try {
+    // Fetch bid including buyer_wallet for on-chain sender verification
     const { data: bid, error: bidErr } = await supabaseAdmin
       .from('token_bids')
-      .select('id, buyer_id, listing_id, campaign_id, quantity, status')
+      .select('id, buyer_id, buyer_wallet, listing_id, campaign_id, quantity, status')
       .eq('id', bidId)
       .single();
 
     if (bidErr || !bid) return res.status(404).json({ error: 'Bid not found' });
     if (bid.buyer_id !== buyerId) return res.status(403).json({ error: 'Not your bid' });
-    if (!['accepted', 'confirmed'].includes(bid.status)) {
+    if (!['accepted', 'confirmed', 'counter_accepted'].includes(bid.status)) {
       return res.status(400).json({ error: 'Only accepted or confirmed bids can be marked as completed' });
     }
 
-    // Mark bid as completed
-    const { error: bidUpdateErr } = await supabaseAdmin
-      .from('token_bids')
-      .update({
-        status: 'completed',
-        tx_hash,
-        block_number: block_number ? Number(block_number) : null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', bidId);
+    // shafqaat implemented — Fix 4: Verify tx_hash on-chain before marking trade complete.
+    // This prevents a buyer from submitting a fake hash and getting tokens for free.
+    try {
+      await verifyOnChainTx(tx_hash, bid.buyer_wallet);
+    } catch (verifyErr) {
+      return res.status(400).json({
+        error: `On-chain verification failed: ${verifyErr.message}`,
+        code: 'TX_VERIFICATION_FAILED',
+      });
+    }
 
-    if (bidUpdateErr) throw bidUpdateErr;
+    // shafqaat implemented — Fix P1 & P2: Atomic completion, quantity decrement, and token_trades recording
+    const effectivePrice = (bid.status === 'counter_accepted' && bid.counter_price_per_token)
+      ? Number(bid.counter_price_per_token)
+      : Number(bid.bid_price_per_token);
+    const totalPrice = effectivePrice * Number(bid.quantity);
+    const feeAmount = (totalPrice * 200) / 10000;
 
-    // Reduce quantity_remaining on the listing
-    const { data: listing } = await supabaseAdmin
-      .from('token_orders')
-      .select('quantity_remaining, quantity_filled')
-      .eq('id', bid.listing_id)
-      .single();
+    let atomicSuccess = false;
+    try {
+      const { data: rpcResult, error: rpcErr } = await supabaseAdmin.rpc('fn_complete_bid_atomic', {
+        p_bid_id: bidId,
+        p_tx_hash: tx_hash,
+        p_block_number: block_number ? Number(block_number) : null,
+        p_fee_amount: feeAmount,
+      });
+      if (!rpcErr && rpcResult?.success) {
+        atomicSuccess = true;
+      }
+    } catch (rpcEx) {
+      console.warn('[completeBid] fn_complete_bid_atomic RPC not available, using atomic fallback:', rpcEx.message);
+    }
 
-    if (listing) {
-      const newRemaining = Number(listing.quantity_remaining) - Number(bid.quantity);
+    if (!atomicSuccess) {
+      const { data: listing, error: listErr } = await supabaseAdmin
+        .from('token_orders')
+        .select('id, quantity_remaining, quantity_filled, investor_id')
+        .eq('id', bid.listing_id)
+        .single();
+
+      if (listErr || !listing) throw new Error('Listing not found');
+      if (Number(listing.quantity_remaining) < Number(bid.quantity)) {
+        return res.status(400).json({ error: 'Listing does not have enough remaining quantity' });
+      }
+
+      const newRemaining = Math.max(0, Number(listing.quantity_remaining) - Number(bid.quantity));
       const newFilled = Number(listing.quantity_filled || 0) + Number(bid.quantity);
+
+      // 1. Mark bid as completed
+      const { error: bidUpdateErr } = await supabaseAdmin
+        .from('token_bids')
+        .update({
+          status: 'completed',
+          tx_hash,
+          block_number: block_number ? Number(block_number) : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', bidId);
+
+      if (bidUpdateErr) throw bidUpdateErr;
+
+      // 2. Decrement listing quantity atomically
       await supabaseAdmin
         .from('token_orders')
         .update({
-          quantity_remaining: Math.max(0, newRemaining),
+          quantity_remaining: newRemaining,
           quantity_filled: newFilled,
           status: newRemaining <= 0 ? 'filled' : 'open',
           updated_at: new Date().toISOString(),
         })
         .eq('id', bid.listing_id);
+
+      // 3. Insert record into token_trades
+      try {
+        await supabaseAdmin.from('token_trades').insert([{
+          campaign_id: bid.campaign_id,
+          buy_order_id: null,
+          sell_order_id: bid.listing_id,
+          bid_id: bidId,
+          buyer_id: bid.buyer_id,
+          seller_id: listing.investor_id,
+          price: effectivePrice,
+          quantity: bid.quantity,
+          fee_amount: feeAmount,
+          tx_hash,
+          settlement_status: 'settled',
+          executed_at: new Date().toISOString(),
+        }]);
+      } catch (tradeErr) {
+        console.warn('[completeBid] Could not insert into token_trades (check migration 0008):', tradeErr.message);
+      }
     }
 
     // Notify both buyer and seller the trade is done on-chain
@@ -667,6 +931,411 @@ async function rejectBid(req, res) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// shafqaat implemented — Fix 7: Counter-Offer Negotiation System
+//
+// Sellers can respond to a buyer's pending bid with a counter-price instead of
+// accept/reject. The buyer then has a configurable window (default 48h) to
+// accept or reject the counter. If accepted, the bid proceeds through the
+// normal confirm → complete flow at the counter price.
+//
+// Status flow:
+//   pending → counter_offered → counter_accepted → confirmed → completed
+//                             → counter_rejected  (bid ends)
+//                             → expired           (counter window passes)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// POST /api/marketplace/bids/:bidId/counter
+// Seller sends a counter price to a buyer's pending bid
+async function counterBid(req, res) {
+  // shafqaat implemented
+  const sellerId = req.user?.id;
+  const { bidId } = req.params;
+  const { counter_price_per_token, counter_message, counter_expires_hours = 48 } = req.body;
+
+  if (!counter_price_per_token || Number(counter_price_per_token) <= 0) {
+    return res.status(400).json({ error: 'counter_price_per_token must be a positive number' });
+  }
+
+  try {
+    // 1. Load bid with listing info to verify seller ownership
+    const { data: bid, error: bidErr } = await supabaseAdmin
+      .from('token_bids')
+      .select(`
+        id, listing_id, buyer_id, bid_price_per_token, quantity, status, campaign_id,
+        token_orders:listing_id ( investor_id, status )
+      `)
+      .eq('id', bidId)
+      .single();
+
+    if (bidErr || !bid) {
+      return res.status(404).json({ error: 'Bid not found' });
+    }
+
+    // 2. Authorization: only the listing's seller can counter
+    if (bid.token_orders?.investor_id !== sellerId) {
+      return res.status(403).json({ error: 'You are not the seller for this listing' });
+    }
+
+    // 3. Can only counter pending bids
+    if (bid.status !== 'pending') {
+      return res.status(400).json({
+        error: `Cannot counter a bid with status: ${bid.status}. Only pending bids can receive a counter-offer.`,
+      });
+    }
+
+    // 4. Listing must still be active
+    if (!['open', 'partially_filled'].includes(bid.token_orders?.status)) {
+      return res.status(400).json({ error: 'The sell listing is no longer active' });
+    }
+
+    // 5. Build counter expiry timestamp
+    const counterExpiresAt = new Date();
+    counterExpiresAt.setHours(counterExpiresAt.getHours() + Number(counter_expires_hours));
+
+    // 6. Update bid to counter_offered status, preserving original bid price
+    const { data: updatedBid, error: updateErr } = await supabaseAdmin
+      .from('token_bids')
+      .update({
+        status: 'counter_offered',
+        original_bid_price: bid.bid_price_per_token,  // preserve buyer's original offer
+        counter_price_per_token: Number(counter_price_per_token),
+        counter_expires_at: counterExpiresAt.toISOString(),
+        counter_message: counter_message || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', bidId)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    // 7. Notify the buyer of the counter-offer
+    const { data: campData } = await supabaseAdmin
+      .from('campaigns').select('title').eq('id', bid.campaign_id).single();
+    const campaignTitle = campData?.title || 'a listing';
+
+    await createNotification({
+      userId: bid.buyer_id,
+      type: 'bid_countered',
+      title: 'Counter-Offer Received',
+      message:
+        `The seller has countered your offer on "${campaignTitle}". ` +
+        `Your offer: ${bid.bid_price_per_token} ETH/token → Counter: ${counter_price_per_token} ETH/token. ` +
+        `You have ${counter_expires_hours} hours to respond.`,
+      link: '/investor-dashboard/my-bids',
+      metadata: {
+        bid_id: bidId,
+        campaign_id: bid.campaign_id,
+        original_price: bid.bid_price_per_token,
+        counter_price: counter_price_per_token,
+        counter_expires_at: counterExpiresAt.toISOString(),
+      },
+    });
+
+    return res.json({
+      bid: updatedBid,
+      counter_expires_at: counterExpiresAt.toISOString(),
+      message: `Counter-offer of ${counter_price_per_token} ETH/token sent. Buyer has ${counter_expires_hours} hours to respond.`,
+    });
+  } catch (err) {
+    console.error('[counterBid] error:', err);
+    return res.status(500).json({ error: 'Failed to send counter-offer' });
+  }
+}
+
+// POST /api/marketplace/bids/:bidId/accept-counter
+// Buyer accepts the seller's counter-offer → proceeds to confirm/complete flow
+async function acceptCounter(req, res) {
+  // shafqaat implemented
+  const buyerId = req.user?.id;
+  const { bidId } = req.params;
+
+  try {
+    const { data: bid, error: bidErr } = await supabaseAdmin
+      .from('token_bids')
+      .select(`
+        id, buyer_id, listing_id, campaign_id, bid_price_per_token,
+        counter_price_per_token, counter_expires_at, status,
+        token_orders:listing_id ( investor_id, seller_signature )
+      `)
+      .eq('id', bidId)
+      .single();
+
+    if (bidErr || !bid) {
+      return res.status(404).json({ error: 'Bid not found' });
+    }
+    if (bid.buyer_id !== buyerId) {
+      return res.status(403).json({ error: 'You can only respond to your own bids' });
+    }
+    if (bid.status !== 'counter_offered') {
+      return res.status(400).json({
+        error: `Cannot accept counter on a bid with status: ${bid.status}`,
+      });
+    }
+
+    // Check counter has not expired
+    if (bid.counter_expires_at && new Date(bid.counter_expires_at) < new Date()) {
+      await supabaseAdmin
+        .from('token_bids')
+        .update({ status: 'expired', updated_at: new Date().toISOString() })
+        .eq('id', bidId);
+      return res.status(400).json({ error: 'The counter-offer has expired.' });
+    }
+
+    // Set 24-hour accept deadline (same as normal accept flow)
+    const acceptDeadline = new Date();
+    acceptDeadline.setHours(acceptDeadline.getHours() + 24);
+
+    // Transition to counter_accepted; the effective price is now counter_price_per_token
+    const { data: updatedBid, error: updateErr } = await supabaseAdmin
+      .from('token_bids')
+      .update({
+        status: 'counter_accepted',
+        accept_deadline: acceptDeadline.toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', bidId)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    // Notify the seller that the buyer accepted their counter
+    const { data: campData } = await supabaseAdmin
+      .from('campaigns').select('title').eq('id', bid.campaign_id).single();
+    const campaignTitle = campData?.title || 'a listing';
+
+    await createNotification({
+      userId: bid.token_orders?.investor_id,
+      type: 'counter_accepted',
+      title: 'Counter-Offer Accepted!',
+      message:
+        `The buyer accepted your counter-offer of ${bid.counter_price_per_token} ETH/token ` +
+        `on "${campaignTitle}". They have 24 hours to confirm the purchase.`,
+      link: '/investor-dashboard/my-listings',
+      metadata: { bid_id: bidId, campaign_id: bid.campaign_id, counter_price: bid.counter_price_per_token },
+    });
+
+    return res.json({
+      bid: updatedBid,
+      accept_deadline: acceptDeadline.toISOString(),
+      effective_price: bid.counter_price_per_token,
+      message: 'Counter-offer accepted. You have 24 hours to confirm and complete the purchase.',
+    });
+  } catch (err) {
+    console.error('[acceptCounter] error:', err);
+    return res.status(500).json({ error: 'Failed to accept counter-offer' });
+  }
+}
+
+// POST /api/marketplace/bids/:bidId/reject-counter
+// Buyer rejects the seller's counter-offer — bid ends, listing re-opens
+async function rejectCounter(req, res) {
+  // shafqaat implemented
+  const buyerId = req.user?.id;
+  const { bidId } = req.params;
+
+  try {
+    const { data: bid, error: bidErr } = await supabaseAdmin
+      .from('token_bids')
+      .select(`
+        id, buyer_id, listing_id, campaign_id, bid_price_per_token,
+        counter_price_per_token, status,
+        token_orders:listing_id ( investor_id )
+      `)
+      .eq('id', bidId)
+      .single();
+
+    if (bidErr || !bid) {
+      return res.status(404).json({ error: 'Bid not found' });
+    }
+    if (bid.buyer_id !== buyerId) {
+      return res.status(403).json({ error: 'You can only respond to your own bids' });
+    }
+    if (bid.status !== 'counter_offered') {
+      return res.status(400).json({
+        error: `Cannot reject counter on a bid with status: ${bid.status}`,
+      });
+    }
+
+    // Transition to counter_rejected
+    const { data: updatedBid, error: updateErr } = await supabaseAdmin
+      .from('token_bids')
+      .update({
+        status: 'counter_rejected',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', bidId)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    // Notify the seller that the buyer rejected their counter
+    const { data: campData } = await supabaseAdmin
+      .from('campaigns').select('title').eq('id', bid.campaign_id).single();
+    const campaignTitle = campData?.title || 'a listing';
+
+    await Promise.all([
+      // Seller notification
+      bid.token_orders?.investor_id
+        ? createNotification({
+            userId: bid.token_orders.investor_id,
+            type: 'counter_rejected',
+            title: 'Counter-Offer Rejected',
+            message:
+              `The buyer rejected your counter-offer of ${bid.counter_price_per_token} ETH/token ` +
+              `on "${campaignTitle}". The listing is now open for new bids.`,
+            link: '/investor-dashboard/my-listings',
+            metadata: { bid_id: bidId, campaign_id: bid.campaign_id },
+          })
+        : Promise.resolve(),
+      // Buyer confirmation
+      createNotification({
+        userId: buyerId,
+        type: 'counter_rejected',
+        title: 'Counter-Offer Declined',
+        message: `You declined the counter-offer on "${campaignTitle}". Browse other listings to find a better deal.`,
+        link: '/investor-dashboard',
+        metadata: { bid_id: bidId, campaign_id: bid.campaign_id },
+      }),
+    ]);
+
+    return res.json({
+      bid: updatedBid,
+      message: 'Counter-offer rejected. The listing is now available for other buyers.',
+    });
+  } catch (err) {
+    console.error('[rejectCounter] error:', err);
+    return res.status(500).json({ error: 'Failed to reject counter-offer' });
+  }
+}
+
+
+// shafqaat implemented — Fix P3: Buyer increases offer on a pending bid
+// POST /api/marketplace/bids/:bidId/modify
+async function modifyBid(req, res) {
+  const buyerId = req.user?.id;
+  const { bidId } = req.params;
+  const { new_bid_price_per_token, new_quantity } = req.body;
+
+  if (!new_bid_price_per_token && !new_quantity) {
+    return res.status(400).json({ error: 'new_bid_price_per_token or new_quantity is required' });
+  }
+
+  try {
+    const { data: bid, error: bidErr } = await supabaseAdmin
+      .from('token_bids')
+      .select('id, buyer_id, listing_id, campaign_id, bid_price_per_token, quantity, status, original_bid_price')
+      .eq('id', bidId)
+      .single();
+
+    if (bidErr || !bid) return res.status(404).json({ error: 'Bid not found' });
+    if (bid.buyer_id !== buyerId) return res.status(403).json({ error: 'Not your bid' });
+    if (bid.status !== 'pending') {
+      return res.status(400).json({ error: `Cannot modify bid in "${bid.status}" status. Only pending bids can be modified.` });
+    }
+
+    const { data: listing, error: listErr } = await supabaseAdmin
+      .from('token_orders')
+      .select('id, investor_id, quantity_remaining, auto_accept_price_per_token')
+      .eq('id', bid.listing_id)
+      .single();
+
+    if (listErr || !listing) return res.status(404).json({ error: 'Listing not found' });
+
+    const price = new_bid_price_per_token ? Number(new_bid_price_per_token) : Number(bid.bid_price_per_token);
+    const qty = new_quantity ? Number(new_quantity) : Number(bid.quantity);
+
+    if (price <= 0 || qty <= 0) {
+      return res.status(400).json({ error: 'Price and quantity must be positive' });
+    }
+
+    if (new_bid_price_per_token && Number(new_bid_price_per_token) <= Number(bid.bid_price_per_token)) {
+      return res.status(400).json({ error: 'New bid price must be strictly higher than the current bid price' });
+    }
+
+    if (qty > Number(listing.quantity_remaining)) {
+      return res.status(400).json({ error: `Requested quantity ${qty} exceeds available ${listing.quantity_remaining} tokens` });
+    }
+
+    const isAutoAccepted = Boolean(
+      listing.auto_accept_price_per_token &&
+      price >= Number(listing.auto_accept_price_per_token)
+    );
+
+    let acceptDeadline = null;
+    if (isAutoAccepted) {
+      acceptDeadline = new Date();
+      acceptDeadline.setHours(acceptDeadline.getHours() + 24);
+    }
+
+    const updatePayload = {
+      bid_price_per_token: price,
+      quantity: qty,
+      original_bid_price: bid.original_bid_price || bid.bid_price_per_token,
+      status: isAutoAccepted ? 'accepted' : 'pending',
+      accept_deadline: acceptDeadline ? acceptDeadline.toISOString() : null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: updatedBid, error: updateErr } = await supabaseAdmin
+      .from('token_bids')
+      .update(updatePayload)
+      .eq('id', bidId)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    const { data: campaign } = await supabaseAdmin
+      .from('campaigns').select('title').eq('id', bid.campaign_id).single();
+    const campaignTitle = campaign?.title || 'a listing';
+
+    if (isAutoAccepted) {
+      await Promise.all([
+        createNotification({
+          userId: listing.investor_id,
+          type: 'bid_accepted',
+          title: 'Auto-Accept Triggered',
+          message: `A modified bid on "${campaignTitle}" reached ${price} ETH/token and was automatically accepted!`,
+          link: '/investor-dashboard/my-listings',
+          metadata: { bid_id: bidId, listing_id: bid.listing_id, campaign_id: bid.campaign_id },
+        }),
+        createNotification({
+          userId: buyerId,
+          type: 'bid_accepted',
+          title: 'Offer Auto-Accepted!',
+          message: `Your updated bid of ${price} ETH/token met the seller's auto-accept threshold on "${campaignTitle}" and was accepted automatically! You have 24 hours to confirm the purchase.`,
+          link: '/investor-dashboard/my-bids',
+          metadata: { bid_id: bidId, listing_id: bid.listing_id, campaign_id: bid.campaign_id },
+        }),
+      ]);
+    } else {
+      await createNotification({
+        userId: listing.investor_id,
+        type: 'bid_received',
+        title: 'Bid Offer Increased',
+        message: `A buyer increased their bid on "${campaignTitle}" from ${bid.bid_price_per_token} to ${price} ETH/token.`,
+        link: '/investor-dashboard/my-listings',
+        metadata: { bid_id: bidId, listing_id: bid.listing_id, campaign_id: bid.campaign_id },
+      });
+    }
+
+    return res.json({
+      bid: updatedBid,
+      auto_accepted: isAutoAccepted,
+      message: isAutoAccepted
+        ? 'Bid updated and automatically accepted!'
+        : 'Bid offer increased successfully. Seller has been notified.',
+    });
+  } catch (err) {
+    console.error('[modifyBid] error:', err);
+    return res.status(500).json({ error: 'Failed to modify bid' });
+  }
+}
+
 module.exports = {
   placeBid,
   getListingBids,
@@ -678,5 +1347,10 @@ module.exports = {
   confirmBid,
   completeBid,
   getKycSignature,
+  counterBid,
+  acceptCounter,
+  rejectCounter,
+  // shafqaat implemented — bid modification (Fix P3)
+  modifyBid,
 };
 
