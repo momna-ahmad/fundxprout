@@ -1,16 +1,46 @@
 -- backend/migrations/0008_marketplace_p1_p2_p3.sql
 -- Run this in the Supabase SQL Editor
 
--- shafqaat implemented — Fix P2: Allow token_trades to record bids as well as order-book matches
--- 1. Make buy_order_id nullable since auction bids do not create a token_orders row
-ALTER TABLE public.token_trades 
-  ALTER COLUMN buy_order_id DROP NOT NULL;
+-- shafqaat implemented — Fix P2: Create token_trades if it doesn't exist, or ensure it supports auction bids
+-- 1. Create public.token_trades table if it does not already exist
+CREATE TABLE IF NOT EXISTS public.token_trades (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    campaign_id bigint NOT NULL REFERENCES public.campaigns(id),
+    buy_order_id uuid REFERENCES public.token_orders(id), -- Nullable for auction bids
+    sell_order_id uuid REFERENCES public.token_orders(id),
+    bid_id uuid REFERENCES public.token_bids(id),
+    buyer_id uuid NOT NULL REFERENCES public.profiles(user_id),
+    seller_id uuid NOT NULL REFERENCES public.profiles(user_id),
+    price numeric NOT NULL,
+    quantity numeric NOT NULL,
+    fee_amount numeric NOT NULL DEFAULT 0,
+    tx_hash text,
+    settlement_status text NOT NULL DEFAULT 'pending' CHECK (settlement_status IN ('pending','settled','failed')),
+    executed_at timestamp with time zone NOT NULL DEFAULT now()
+);
 
--- 2. Add bid_id reference so trades originating from bids link directly to the bid
-ALTER TABLE public.token_trades 
-  ADD COLUMN IF NOT EXISTS bid_id uuid REFERENCES public.token_bids(id);
+-- 2. If token_trades already existed from prior setup, ensure buy_order_id is nullable and bid_id exists
+DO $$
+BEGIN
+  -- Make buy_order_id nullable
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' AND table_name = 'token_trades' AND column_name = 'buy_order_id' AND is_nullable = 'NO'
+  ) THEN
+    ALTER TABLE public.token_trades ALTER COLUMN buy_order_id DROP NOT NULL;
+  END IF;
+
+  -- Add bid_id column if not present
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' AND table_name = 'token_trades' AND column_name = 'bid_id'
+  ) THEN
+    ALTER TABLE public.token_trades ADD COLUMN bid_id uuid REFERENCES public.token_bids(id);
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_token_trades_bid_id ON public.token_trades(bid_id);
+CREATE INDEX IF NOT EXISTS idx_token_trades_campaign_id ON public.token_trades(campaign_id);
 
 -- shafqaat implemented — Fix P3: Add auto-accept threshold price to sell listings
 ALTER TABLE public.token_orders

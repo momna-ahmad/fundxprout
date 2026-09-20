@@ -10,20 +10,34 @@ const { createNotification } = require('../services/notificationService');
 // ─────────────────────────────────────────────────────────────────────────────
 // shafqaat implemented — Fix 4: On-chain transaction verification helper.
 // verifyOnChainTx() is called inside completeBid() BEFORE writing to the DB.
-// Without this check a malicious buyer could submit a fake or recycled tx_hash
-// and get the trade marked as complete without ever sending ETH.
+// Validates:
+// 1. Valid 66-character hex hash format
+// 2. Hash has never been used for any other trade (replay protection)
+// 3. Receipt exists and is mined (status === 1)
+// 4. Sender (from) matches the buyer's registered wallet
+// 5. Destination (to) matches the secondary marketplace contract
 // ─────────────────────────────────────────────────────────────────────────────
-async function verifyOnChainTx(txHash, expectedBuyerWallet) {
-  const rpcUrl = process.env.ETH_RPC_URL;
-
-  if (!rpcUrl) {
-    // Allow in development when ETH_RPC_URL is not configured, but log a clear warning
-    console.warn(
-      '[completeBid] ETH_RPC_URL is not set — skipping on-chain tx verification. ' +
-      'Set ETH_RPC_URL in backend/.env before going to production.'
-    );
-    return;
+async function verifyOnChainTx(txHash, expectedBuyerWallet, currentBidId) {
+  if (!txHash || typeof txHash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+    throw new Error('Invalid Ethereum transaction hash format. Expected a 0x-prefixed 64-character hex string.');
   }
+
+  // 1. Replay protection: Check if this tx_hash has already been used on any other bid
+  if (currentBidId) {
+    const { data: existingBid } = await supabaseAdmin
+      .from('token_bids')
+      .select('id')
+      .eq('tx_hash', txHash)
+      .neq('id', currentBidId)
+      .maybeSingle();
+
+    if (existingBid) {
+      throw new Error('This transaction hash has already been used for another settled trade (replay attack rejected).');
+    }
+  }
+
+  // 2. RPC provider resolution
+  const rpcUrl = process.env.ETH_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
 
   let receipt;
   try {
@@ -31,26 +45,36 @@ async function verifyOnChainTx(txHash, expectedBuyerWallet) {
     receipt = await provider.getTransactionReceipt(txHash);
   } catch (rpcErr) {
     throw new Error(
-      `Could not reach the Ethereum RPC to verify the transaction: ${rpcErr.message}`
+      `Could not reach the Ethereum RPC (${rpcUrl}) to verify the transaction: ${rpcErr.message}`
     );
   }
 
+  // 3. Verification checks
   if (!receipt) {
     throw new Error(
-      'Transaction not found on-chain. It may not be mined yet — wait a few seconds and try again.'
+      'Transaction not found on-chain. It may still be pending in the mempool — please wait a few seconds and try again.'
     );
   }
   if (receipt.status !== 1) {
     throw new Error(
-      'Transaction failed on-chain (status = 0). The trade was not settled. ' +
-      'Check the transaction on Etherscan for details.'
+      'Transaction failed on-chain (status = 0 / reverted). The trade was not settled. ' +
+      'Check the transaction on Etherscan for the revert reason.'
     );
   }
   if (receipt.from.toLowerCase() !== expectedBuyerWallet.toLowerCase()) {
     throw new Error(
-      'Transaction sender does not match your registered buyer wallet. ' +
-      'Only the bid owner can settle this trade.'
+      `Transaction sender (${receipt.from.slice(0, 8)}…) does not match your registered buyer wallet (${expectedBuyerWallet.slice(0, 8)}…). Only the bid owner can settle this trade.`
     );
+  }
+
+  // 4. Contract destination check
+  const marketplaceAddress = process.env.MARKETPLACE_CONTRACT_ADDRESS;
+  if (marketplaceAddress && receipt.to) {
+    if (receipt.to.toLowerCase() !== marketplaceAddress.toLowerCase()) {
+      throw new Error(
+        `Transaction destination (${receipt.to}) does not match the secondary marketplace contract (${marketplaceAddress}).`
+      );
+    }
   }
 }
 
@@ -727,7 +751,7 @@ async function completeBid(req, res) {
     // shafqaat implemented — Fix 4: Verify tx_hash on-chain before marking trade complete.
     // This prevents a buyer from submitting a fake hash and getting tokens for free.
     try {
-      await verifyOnChainTx(tx_hash, bid.buyer_wallet);
+      await verifyOnChainTx(tx_hash, bid.buyer_wallet, bid.id);
     } catch (verifyErr) {
       return res.status(400).json({
         error: `On-chain verification failed: ${verifyErr.message}`,
