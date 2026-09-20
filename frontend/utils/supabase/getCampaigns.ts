@@ -14,6 +14,7 @@ function normalizeCampaign(raw: any) {
         image_url: raw.image_url || raw.image_hash || null,
         transaction_hash: raw.transaction_hash || raw.tx_hash || null,
         price_per_token: raw.price_per_token || "0",
+        valuation: raw.valuation ?? null,
         contract_address: raw.contract_address,
         created_at: raw.created_at,
         owner: raw.owner || raw.owner_wallet,
@@ -251,7 +252,30 @@ export async function getMyCampaigns() {
         }
 
         const normalized = (data ?? []).map(normalizeCampaign);
-        return await attachCampaignStats(normalized);
+        
+        const { data: reviews, error: reviewsError } = await supabase
+            .from("campaign_reviews")
+            .select("campaign_id, action, rejection_reason, internal_notes, created_at")
+            .in("campaign_id", normalized.map((campaign) => campaign.id))
+            .order("created_at", { ascending: false });
+
+        if (reviewsError) {
+            console.error("[getMyCampaigns] Review lookup error:", reviewsError.message);
+        }
+
+        const latestReviews = new Map();
+        for (const review of reviews ?? []) {
+            if (!latestReviews.has(String(review.campaign_id))) {
+                latestReviews.set(String(review.campaign_id), review);
+            }
+        }
+
+        const campaignsWithReviews = normalized.map((campaign) => ({
+            ...campaign,
+            campaign_review: latestReviews.get(String(campaign.id)) ?? null,
+        }));
+
+        return await attachCampaignStats(campaignsWithReviews);
     } catch (err) {
         console.error("[getMyCampaigns] Exception:", err);
         return [];

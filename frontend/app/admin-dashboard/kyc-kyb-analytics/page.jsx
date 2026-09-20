@@ -31,7 +31,7 @@ export default async function AdminDashboardPage() {
         </div>
         <div className="flex gap-3 flex-wrap">
           <Link
-            href="/admin-dashboard/campaigns"
+            href="/admin-dashboard/audit-log"
             className="px-4 py-2 rounded-xl bg-[#a78bfa]/10 hover:bg-[#a78bfa]/20 text-[#a78bfa] border border-[#a78bfa]/20 text-sm font-semibold transition flex items-center gap-2"
           >
             <FileText className="h-4 w-4" /> Campaign Moderation

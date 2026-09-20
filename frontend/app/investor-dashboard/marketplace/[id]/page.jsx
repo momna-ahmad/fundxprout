@@ -61,6 +61,7 @@ export default function CampaignMarketplacePage() {
   const [campaign, setCampaign] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
 
   useEffect(() => {
     if (!campaignId) return;
@@ -71,6 +72,7 @@ export default function CampaignMarketplacePage() {
 
       try {
         const result = await getCampaignById(campaignId);
+        setDescriptionExpanded(false);
 
         if (!result) {
           setError('Campaign not found.');
@@ -114,6 +116,9 @@ export default function CampaignMarketplacePage() {
       ? Math.min((raised / goal) * 100, 100)
       : 0;
 
+  const description = campaign.description?.trim();
+  const hasDescription = Boolean(description);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -143,10 +148,30 @@ export default function CampaignMarketplacePage() {
               {campaign.title || 'Untitled Campaign'}
             </h1>
 
-            <p className="mt-4 max-w-3xl text-sm leading-6 text-muted-foreground">
-              {campaign.description ||
-                'No detailed campaign description is available for this marketplace listing.'}
-            </p>
+            <div className="mt-4 flex max-w-3xl items-baseline gap-1 text-sm leading-6 text-muted-foreground">
+              <p
+                className={
+                  descriptionExpanded
+                    ? 'min-w-0 flex-1'
+                    : 'min-w-0 flex-1 truncate'
+                }
+              >
+                {description ||
+                  'No detailed campaign description is available for this marketplace listing.'}
+              </p>
+
+              {hasDescription && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDescriptionExpanded((expanded) => !expanded)
+                  }
+                  className="shrink-0 font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  {descriptionExpanded ? 'show less' : '...show more'}
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
