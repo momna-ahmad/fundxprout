@@ -345,7 +345,7 @@ export async function saveCampaignToDb(formData: any) {
         .update(row)
         .eq("id", formData.campaignId)
         .eq("owner", user.id)
-        .eq("status", "approved")
+        .in("status", ["approved", "adjusted"])
         .select()
         .single()
     : supabase.from("campaigns").insert([row]).select().single();

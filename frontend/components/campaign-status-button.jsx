@@ -36,7 +36,7 @@ export default function CampaignStatusButton({ status, campaignId, isComplete, i
     );
   }
 
-  if (normalizedStatus === "approved") {
+  if (normalizedStatus === "approved" || normalizedStatus === "adjusted") {
     return (
       <button
         type="submit"
