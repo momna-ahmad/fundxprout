@@ -1,5 +1,5 @@
 "use client";
-import { UserCircle, Menu, X, Sun, Moon, LayoutDashboard, ShieldCheck } from "lucide-react";
+import { UserCircle, Menu, X, Sun, Moon, LayoutDashboard, ShieldCheck, Bell } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useState, useEffect } from "react";
@@ -8,13 +8,22 @@ import { useTheme } from "@/components/theme-provider";
 import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/context/auth-context";
 import { getUserRole } from "@/utils/supabase/getProfile";
+import { useNotifications } from "@/hooks/useNotifications";
+import NotificationDrawer from "@/components/NotificationDrawer";
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userRole, setUserRole] = useState(null);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const { user, session, loading } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
+  const { notifications, unreadCount, markAllRead, markOneRead } = useNotifications();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const isLoggedIn = !!user && !!session;
 
@@ -78,14 +87,16 @@ export default function Navbar() {
           onClick={toggleTheme}
           className="relative w-9 h-9 rounded-full flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 transition-all duration-300 group"
           aria-label="Toggle theme"
-          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          title={mounted && theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          suppressHydrationWarning
         >
-          {theme === "dark" ? (
+          {mounted && theme === "dark" ? (
             <Sun className="h-4 w-4 text-yellow-400 group-hover:rotate-45 transition-transform duration-300" />
           ) : (
             <Moon className="h-4 w-4 text-[#6f42c1] group-hover:-rotate-12 transition-transform duration-300" />
           )}
         </button>
+
 
         {isLoggedIn && userRole === "owner" && (
           <Link
@@ -116,7 +127,35 @@ export default function Navbar() {
             <ShieldCheck className="h-5 w-5" />
           </Link>
         )}
-        
+
+        {/* Notification Bell — only for logged-in investors/owners */}
+        {isLoggedIn && userRole && userRole !== "admin" && (
+          <div className="relative">
+            <button
+              onClick={() => setNotifOpen((v) => !v)}
+              className="relative w-9 h-9 rounded-full flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 transition-all duration-300"
+              aria-label="Notifications"
+              title="Notifications"
+            >
+              <Bell className="h-4 w-4 text-gray-300" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-violet-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {notifOpen && (
+              <NotificationDrawer
+                notifications={notifications}
+                unreadCount={unreadCount}
+                onClose={() => setNotifOpen(false)}
+                onMarkAllRead={markAllRead}
+                onMarkOneRead={markOneRead}
+              />
+            )}
+          </div>
+        )}
         {isLoggedIn ? (
           <button
             onClick={handleLogout}

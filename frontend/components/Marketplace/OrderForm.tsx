@@ -41,8 +41,10 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
   const { walletAddress, connectWallet } = useWallet();
   const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
   const { user } = useAuth();
-  const [price, setPrice] = useState('0.001');
   const [quantity, setQuantity] = useState('1');
+  // shafqaat implemented — Fix P3: Auto-accept threshold price on sell listings
+  const [price, setPrice] = useState('')
+  const [autoAcceptPrice, setAutoAcceptPrice] = useState('');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -97,6 +99,8 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
         price: Number(price),
         quantity: Number(quantity),
         wallet_address: walletAddress,
+        // shafqaat implemented — Fix P3: pass auto_accept_price_per_token to marketplace order
+        auto_accept_price_per_token: autoAcceptPrice ? Number(autoAcceptPrice) : undefined,
       });
 
       // ── Step 4 (sell only): Sign the order with MetaMask — EIP-712 ─
@@ -134,8 +138,9 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
 
           const signature = await signer.signTypedData(domain, ORDER_TYPES, orderValue);
 
-          // Save signature to DB
-          await signListing(dbOrder.id, signature, nonce);
+          // Save signature to DB with expiry for backend EIP-712 verification
+          // shafqaat implemented — Fix P1: Pass expiry to signListing
+          await signListing(dbOrder.id, signature, nonce, expiry);
           setStatusMessage('✅ Listing signed and saved. Buyers can now place bids on your listing!');
         } catch (signErr: any) {
           // Non-blocking: order exists but without signature. Show warning.
@@ -183,6 +188,21 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
             <input required type="number" min="0" step="any" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground" />
           </label>
         </div>
+        {/* shafqaat implemented — Fix P3: Optional auto-accept price field for sellers */}
+        {side === 'sell' && (
+          <label className="block text-xs font-semibold text-muted-foreground">
+            Auto-Accept Threshold Price (ETH) — <span className="font-normal opacity-80">Optional</span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              placeholder="e.g. 0.002 (bids at or above this are accepted instantly)"
+              value={autoAcceptPrice}
+              onChange={(event) => setAutoAcceptPrice(event.target.value)}
+              className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground"
+            />
+          </label>
+        )}
         <button type="submit" disabled={isSubmitting} className="inline-flex w-full items-center justify-center rounded-3xl bg-ring px-4 py-3 text-sm font-semibold text-background disabled:cursor-not-allowed disabled:opacity-60">
           {isSubmitting ? 'Submitting…' : `Place ${side} order`}
         </button>

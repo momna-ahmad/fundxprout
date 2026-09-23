@@ -12,7 +12,9 @@ import { toast } from 'sonner';
 import {
   Loader2, ChevronDown, ChevronUp, CheckCircle2, Trophy,
   Clock, AlertCircle, RotateCcw, ShieldCheck, ArrowUpDown, Filter, Trash2,
+  Handshake, Sparkles,
 } from 'lucide-react';
+import CounterOfferModal from '@/components/bidding/CounterOfferModal';
 
 type Listing = {
   id: string;
@@ -23,6 +25,8 @@ type Listing = {
   quantity_filled: number;
   status: string;
   seller_signature: string | null;
+  // shafqaat implemented — Fix P3: auto-accept threshold price on listings
+  auto_accept_price_per_token?: number | null;
   created_at: string;
   campaign?: { title: string | null; category: string | null; token_contract_address: string | null };
 };
@@ -54,6 +58,8 @@ function ListingRow({ listing, userId, onRefresh }: { listing: Listing; userId: 
   const [bidsError, setBidsError] = useState<string | null>(null);
   const [accepting, setAccepting] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  // shafqaat implemented — Fix P3: Counter offer modal state for seller
+  const [counterModalBid, setCounterModalBid] = useState<TokenBid | null>(null);
 
   // Filter & Sort state for bids
   const [sortBy, setSortBy] = useState<'highest' | 'lowest' | 'newest' | 'oldest'>('highest');
@@ -154,6 +160,12 @@ function ListingRow({ listing, userId, onRefresh }: { listing: Listing; userId: 
             {!listing.seller_signature && (
               <span className="flex items-center gap-1 rounded-xl bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-500">
                 <AlertCircle size={9} /> Unsigned
+              </span>
+            )}
+            {/* shafqaat implemented — Fix P3: Auto-accept threshold indicator badge */}
+            {listing.auto_accept_price_per_token && (
+              <span className="flex items-center gap-1 rounded-xl bg-chart-3/15 px-2 py-0.5 text-[10px] font-bold text-chart-3 border border-chart-3/30">
+                <Sparkles size={9} /> Auto-Accept: {listing.auto_accept_price_per_token} ETH
               </span>
             )}
           </div>
@@ -307,6 +319,10 @@ function ListingRow({ listing, userId, onRefresh }: { listing: Listing; userId: 
                           style={{ color: 'var(--chart-3)', background: 'color-mix(in srgb, var(--chart-3) 12%, transparent)' }}>
                           <CheckCircle2 size={11} /> Accepted
                         </span>
+                      ) : bid.status === 'counter_offered' ? (
+                        <span className="flex items-center gap-1 rounded-xl px-2.5 py-1 text-[11px] font-bold text-chart-4 bg-chart-4/15 border border-chart-4/30">
+                          <Handshake size={11} /> Counter Sent ({bid.counter_price_per_token} ETH)
+                        </span>
                       ) : (bid.status === 'expired' || (bid.status === 'pending' && new Date(bid.bid_expires_at) < new Date())) ? (
                         <span className="flex items-center gap-1 rounded-xl px-2 py-1 text-[11px] font-bold text-muted-foreground border border-border bg-muted/40">
                           Expired
@@ -316,15 +332,27 @@ function ListingRow({ listing, userId, onRefresh }: { listing: Listing; userId: 
                           Rejected
                         </span>
                       ) : (
-                        <button
-                          onClick={() => handleAccept(bid.id)}
-                          disabled={!!accepting || !listing.seller_signature}
-                          title={!listing.seller_signature ? 'Sign your listing first before accepting bids' : ''}
-                          className="rounded-xl px-3 py-1.5 text-xs font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-50"
-                          style={{ background: 'linear-gradient(135deg, var(--ring), var(--chart-5))' }}
-                        >
-                          {isAccepting ? <Loader2 size={12} className="animate-spin" /> : 'Accept'}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleAccept(bid.id)}
+                            disabled={!!accepting || !listing.seller_signature}
+                            title={!listing.seller_signature ? 'Sign your listing first before accepting bids' : ''}
+                            className="rounded-xl px-3 py-1.5 text-xs font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-50"
+                            style={{ background: 'linear-gradient(135deg, var(--ring), var(--chart-5))' }}
+                          >
+                            {isAccepting ? <Loader2 size={12} className="animate-spin" /> : 'Accept'}
+                          </button>
+
+                          {/* shafqaat implemented — Fix P3: Counter-offer button */}
+                          <button
+                            onClick={() => setCounterModalBid(bid)}
+                            disabled={!!accepting}
+                            className="flex items-center gap-1 rounded-xl border border-chart-4/40 bg-chart-4/10 px-2.5 py-1.5 text-xs font-semibold text-chart-4 hover:bg-chart-4/20 transition-colors"
+                          >
+                            <Handshake size={12} />
+                            Counter
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -339,6 +367,14 @@ function ListingRow({ listing, userId, onRefresh }: { listing: Listing; userId: 
                   </span>
                 </div>
               )}
+
+              {/* shafqaat implemented — Fix P3: CounterOfferModal for sellers */}
+              <CounterOfferModal
+                isOpen={Boolean(counterModalBid)}
+                onClose={() => setCounterModalBid(null)}
+                bid={counterModalBid}
+                onSuccess={loadBids}
+              />
             </div>
           )}
         </div>

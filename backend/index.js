@@ -13,7 +13,26 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
-app.use(cors());
+// shafqaat implemented — Fix 1: Restrict CORS to known origins only.
+// Previously `cors()` was called with no config, allowing ANY origin to hit the API.
+// Now only the frontend origin(s) listed in ALLOWED_ORIGINS are permitted.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
+  .split(',')
+  .map((o) => o.trim());
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, server-to-server)
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS: Origin "${origin}" is not allowed.`));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  })
+);
 
 // IMPORTANT: Mount didit routes BEFORE express.json() because the webhook needs the raw body
 const diditRoutes = require('./routes/diditRoutes');
@@ -25,18 +44,35 @@ app.use(express.json());
 const campaignRoutes = require('./routes/campaignRoutes');
 app.use('/api/campaigns', campaignRoutes);
 
-// Marketplace and wallet APIs must be mounted here because npm start runs index.js.
+// shafqaat implemented — Fix 2: Removed duplicate marketplaceRoutes mount.
+// Previously marketplaceRoutes was mounted twice (lines 31 and 38), causing every
+// marketplace request to be processed twice, doubling DB calls and corrupting the
+// in-memory order book. Now each router is mounted exactly once.
 const marketplaceRoutes = require('./routes/marketplaceRoutes');
 const walletRoutes = require('./routes/walletRoutes');
-app.use('/api/marketplace', marketplaceRoutes);
-app.use('/api/wallet', walletRoutes);
-
-// Marketplace and wallet APIs must be mounted here because npm start runs index.js.
-
-
 const biddingRoutes = require('./routes/biddingRoutes'); // Auction-style bidding system
+
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/marketplace', biddingRoutes); // Bidding routes share the /api/marketplace prefix
+app.use('/api/wallet', walletRoutes);
+
+const notificationRoutes = require('./routes/notificationRoutes');
+app.use('/api/notifications', notificationRoutes);
+
+// shafqaat implemented — Fix 6 (Node.js fallback): Sweep expired bids every 5 minutes.
+// This ensures `pending` bids past bid_expires_at and `accepted` bids past
+// accept_deadline are automatically transitioned to `expired` status.
+// The primary mechanism is the Supabase pg_cron job in 0007_bid_expiry_sweep.sql;
+// this interval is a safety net if pg_cron is unavailable.
+const { supabaseAdmin } = require('./config/supabaseAdmin');
+setInterval(async () => {
+  try {
+    const { error } = await supabaseAdmin.rpc('fn_sweep_expired_bids');
+    if (error) console.warn('[expiry-sweep] RPC error:', error.message);
+  } catch (err) {
+    console.warn('[expiry-sweep] fn_sweep_expired_bids failed:', err.message);
+  }
+}, 5 * 60 * 1000); // every 5 minutes
 
 
 function runRiskAssessmentForCampaign(campaignId) {

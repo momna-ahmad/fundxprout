@@ -47,14 +47,10 @@ export default function ThemeProvider({ children }) {
 		setTheme((prev) => (prev === "dark" ? "light" : "dark"))
 	}
 
-	// Prevent flash of wrong theme
-	if (!mounted) {
-		return <>{children}</>
-	}
-
 	return (
 		<ThemeContext.Provider value={{ theme, toggleTheme }}>
 			{children}
 		</ThemeContext.Provider>
 	)
 }
+
