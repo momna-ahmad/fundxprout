@@ -609,6 +609,17 @@ export default function DashboardPage() {
                                       : "Edit"}
                                   </Link>
                                 )}
+
+                                {/* Upload Financials for Successful Campaigns */}
+                                {campaign.status?.toLowerCase() === "successful" && (
+                                  <Link
+                                    href={`/dashboard/financials?campaignId=${campaign.id}`}
+                                    className="inline-flex items-center px-2.5 py-1 bg-[#6f42c1]/20 border border-[#6f42c1]/40 hover:bg-[#6f42c1] text-[#a78bfa] hover:text-white rounded-md text-xs font-medium transition-all"
+                                  >
+                                    Upload Financials
+                                  </Link>
+                                )}
+
                                 <Link
                                   href={`/campaigns/${campaign.id}`}
                                   className="text-[#a78bfa] hover:text-white text-xs font-medium transition-colors"
