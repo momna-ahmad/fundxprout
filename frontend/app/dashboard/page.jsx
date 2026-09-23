@@ -175,7 +175,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#181A2A] ">
       <Navbar />
-      <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pt-20">
+      <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pt-7">
         {/* shafqaat — Dashboard header with real user name */}
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -199,13 +199,6 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="mb-6 grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-4 items-stretch">
-          <Link
-            href="/create-campaign"
-            className="w-full sm:w-fit bg-[#6f42c1] hover:bg-[#5a3599] text-white px-4 py-2.5 rounded-full font-semibold transition duration-200 inline-flex items-center justify-center gap-2 text-sm"
-          >
-            <Plus className="h-4 w-4" />
-            New Campaign
-          </Link>
 
           {/* shafqaat — Profile completion banner (only if incomplete) */}
           {!loading && stats.profileCompletion < 100 && (
@@ -315,10 +308,20 @@ export default function DashboardPage() {
           {/* ── Overview Tab ─────────────────────────────────── */}
           {activeTab === "overview" && (
             <div>
-              <h2 className="text-xl font-bold text-white mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xl font-bold text-white mb-6">
                 Campaign Overview
               </h2>
 
+              <Link
+                href="/create-campaign"
+                className="w-full sm:w-fit bg-[#6f42c1] hover:bg-[#5a3599] text-white px-4 py-2.5 rounded-full font-semibold transition duration-200 inline-flex items-center justify-center gap-2 text-sm"
+              >
+                <Plus className="h-4 w-4" />
+                New Campaign
+              </Link>
+              </div>
+              
               {/* shafqaat — Loading state */}
               {loading && (
                 <div className="text-center py-12 text-gray-400 text-sm">
@@ -450,13 +453,15 @@ export default function DashboardPage() {
                             </button>
                           )}
 
-                          {["draft", "approved"].includes(campaign.status?.toLowerCase()) && (
+                          {["draft", "approved", "adjusted"].includes(campaign.status?.toLowerCase()) && (
                             <Link
                               href={buildDraftEditHref(campaign)}
                               className="flex items-center gap-1.5 text-yellow-400 hover:text-yellow-300 text-xs font-medium transition-colors"
                             >
                               <Edit2 className="h-3.5 w-3.5" />
-                              {campaign.status?.toLowerCase() === "approved" ? "Launch Campaign" : "Edit Draft"}
+                              {["approved", "adjusted"].includes(campaign.status?.toLowerCase() ?? "")
+                                      ? "Launch"
+                                      : "Edit"}
                             </Link>
                           )}
                           <Link
@@ -594,14 +599,27 @@ export default function DashboardPage() {
                             </td>
                             <td className="py-4 px-4">
                               <div className="flex gap-2">
-                                {["draft", "approved"].includes(campaign.status?.toLowerCase()) && (
+                                {["draft", "approved", "adjusted"].includes(campaign.status?.toLowerCase()) && (
                                   <Link
                                     href={buildDraftEditHref(campaign)}
                                     className="text-yellow-400 hover:text-yellow-300 text-xs font-medium transition-colors"
                                   >
-                                    {campaign.status?.toLowerCase() === "approved" ? "Launch" : "Edit"}
+                                    {["approved", "adjusted"].includes(campaign.status?.toLowerCase() ?? "")
+                                      ? "Launch"
+                                      : "Edit"}
                                   </Link>
                                 )}
+
+                                {/* Upload Financials for Successful Campaigns */}
+                                {campaign.status?.toLowerCase() === "successful" && (
+                                  <Link
+                                    href={`/dashboard/financials?campaignId=${campaign.id}`}
+                                    className="inline-flex items-center px-2.5 py-1 bg-[#6f42c1]/20 border border-[#6f42c1]/40 hover:bg-[#6f42c1] text-[#a78bfa] hover:text-white rounded-md text-xs font-medium transition-all"
+                                  >
+                                    Upload Financials
+                                  </Link>
+                                )}
+
                                 <Link
                                   href={`/campaigns/${campaign.id}`}
                                   className="text-[#a78bfa] hover:text-white text-xs font-medium transition-colors"

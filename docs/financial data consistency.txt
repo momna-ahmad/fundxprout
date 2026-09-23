@@ -1,0 +1,3 @@
+ensure check on the numbers input at financials form 
+-disclose gross revenue , operating expenses , net income/loss ,beginning cash , operating cash flow , ending cash balance
+-ending cash of an year should be the beginning of next year beginning cash 
