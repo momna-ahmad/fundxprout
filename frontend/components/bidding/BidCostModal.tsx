@@ -76,7 +76,7 @@ export default function BidCostModal({
         const feeData = await provider.getFeeData();
         const gasPrice = feeData.gasPrice || ethers.parseUnits('25', 'gwei');
         // fillOrder typical execution: ~120,000 gas units
-        const estimatedUnits = 125000n;
+        const estimatedUnits = BigInt(125000);
         const totalGasWei = gasPrice * estimatedUnits;
         if (!cancelled) {
           setEstimatedGasEth(parseFloat(ethers.formatEther(totalGasWei)).toFixed(5));
