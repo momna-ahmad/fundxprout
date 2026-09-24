@@ -32,8 +32,9 @@ export async function launchBusinessCampaign(
 
   const campaign = await getCampaignForLaunch(campaignId);
   if (campaign.error) return { error: campaign.error };
-  if (campaign.status !== "approved") {
-    return { error: "Campaign must be approved before it can be launched." };
+  
+  if (campaign.status !== "approved" && campaign.status !== "adjusted") {
+    return { error: "Campaign must be approved before it can be launched. campaign.status: " + campaign.status };
   }
 
   const imageUrl = (formData.get("image_url") as string) ?? "";
