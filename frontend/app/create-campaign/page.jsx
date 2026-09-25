@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useMemo } from "react";
 import { useActionState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { launchBusinessCampaign } from "@/lib/launchCampaign";
+import { launchBusinessCampaign } from "@/lib/owner/launchCampaign";
 import { saveDraftCampaign } from "@/lib/action";
 import CampaignStatusButton from "@/components/campaign-status-button";
 import CampaignDocUpload from "@/components/campaign-doc-upload";
@@ -14,6 +14,7 @@ import {
   Loader2, CheckCircle, Coins, Lock, Info
 } from "lucide-react";
 import Image from "next/image";
+import { updateApprovedCampaign } from "@/lib/owner/campaignActions";
 
 function getInitialFormState(draftCampaign) {
   return {
@@ -241,7 +242,27 @@ export function CreateCampaignForm() {
       if (!formData.tokenSymbol.trim()) throw new Error("Token Symbol is required");
       if (!formData.pricePerToken) throw new Error("Price per token is required");
 
-      const result = await saveDraftCampaign({
+      if(draftCampaign?.id && isApprovedOrAdjusted){
+
+        const result = await updateApprovedCampaign({
+        campaignId: draftCampaign.id,
+        title: formData.title,
+        description: formData.description,
+        goal: formData.goal,
+        duration: formData.duration,
+        category: formData.category,
+        imageUrl: imageUrl,
+        tokenSymbol: formData.tokenSymbol,
+        pricePerToken: formData.pricePerToken,
+      });
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      }else {
+
+        const result = await saveDraftCampaign({
         campaignId: draftCampaign?.id,
         title: formData.title,
         description: formData.description,
@@ -264,6 +285,7 @@ export function CreateCampaignForm() {
 
       if (result.error) {
         throw new Error(result.error);
+      }
       }
 
       router.push("/dashboard");
