@@ -5,21 +5,35 @@ import { ethers } from 'ethers';
 import {
   Gavel, Clock, CheckCircle2, XCircle, AlertTriangle,
   Loader2, ChevronRight, RotateCcw, ExternalLink,
+  ArrowUpCircle, Handshake, Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getMyBids, cancelBid, confirmBid, completeBid, type TokenBid } from '@/lib/bidding-api';
+import {
+  getMyBids,
+  cancelBid,
+  confirmBid,
+  completeBid,
+  acceptCounter,
+  rejectCounter,
+  type TokenBid,
+} from '@/lib/bidding-api';
 import { useWallet } from '@/context/WalletContext';
+import BidCostModal from '@/components/bidding/BidCostModal';
+import ModifyBidModal from '@/components/bidding/ModifyBidModal';
 
 // ── Status badge helper ───────────────────────────────────────────
 function StatusBadge({ status }: { status: TokenBid['status'] }) {
   const map: Record<string, { label: string; color: string; bg: string }> = {
-    pending:   { label: 'Pending',    color: 'var(--chart-5)', bg: 'color-mix(in srgb, var(--chart-5) 12%, transparent)' },
-    accepted:  { label: 'Accepted!',  color: 'var(--chart-3)', bg: 'color-mix(in srgb, var(--chart-3) 12%, transparent)' },
-    confirmed: { label: 'Confirming', color: 'var(--ring)',    bg: 'color-mix(in srgb, var(--ring) 12%, transparent)' },
-    completed: { label: 'Completed',  color: '#22c55e',        bg: 'rgba(34,197,94,0.1)' },
-    rejected:  { label: 'Rejected',   color: 'var(--destructive)', bg: 'color-mix(in srgb, var(--destructive) 10%, transparent)' },
-    cancelled: { label: 'Cancelled',  color: 'var(--muted-foreground)', bg: 'color-mix(in srgb, var(--muted-foreground) 10%, transparent)' },
-    expired:   { label: 'Expired',    color: 'var(--muted-foreground)', bg: 'color-mix(in srgb, var(--muted-foreground) 10%, transparent)' },
+    pending:          { label: 'Pending',           color: 'var(--chart-5)', bg: 'color-mix(in srgb, var(--chart-5) 12%, transparent)' },
+    counter_offered:  { label: 'Counter-Offer!',    color: 'var(--chart-4)', bg: 'color-mix(in srgb, var(--chart-4) 15%, transparent)' },
+    counter_accepted: { label: 'Counter Accepted',  color: 'var(--chart-3)', bg: 'color-mix(in srgb, var(--chart-3) 12%, transparent)' },
+    counter_rejected: { label: 'Counter Declined',  color: 'var(--muted-foreground)', bg: 'color-mix(in srgb, var(--muted-foreground) 10%, transparent)' },
+    accepted:         { label: 'Accepted!',         color: 'var(--chart-3)', bg: 'color-mix(in srgb, var(--chart-3) 12%, transparent)' },
+    confirmed:        { label: 'Confirming',        color: 'var(--ring)',    bg: 'color-mix(in srgb, var(--ring) 12%, transparent)' },
+    completed:        { label: 'Completed',         color: '#22c55e',        bg: 'rgba(34,197,94,0.1)' },
+    rejected:         { label: 'Rejected',          color: 'var(--destructive)', bg: 'color-mix(in srgb, var(--destructive) 10%, transparent)' },
+    cancelled:        { label: 'Cancelled',         color: 'var(--muted-foreground)', bg: 'color-mix(in srgb, var(--muted-foreground) 10%, transparent)' },
+    expired:          { label: 'Expired',           color: 'var(--muted-foreground)', bg: 'color-mix(in srgb, var(--muted-foreground) 10%, transparent)' },
   };
   const style = map[status] ?? map.pending;
   return (
@@ -29,6 +43,54 @@ function StatusBadge({ status }: { status: TokenBid['status'] }) {
     >
       {style.label}
     </span>
+  );
+}
+
+// shafqaat implemented — Fix P2: Dynamic live 24-hour countdown timer ticking every second
+function CountdownTimer({ deadline, label = 'Window' }: { deadline: string | null; label?: string }) {
+  const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!deadline) return;
+
+    function update() {
+      const diff = Math.floor((new Date(deadline!).getTime() - Date.now()) / 1000);
+      setSecondsRemaining(diff > 0 ? diff : 0);
+    }
+
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [deadline]);
+
+  if (!deadline || secondsRemaining === null) return null;
+
+  if (secondsRemaining <= 0) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-destructive/15 text-destructive text-xs font-semibold">
+        <AlertTriangle size={11} /> Expired
+      </span>
+    );
+  }
+
+  const h = Math.floor(secondsRemaining / 3600);
+  const m = Math.floor((secondsRemaining % 3600) / 60);
+  const s = secondsRemaining % 60;
+
+  const isUrgent = h < 2;
+  const isWarning = h < 12;
+
+  const cls = isUrgent
+    ? 'bg-destructive/15 text-destructive border border-destructive/30 animate-pulse'
+    : isWarning
+    ? 'bg-chart-4/15 text-chart-4 border border-chart-4/30'
+    : 'bg-chart-3/15 text-chart-3 border border-chart-3/30';
+
+  return (
+    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-mono text-xs font-bold ${cls}`}>
+      <Clock size={12} />
+      <span>{label}: {String(h).padStart(2, '0')}:{String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}</span>
+    </div>
   );
 }
 
@@ -55,6 +117,25 @@ export default function MyBidsPage() {
   const [error, setError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [progressMsg, setProgressMsg] = useState<Record<string, string>>({});
+  // shafqaat implemented — modals state for cost breakdown and offer increase
+  const [costModalBid, setCostModalBid] = useState<TokenBid | null>(null);
+  const [modifyModalBid, setModifyModalBid] = useState<TokenBid | null>(null);
+  const [walletBalanceEth, setWalletBalanceEth] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function checkBalance() {
+      if (walletAddress && typeof window !== 'undefined' && window.ethereum) {
+        try {
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const bal = await provider.getBalance(walletAddress);
+          setWalletBalanceEth(parseFloat(ethers.formatEther(bal)).toFixed(4));
+        } catch (e) {
+          console.warn('Could not fetch wallet balance', e);
+        }
+      }
+    }
+    checkBalance();
+  }, [walletAddress]);
 
   const loadBids = useCallback(async () => {
     try {
@@ -90,6 +171,36 @@ export default function MyBidsPage() {
       toast.success('Bid cancelled successfully.', { id: toastId });
     } catch (err: any) {
       toast.error(err.message || 'Failed to cancel bid.', { id: toastId });
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
+  // shafqaat implemented — Fix P3: Accept seller's counter-offer
+  async function handleAcceptCounter(bidId: string) {
+    setProcessingId(bidId);
+    const toastId = toast.loading('Accepting counter-offer…');
+    try {
+      await acceptCounter(bidId);
+      toast.success('Counter-offer accepted! You can now proceed to confirm your purchase.', { id: toastId });
+      await loadBids();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to accept counter-offer', { id: toastId });
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
+  // shafqaat implemented — Fix P3: Decline seller's counter-offer
+  async function handleRejectCounter(bidId: string) {
+    setProcessingId(bidId);
+    const toastId = toast.loading('Declining counter-offer…');
+    try {
+      await rejectCounter(bidId);
+      toast.success('Counter-offer declined.', { id: toastId });
+      await loadBids();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to decline counter-offer', { id: toastId });
     } finally {
       setProcessingId(null);
     }
@@ -213,8 +324,11 @@ export default function MyBidsPage() {
   // Helper to check if deadline/expiry has passed
   const isBidExpired = (b: any) => {
     if (b.status === 'expired') return true;
-    if (['accepted', 'confirmed'].includes(b.status) && b.accept_deadline) {
+    if (['accepted', 'confirmed', 'counter_accepted'].includes(b.status) && b.accept_deadline) {
       return new Date(b.accept_deadline).getTime() < Date.now();
+    }
+    if (b.status === 'counter_offered' && b.counter_expires_at) {
+      return new Date(b.counter_expires_at).getTime() < Date.now();
     }
     if (b.status === 'pending' && b.bid_expires_at) {
       return new Date(b.bid_expires_at).getTime() < Date.now();
@@ -223,8 +337,13 @@ export default function MyBidsPage() {
   };
 
   // ── Render ───────────────────────────────────────────────────
-  const activeBids = bids.filter((b) => ['pending', 'accepted', 'confirmed'].includes(b.status) && !isBidExpired(b));
-  const historicBids = bids.filter((b) => ['completed', 'rejected', 'cancelled', 'expired'].includes(b.status) || isBidExpired(b));
+  // shafqaat implemented — active bids include counter states
+  const activeBids = bids.filter(
+    (b) => ['pending', 'accepted', 'confirmed', 'counter_offered', 'counter_accepted'].includes(b.status) && !isBidExpired(b)
+  );
+  const historicBids = bids.filter(
+    (b) => ['completed', 'rejected', 'cancelled', 'expired', 'counter_rejected'].includes(b.status) || isBidExpired(b)
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -270,9 +389,13 @@ export default function MyBidsPage() {
               <div className="flex flex-col gap-3">
                 {activeBids.map((bid) => {
                   const campaign = bid.token_orders?.campaigns;
-                  const isAccepted = ['accepted', 'confirmed'].includes(bid.status);
+                  const isAccepted = ['accepted', 'confirmed', 'counter_accepted'].includes(bid.status);
+                  const isCounterOffered = bid.status === 'counter_offered';
                   const isProcessing = processingId === bid.id;
                   const step = progressMsg[bid.id];
+                  const effectivePrice = isAccepted && bid.counter_price_per_token
+                    ? Number(bid.counter_price_per_token)
+                    : Number(bid.bid_price_per_token);
 
                   return (
                     <div
@@ -281,17 +404,75 @@ export default function MyBidsPage() {
                       style={isAccepted ? {
                         borderColor: 'color-mix(in srgb, var(--chart-3) 40%, transparent)',
                         boxShadow: '0 0 24px color-mix(in srgb, var(--chart-3) 12%, transparent)',
+                      } : isCounterOffered ? {
+                        borderColor: 'color-mix(in srgb, var(--chart-4) 40%, transparent)',
+                        boxShadow: '0 0 24px color-mix(in srgb, var(--chart-4) 12%, transparent)',
                       } : {}}
                     >
-                      {/* Accepted banner */}
+                      {/* Accepted banner with live countdown timer */}
                       {isAccepted && (
                         <div
-                          className="mb-4 flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                          className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl px-4 py-3 text-sm font-semibold"
                           style={{ background: 'color-mix(in srgb, var(--chart-3) 12%, transparent)', color: 'var(--chart-3)' }}
                         >
-                          <CheckCircle2 size={15} />
-                          Your bid was accepted! Complete your purchase within{' '}
-                          <strong>{timeLeft(bid.accept_deadline) || '24h'}</strong>
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 size={16} />
+                            <span>Your offer was accepted! Complete purchase before deadline.</span>
+                          </div>
+                          <CountdownTimer deadline={bid.accept_deadline} label="Time Left" />
+                        </div>
+                      )}
+
+                      {/* shafqaat implemented — Fix 7 & P3: Counter-Offer Negotiation Panel */}
+                      {isCounterOffered && (
+                        <div className="mb-4 rounded-2xl border border-chart-4/30 bg-chart-4/10 p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-chart-4 font-bold text-sm">
+                              <Handshake size={16} />
+                              <span>Seller Sent a Counter-Offer!</span>
+                            </div>
+                            <CountdownTimer deadline={bid.counter_expires_at} label="Counter Expires" />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 text-xs bg-background/60 p-3 rounded-xl border border-border/40">
+                            <div>
+                              <span className="text-muted-foreground block text-[11px]">Your Original Offer</span>
+                              <span className="font-semibold text-foreground text-sm">
+                                {bid.original_bid_price || bid.bid_price_per_token} ETH/token
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground block text-[11px]">Seller's Counter Price</span>
+                              <span className="font-bold text-chart-4 text-sm">
+                                {bid.counter_price_per_token} ETH/token
+                              </span>
+                            </div>
+                          </div>
+
+                          {bid.counter_message && (
+                            <p className="text-xs text-muted-foreground italic bg-muted/30 p-2.5 rounded-lg border border-border/30">
+                              "{bid.counter_message}"
+                            </p>
+                          )}
+
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              onClick={() => handleAcceptCounter(bid.id)}
+                              disabled={isProcessing}
+                              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold shadow hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                            >
+                              {isProcessing ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                              Accept Counter Offer
+                            </button>
+                            <button
+                              onClick={() => handleRejectCounter(bid.id)}
+                              disabled={isProcessing}
+                              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-border text-xs font-semibold text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors"
+                            >
+                              {isProcessing ? <Loader2 size={13} className="animate-spin" /> : <XCircle size={13} />}
+                              Decline Counter
+                            </button>
+                          </div>
                         </div>
                       )}
 
@@ -301,10 +482,10 @@ export default function MyBidsPage() {
                             {campaign?.title || 'Token listing'}
                           </p>
                           <p className="mt-0.5 text-xs text-muted-foreground">
-                            {campaign?.category || 'Uncategorized'} · {bid.quantity} tokens @ {bid.bid_price_per_token} ETH/token
+                            {campaign?.category || 'Uncategorized'} · {bid.quantity} tokens @ {effectivePrice} ETH/token
                           </p>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            Total: <strong className="text-foreground">{(bid.quantity * bid.bid_price_per_token).toFixed(6)} ETH</strong>
+                            Total Outlay: <strong className="text-foreground">{(bid.quantity * effectivePrice).toFixed(6)} ETH</strong>
                           </p>
                         </div>
                         <StatusBadge status={bid.status} />
@@ -313,35 +494,50 @@ export default function MyBidsPage() {
                       {/* Expiry info */}
                       <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
                         <Clock size={12} />
-                        {isAccepted
-                          ? `Accept deadline: ${timeLeft(bid.accept_deadline)}`
-                          : `Bid expires: ${timeLeft(bid.bid_expires_at)}`
-                        }
+                        {isAccepted ? (
+                          <span>Accept deadline: {timeLeft(bid.accept_deadline)}</span>
+                        ) : isCounterOffered ? (
+                          <span>Response deadline: {timeLeft(bid.counter_expires_at)}</span>
+                        ) : (
+                          <span>Bid expires: {timeLeft(bid.bid_expires_at)}</span>
+                        )}
                       </div>
 
                       {/* Actions */}
                       <div className="mt-4 flex flex-wrap items-center gap-2">
                         {isAccepted && (
                           <button
-                            onClick={() => handleConfirmPurchase(bid)}
+                            onClick={() => setCostModalBid(bid)}
                             disabled={isProcessing}
-                            className="flex items-center gap-1.5 rounded-2xl px-4 py-2.5 text-sm font-bold text-white transition disabled:opacity-60"
+                            className="flex items-center gap-1.5 rounded-2xl px-4 py-2.5 text-sm font-bold text-white transition disabled:opacity-60 shadow-md hover:opacity-95"
                             style={{ background: 'linear-gradient(135deg, var(--chart-3), var(--ring))' }}
                           >
                             {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <ChevronRight size={14} />}
-                            {isProcessing ? (step || 'Processing…') : (bid.status === 'confirmed' ? 'Complete Purchase' : 'Confirm Purchase')}
+                            {isProcessing ? (step || 'Processing…') : (bid.status === 'confirmed' ? 'Complete Purchase' : 'Review & Confirm Purchase')}
                           </button>
                         )}
 
                         {bid.status === 'pending' && (
-                          <button
-                            onClick={() => handleCancel(bid.id)}
-                            disabled={isProcessing}
-                            className="flex items-center gap-1.5 rounded-2xl border border-border px-4 py-2 text-sm text-muted-foreground transition hover:border-destructive hover:text-destructive disabled:opacity-60"
-                          >
-                            {isProcessing ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={13} />}
-                            Cancel Bid
-                          </button>
+                          <>
+                            {/* shafqaat implemented — Fix P3: Increase Offer button */}
+                            <button
+                              onClick={() => setModifyModalBid(bid)}
+                              disabled={isProcessing}
+                              className="flex items-center gap-1.5 rounded-2xl border border-primary/40 bg-primary/10 px-3.5 py-2 text-xs font-semibold text-primary transition hover:bg-primary/20"
+                            >
+                              <ArrowUpCircle size={13} />
+                              Increase Offer
+                            </button>
+
+                            <button
+                              onClick={() => handleCancel(bid.id)}
+                              disabled={isProcessing}
+                              className="flex items-center gap-1.5 rounded-2xl border border-border px-3.5 py-2 text-xs text-muted-foreground transition hover:border-destructive hover:text-destructive disabled:opacity-60"
+                            >
+                              {isProcessing ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={13} />}
+                              Cancel Bid
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -387,6 +583,38 @@ export default function MyBidsPage() {
           )}
         </div>
       )}
+
+      {/* shafqaat implemented — Fix P2: Total cost breakdown modal with gas estimate */}
+      <BidCostModal
+        isOpen={Boolean(costModalBid)}
+        onClose={() => setCostModalBid(null)}
+        onConfirm={() => {
+          if (costModalBid) {
+            const b = costModalBid;
+            setCostModalBid(null);
+            handleConfirmPurchase(b);
+          }
+        }}
+        quantity={costModalBid?.quantity || 1}
+        pricePerToken={
+          costModalBid?.counter_price_per_token
+            ? Number(costModalBid.counter_price_per_token)
+            : Number(costModalBid?.bid_price_per_token || 0)
+        }
+        campaignTitle={costModalBid?.token_orders?.campaigns?.title || 'Token Listing'}
+        userWalletBalanceEth={walletBalanceEth}
+        isLoading={processingId === costModalBid?.id}
+        actionLabel="Execute Settlement On-Chain"
+        isSettlement={true}
+      />
+
+      {/* shafqaat implemented — Fix P3: Modify bid (increase offer) modal */}
+      <ModifyBidModal
+        isOpen={Boolean(modifyModalBid)}
+        onClose={() => setModifyModalBid(null)}
+        bid={modifyModalBid}
+        onSuccess={loadBids}
+      />
     </div>
   );
 }

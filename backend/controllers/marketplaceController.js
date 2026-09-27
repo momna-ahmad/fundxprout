@@ -1,12 +1,12 @@
-// backend/controllers/marketplaceController.js
 const { supabaseAdmin } = require('../config/supabaseAdmin');
 const { validateOrder, ValidationError } = require('../services/orderValidationService');
 const { processOrder } = require('../services/matchingEngine');
 const { getOrCreateBook } = require('../services/orderBookService');
+const { createNotification } = require('../services/notificationService');
 
 async function createOrder(req, res) {
   const investorId = req.investorId || req.user?.id;
-  const { campaign_id, side, price, quantity, wallet_address } = req.body;
+  const { campaign_id, side, price, quantity, wallet_address, auto_accept_price_per_token } = req.body;
 
   if (!campaign_id || !side || !price || !quantity) {
     return res.status(400).json({ error: 'campaign_id, side, price, and quantity are required' });
@@ -16,15 +16,14 @@ async function createOrder(req, res) {
   }
 
   try {
-    // Validate campaign and order rules. Identity/profile completion is not a
-    // marketplace requirement in this development flow; MetaMask connection is
-    // enforced by the frontend and Supabase login identifies the order owner.
-
-    // validate before sending request to backend by calling the smart contract function and state (completed)
-    // await validateOrder(
-    //   { campaign_id, investor_id: investorId, side, price, quantity },
-    //   { skipInvestorValidation: true }
-    // );
+    // shafqaat implemented — Fix 5a: validateOrder() re-enabled with full KYC + lockup checks.
+    // Previously this block was commented out, allowing ANY authenticated user to place orders
+    // regardless of KYC status, campaign trading status, or lockup period.
+    // ValidationError is caught below and returned as a 403 to the frontend.
+    await validateOrder(
+      { campaign_id, investor_id: investorId, side, price, quantity },
+      { skipInvestorValidation: false }
+    );
 
     // Keep tokens in the seller's wallet. Prevent over-listing by accounting
     // for the user's unfilled sell orders in Supabase; final ownership is
@@ -56,8 +55,9 @@ async function createOrder(req, res) {
         quantity,
         quantity_remaining: quantity,
         status: 'open',
-        seller_wallet_address: wallet_address
-
+        seller_wallet_address: wallet_address,
+        // shafqaat implemented — Fix P3: Store optional auto-accept threshold price for sell listing
+        auto_accept_price_per_token: auto_accept_price_per_token ? Number(auto_accept_price_per_token) : null,
       }])
       .select()
       .single();
@@ -74,6 +74,23 @@ async function createOrder(req, res) {
 
     const result = await processOrder({ ...dbOrder });
 
+    // Send success notification to order creator
+    const { data: campaign } = await supabaseAdmin
+      .from('campaigns').select('title').eq('id', campaign_id).single();
+    const campaignTitle = campaign?.title || 'a campaign';
+
+    const { createNotification } = require('../services/notificationService');
+    await createNotification({
+      userId: investorId,
+      type: 'bid_received',
+      title: side === 'sell' ? 'Sell Order Listed Successfully' : 'Order Placed Successfully',
+      message: side === 'sell'
+        ? `You successfully listed ${quantity} tokens of "${campaignTitle}" for sale at ${price} ETH/token.`
+        : `Your order for ${quantity} tokens of "${campaignTitle}" at ${price} ETH/token has been placed.`,
+      link: side === 'sell' ? '/investor-dashboard/my-listings' : '/investor-dashboard/my-bids',
+      metadata: { order_id: dbOrder.id, campaign_id, price, quantity },
+    });
+
     return res.status(201).json({ order: result });
   } catch (err) {
     if (err instanceof ValidationError) {
@@ -83,6 +100,7 @@ async function createOrder(req, res) {
     return res.status(500).json({ error: 'Failed to place order' });
   }
 }
+
 
 async function getOrderBook(req, res) {
   try {
@@ -211,8 +229,37 @@ async function cancelOrder(req, res) {
       return res.status(400).json({ error: 'Order cannot be cancelled' });
     }
 
+    // shafqaat implemented — Fix P2: Notify bidders when a listing is cancelled/delisted
+    const { data: pendingBids } = await supabaseAdmin
+      .from('token_bids')
+      .select('id, buyer_id, campaign_id')
+      .eq('listing_id', orderId)
+      .eq('status', 'pending');
+
     await supabaseAdmin.from('token_orders').update({ status: 'cancelled' }).eq('id', orderId);
     await supabaseAdmin.from('token_bids').update({ status: 'cancelled' }).eq('listing_id', orderId).eq('status', 'pending');
+
+    if (pendingBids && pendingBids.length > 0) {
+      const { data: campaign } = await supabaseAdmin
+        .from('campaigns')
+        .select('title')
+        .eq('id', order.campaign_id)
+        .single();
+      const campaignTitle = campaign?.title || 'a listing';
+
+      await Promise.all(
+        pendingBids.map((b) =>
+          createNotification({
+            userId: b.buyer_id,
+            type: 'bid_cancelled',
+            title: 'Listing Delisted — Bid Cancelled',
+            message: `The listing for "${campaignTitle}" was delisted by the seller. Your pending bid has been cancelled.`,
+            link: '/investor-dashboard/my-bids',
+            metadata: { bid_id: b.id, listing_id: orderId, campaign_id: b.campaign_id },
+          })
+        )
+      );
+    }
 
     return res.json({ success: true, message: 'Order delisted successfully' });
   } catch (err) {

@@ -25,12 +25,8 @@ async function validateTradeable(campaignId) {
     throw new ValidationError('CAMPAIGN_NOT_CLOSED', 'Campaign must be closed and funded before secondary trading');
   }
   if (!campaign.secondary_trading_enabled) {
-    console.log(campaign.secondary_trading_enabled, 'secondary trading enabled');
     throw new ValidationError('TRADING_DISABLED', 'Secondary trading is not enabled for this campaign');
   }
-  // if ((campaign.flag_count ?? 0) > 0) {
-  //   throw new ValidationError('CAMPAIGN_FLAGGED', 'This campaign is under review and trading is paused');
-  // }
 
   const { data: settings } = await supabaseAdmin
     .from('campaign_secondary_market_settings')
@@ -86,7 +82,7 @@ async function validateInvestor(investorId) {
 /** Rule 11: order price must sit within the configured band of the reference price. */
 function validatePriceBand(price, campaign, settings) {
   const reference = campaign.last_traded_price ?? campaign.price_per_token;
-  if (!reference) return; // no reference yet (never traded, no issue price) — allow, log if needed
+  if (!reference) return; // no reference yet (never traded, no issue price) — allow
 
   const bandPercent = settings?.price_band_percent ?? 20;
   const lower = reference * (1 - bandPercent / 100);
@@ -110,19 +106,60 @@ function validateOrderSize(qty, settings) {
   }
 }
 
+// shafqaat implemented — Fix 5b: Lockup period enforcement.
+// Checks the investments table for lockup_expires_at. If the investor's tokens
+// are still within the lockup window they are blocked from creating sell orders.
+// This prevents early secondary-market dumps that bypass the lockup agreement.
+async function validateLockup(investorId, campaignId) {
+  const { data: investment, error } = await supabaseAdmin
+    .from('investments')
+    .select('lockup_expires_at')
+    .eq('user_id', investorId)
+    .eq('campaign_id', campaignId)
+    .maybeSingle();
+
+  if (error) {
+    // Non-fatal: if we can't read the investment row, don't block the order
+    console.warn('[validateLockup] Could not read investments row:', error.message);
+    return;
+  }
+
+  if (investment?.lockup_expires_at && new Date(investment.lockup_expires_at) > new Date()) {
+    const msLeft = new Date(investment.lockup_expires_at) - new Date();
+    const daysLeft = Math.ceil(msLeft / 86_400_000);
+    throw new ValidationError(
+      'LOCKUP_ACTIVE',
+      `Your tokens are locked for ${daysLeft} more day${daysLeft === 1 ? '' : 's'}. ` +
+      `You cannot list them for sale until the lockup period ends.`
+    );
+  }
+}
+
 /**
  * Runs every pre-trade check. Throws ValidationError on first failure.
  * @param {Object} order - { campaign_id, investor_id, side, price, quantity }
+ * @param {Object} opts  - { skipInvestorValidation: boolean }
  * @returns {Promise<{campaign: Object, settings: Object}>}
  */
+// shafqaat implemented — Fix 5a: validateOrder re-enabled with KYC + lockup enforcement.
+// Previously this function was commented out in marketplaceController.js, allowing
+// ANY user to place orders regardless of KYC status, campaign state, or lockup period.
 async function validateOrder(order, { skipInvestorValidation = false } = {}) {
   const { campaign, settings } = await validateTradeable(order.campaign_id);
+
   if (!skipInvestorValidation) {
     await validateInvestor(order.investor_id);
   }
+
+  // Enforce lockup only for sell orders
+  if (order.side === 'sell' && order.investor_id) {
+    await validateLockup(order.investor_id, order.campaign_id);
+  }
+
   validatePriceBand(order.price, campaign, settings);
   validateOrderSize(order.quantity, settings);
+
   return { campaign, settings };
 }
 
-module.exports = { validateOrder, validateTradeable, validateInvestor, ValidationError };
+module.exports = { validateOrder, validateTradeable, validateInvestor, validateLockup, ValidationError };

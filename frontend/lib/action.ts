@@ -633,6 +633,29 @@ async function logAdminAction(supabase: any, adminId: string, action: string, ta
   }
 }
 
+async function sendSystemNotification(payload: {
+  userId: string;
+  type: string;
+  title: string;
+  message: string;
+  link?: string;
+  metadata?: any;
+}) {
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    await fetch(`${apiUrl}/api/notifications/system-emit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-system-key": process.env.SYSTEM_NOTIF_KEY || "fxp-system-secret",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.error("[sendSystemNotification] error sending system notification:", err);
+  }
+}
+
 export async function adminVerifyKYC(userId: string) {
   const supabase = await createClient();
   const adminUser = await checkAdmin(supabase);
@@ -646,7 +669,15 @@ export async function adminVerifyKYC(userId: string) {
   if (error) return { error: error.message };
 
   await logAdminAction(supabase, adminUser.id, "verify_kyc", "profile", userId, "Admin manually approved KYC");
-  
+
+  await sendSystemNotification({
+    userId,
+    type: "kyc_status",
+    title: "Identity Verified",
+    message: "Your KYC identity verification has been approved! You can now participate in primary campaigns and secondary trading.",
+    link: "/dashboard/profile",
+  });
+
   revalidatePath("/admin-dashboard");
   return { success: true };
 }
@@ -664,7 +695,24 @@ export async function adminVerifyKYB(businessId: string) {
   if (error) return { error: error.message };
 
   await logAdminAction(supabase, adminUser.id, "verify_kyb", "business", businessId, "Admin manually approved KYB");
-  
+
+  // Fetch business owner to send notification
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("owner_id")
+    .eq("id", businessId)
+    .maybeSingle();
+
+  if (business?.owner_id) {
+    await sendSystemNotification({
+      userId: business.owner_id,
+      type: "kyb_status",
+      title: "Business Verified",
+      message: "Your KYB business verification has been approved! You can now launch fundraising campaigns.",
+      link: "/dashboard/profile",
+    });
+  }
+
   revalidatePath("/admin-dashboard");
   return { success: true };
 }
@@ -676,6 +724,13 @@ export async function adminApproveCampaign(campaignId: number) {
   const adminUser = await checkAdmin(supabase);
   if (!adminUser) return { error: "Unauthorized: Admins only" };
 
+  // Fetch campaign details before updating
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select("owner, title")
+    .eq("id", campaignId)
+    .single();
+
   const { error } = await supabase
     .from("campaigns")
     .update({ status: "approved" })
@@ -684,6 +739,18 @@ export async function adminApproveCampaign(campaignId: number) {
   if (error) return { error: error.message };
 
   await logAdminAction(supabase, adminUser.id, "approve_campaign", "campaign", String(campaignId), "Admin approved campaign");
+
+  if (campaign?.owner) {
+    await sendSystemNotification({
+      userId: campaign.owner,
+      type: "campaign_approved",
+      title: "Campaign Approved",
+      message: `Your campaign "${campaign.title || "Equity Raising"}" has been approved by admin and is now live!`,
+      link: `/campaign/${campaignId}`,
+      metadata: { campaign_id: campaignId },
+    });
+  }
+
   revalidatePath("/admin-dashboard/campaigns");
   return { success: true };
 }
@@ -693,6 +760,13 @@ export async function adminRejectCampaign(campaignId: number, reason: string) {
   const adminUser = await checkAdmin(supabase);
   if (!adminUser) return { error: "Unauthorized: Admins only" };
 
+  // Fetch campaign details before updating
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select("owner, title")
+    .eq("id", campaignId)
+    .single();
+
   const { error } = await supabase
     .from("campaigns")
     .update({ status: "rejected" })
@@ -701,9 +775,22 @@ export async function adminRejectCampaign(campaignId: number, reason: string) {
   if (error) return { error: error.message };
 
   await logAdminAction(supabase, adminUser.id, "reject_campaign", "campaign", String(campaignId), reason || "Admin rejected campaign");
+
+  if (campaign?.owner) {
+    await sendSystemNotification({
+      userId: campaign.owner,
+      type: "campaign_rejected",
+      title: "Campaign Verification Update",
+      message: `Your campaign "${campaign.title || "Equity Raising"}" was rejected. Reason: ${reason || "Does not meet guidelines"}`,
+      link: "/dashboard",
+      metadata: { campaign_id: campaignId, reason },
+    });
+  }
+
   revalidatePath("/admin-dashboard/campaigns");
   return { success: true };
 }
+
 
 export async function adminRevokeKYC(userId: string) {
   const supabase = await createClient();

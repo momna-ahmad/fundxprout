@@ -17,6 +17,8 @@ export type OrderRequest = {
   price: number;
   quantity: number;
   wallet_address : string | undefined ;
+  // shafqaat implemented — Fix P3: optional auto-accept threshold price
+  auto_accept_price_per_token?: number;
 };
 
 export type OrderResponse = { order: any };
