@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { updateApprovedCampaign } from "@/lib/owner/campaignActions";
+import { convertUsdToEth } from "@/lib/common";
 
 function getInitialFormState(draftCampaign) {
   return {
@@ -148,6 +149,59 @@ export function CreateCampaignForm() {
   const [imageUploadError, setImageUploadError] = useState("");
   const [draftSaving, setDraftSaving] = useState(false);
   const [draftMessage, setDraftMessage] = useState("");
+  // ── Compute Real-Time Dilution Math ───────────────────────────────────────
+  const [equityCalculation, setEquityCalculation] = useState({
+    offered: 0,
+    retained: 100,
+    postMoney: 0,
+  });
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function calculateDilution() {
+      const valuationNum = parseFloat(formData.valuation || "0");
+      const goalNum = parseFloat(formData.goal || "0");
+
+      if (valuationNum <= 0 || goalNum <= 0) {
+        if (!isCancelled) {
+          setEquityCalculation({ offered: 0, retained: 100, postMoney: 0 });
+        }
+        return;
+      }
+
+      try {
+        const { ethAmount } = await convertUsdToEth(valuationNum);
+        const postMoney = ethAmount + goalNum;
+
+        if (postMoney <= 0) {
+          if (!isCancelled) {
+            setEquityCalculation({ offered: 0, retained: 100, postMoney: 0 });
+          }
+          return;
+        }
+
+        const offered = (goalNum / postMoney) * 100;
+        const retained = 100 - offered;
+
+        if (!isCancelled) {
+          setEquityCalculation({
+            offered: Number(offered.toFixed(2)),
+            retained: Number(retained.toFixed(2)),
+            postMoney: Number(postMoney.toFixed(3)),
+          });
+        }
+      } catch (err) {
+        console.error("Dilution calculation error:", err);
+      }
+    }
+
+    calculateDilution();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [formData.valuation, formData.goal]);
 
   useEffect(() => {
     setFormData(getInitialFormState(draftCampaign));
@@ -176,26 +230,6 @@ export function CreateCampaignForm() {
   // ── Determine if campaign fields are locked due to approval status ───────
   const campaignStatusLower = draftCampaign?.status?.toLowerCase() ?? "";
   const isApprovedOrAdjusted = ["approved", "adjusted"].includes(campaignStatusLower);
-
-  // ── Compute Real-Time Dilution Math ───────────────────────────────────────
-  const equityCalculation = useMemo(() => {
-    const valuationNum = parseFloat(formData.valuation || "0");
-    const goalNum = parseFloat(formData.goal || "0");
-    const postMoney = valuationNum + goalNum;
-
-    if (postMoney <= 0 || goalNum <= 0) {
-      return { offered: 0, retained: 100, postMoney: 0 };
-    }
-
-    const offered = (goalNum / postMoney) * 100;
-    const retained = 100 - offered;
-
-    return {
-      offered: Number(offered.toFixed(2)),
-      retained: Number(retained.toFixed(2)),
-      postMoney: Number(postMoney.toFixed(3)),
-    };
-  }, [formData.valuation, formData.goal]);
 
   const handleDocUploaded = (key, cid) =>
     setDocCids((prev) => ({ ...prev, [key]: cid }));
@@ -455,7 +489,7 @@ export function CreateCampaignForm() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                  {isApprovedOrAdjusted ? "Approved Valuation (ETH)" : "Pre-launch Business Valuation (ETH) *"}
+                  {isApprovedOrAdjusted ? "Approved Valuation" : "Pre-launch Business Valuation *"}
                 </label>
                 {isApprovedOrAdjusted && (
                   <span className="flex items-center gap-1 text-[11px] text-amber-400/90 font-medium">

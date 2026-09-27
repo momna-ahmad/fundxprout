@@ -4,6 +4,7 @@ import { ethers } from "ethers";
 import { getCampaignForLaunch, saveCampaignToDb } from "../action";
 import CampaignFactoryJSON from "@/abis/CampaignFactory.json";
 import { createClient } from "@/utils/supabase/server";
+import { convertUsdToEth } from "@/lib/common";
 
 
 // ⚠️ Hafsa has Updated this after redeploying CampaignFactory with the new event
@@ -54,7 +55,8 @@ export async function launchBusinessCampaign(
   // Use the verified valuation from the database record rather than editable form input
   const verifiedValuation = Number(campaign.valuation ?? 0);
   const goalNum = Number(goal || 0);
-  const postMoney = verifiedValuation + goalNum;
+  const { ethAmount } = await convertUsdToEth(verifiedValuation);
+  const postMoney = ethAmount + goalNum;
 
   // Recalculate equity dilution based on final goal launched on-chain
   let equityOffered = Number(campaign.equity_offered ?? 0);
@@ -163,6 +165,9 @@ export async function launchBusinessCampaign(
       deadline: deadlineIso,
       campaignId,
       valuation,
+      postmoney_valuation_eth: postMoney,
+      equity_offered: equityOffered,
+      equity_retained: equityRetained,
     });
 
     if (dbResult.error) return { error: dbResult.error };

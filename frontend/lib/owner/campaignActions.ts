@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from "@/utils/supabase/server";
+import { convertUsdToEth } from "@/lib/common";
 
 export async function updateApprovedCampaign(campaignData: {
   campaignId: string | number;
@@ -47,7 +48,8 @@ export async function updateApprovedCampaign(campaignData: {
   }
 
   // 3. Recalculate post-money valuation and dilution
-  const postMoney = verifiedValuation + newGoal;
+  const { ethAmount } = await convertUsdToEth(verifiedValuation);
+  const postMoney = ethAmount + newGoal;
   let equityOffered = existing.equity_offered;
   let equityRetained = existing.equity_retained;
 
@@ -73,6 +75,7 @@ export async function updateApprovedCampaign(campaignData: {
       equity_offered: equityOffered,
       equity_retained: equityRetained,
       updated_at: new Date().toISOString(),
+      postmoney_valuation_eth: postMoney,
     })
     .eq("id", campaignData.campaignId)
     .eq("owner", user.id);
