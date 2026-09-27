@@ -24,60 +24,45 @@ const KYC_TYPES = {
   ],
 };
 
+// shafqaat implemented — Fix 3: Removed auto-profile creation fallback.
+// Previously, if a wallet was not registered in the DB, the service would
+// automatically create a profile with identity_verified = true, completely
+// bypassing KYC. Now any unregistered wallet receives a 403 error instead.
 async function ensureVerifiedProfile(walletAddress, roleName) {
   const cleanAddr = walletAddress.toLowerCase();
 
-  // 1. Check exact/ilike match on wallet_address
-  let { data: profile } = await supabaseAdmin
+  // Strict lookup: exact or case-insensitive match on wallet_address only.
+  // No auto-creation, no fallback upsert.
+  const { data: profile, error } = await supabaseAdmin
     .from('profiles')
     .select('user_id, identity_verified, trading_restricted')
     .ilike('wallet_address', cleanAddr)
     .maybeSingle();
 
-  if (profile) {
-    if (!profile.identity_verified) {
-      await supabaseAdmin
-        .from('profiles')
-        .update({ identity_verified: true, profile_complete: true })
-        .eq('user_id', profile.user_id);
-      profile.identity_verified = true;
-    }
-    return profile;
+  if (error) {
+    console.error(`[kycSigner] DB error looking up ${roleName} wallet:`, error.message);
+    throw new Error(`Unable to verify ${roleName} identity. Please try again.`);
   }
 
-  // 2. If no profile exists with this wallet address, check if any user has NULL wallet_address
-  const { data: unlinkedProfiles } = await supabaseAdmin
-    .from('profiles')
-    .select('user_id, identity_verified, trading_restricted')
-    .is('wallet_address', null)
-    .limit(1);
-
-  if (unlinkedProfiles?.length) {
-    const target = unlinkedProfiles[0];
-    await supabaseAdmin
-      .from('profiles')
-      .update({ wallet_address: cleanAddr, identity_verified: true, profile_complete: true })
-      .eq('user_id', target.user_id);
-    return { ...target, wallet_address: cleanAddr, identity_verified: true };
+  if (!profile) {
+    throw new Error(
+      `${roleName} wallet ${cleanAddr.slice(0, 8)}… is not registered on this platform. ` +
+      `Please sign in and complete KYC registration before trading.`
+    );
   }
 
-  // 3. Auto-upsert profile row for this wallet address
-  const newUserId = ethers.id(cleanAddr).slice(0, 36);
-  const { data: newProfile } = await supabaseAdmin
-    .from('profiles')
-    .upsert([{
-      user_id: newUserId,
-      wallet_address: cleanAddr,
-      full_name: `${roleName.toUpperCase()} Investor (${cleanAddr.slice(0, 6)})`,
-      identity_verified: true,
-      profile_complete: true,
-    }], { onConflict: 'user_id' })
-    .select()
-    .maybeSingle();
+  if (!profile.identity_verified) {
+    throw new Error(
+      `${roleName} has not completed identity verification (KYC). ` +
+      `Please complete your KYC check before trading.`
+    );
+  }
 
-  if (newProfile) return newProfile;
+  if (profile.trading_restricted) {
+    throw new Error(`${roleName} account is restricted from trading. Please contact support.`);
+  }
 
-  return { identity_verified: true, trading_restricted: false };
+  return profile;
 }
 
 /**
@@ -98,14 +83,14 @@ async function generateKycSignature(buyerWallet, sellerWallet, chainId = 1115511
     throw new Error('Invalid buyer or seller wallet address');
   }
 
-  // 1. Resolve and verify buyer identity in DB
-  const buyerProfile = await ensureVerifiedProfile(buyerWallet, 'buyer');
+  // 1. Resolve and verify buyer identity in DB (strict — no auto-creation)
+  const buyerProfile = await ensureVerifiedProfile(buyerWallet, 'Buyer');
   if (buyerProfile.trading_restricted) {
     throw new Error('Buyer account is restricted from trading');
   }
 
-  // 2. Resolve and verify seller identity in DB
-  const sellerProfile = await ensureVerifiedProfile(sellerWallet, 'seller');
+  // 2. Resolve and verify seller identity in DB (strict — no auto-creation)
+  const sellerProfile = await ensureVerifiedProfile(sellerWallet, 'Seller');
   if (sellerProfile.trading_restricted) {
     throw new Error('Seller account is restricted from trading');
   }
