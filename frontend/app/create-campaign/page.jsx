@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useMemo } from "react";
 import { useActionState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { launchBusinessCampaign } from "@/lib/owner/launchCampaign";
+import { launchBusinessCampaign } from "@/lib/Owner/launchCampaign";
 import { saveDraftCampaign } from "@/lib/action";
 import CampaignStatusButton from "@/components/campaign-status-button";
 import CampaignDocUpload from "@/components/campaign-doc-upload";
@@ -14,7 +14,7 @@ import {
   Loader2, CheckCircle, Coins, Lock, Info
 } from "lucide-react";
 import Image from "next/image";
-import { updateApprovedCampaign } from "@/lib/owner/campaignActions";
+import { updateApprovedCampaign } from "@/lib/Owner/campaignActions";
 import { convertUsdToEth } from "@/lib/common";
 
 function getInitialFormState(draftCampaign) {

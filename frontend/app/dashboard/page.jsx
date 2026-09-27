@@ -28,7 +28,7 @@ import Navbar from "@/components/navbar";
 import { ethers } from "ethers";
 import BusinessCampaignJSON from "@/abis/BusinessCampaign.json";
 import CampaignReviewInfo from "@/components/campaign-review-info";
-import DashboardOverviewTab from "@/components/owner/DashboardOverviewTab";
+import DashboardOverviewTab from "@/components/Owner/DashboardOverviewTab";
 
 const ITEMS_PER_PAGE = 6; // shafqaat — campaigns per page in My Campaigns tab
 
