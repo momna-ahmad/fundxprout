@@ -2430,7 +2430,7 @@ export default function KYCVerificationManager({
                       <td className="px-5 py-3.5 text-xs text-gray-300 max-w-[140px] truncate">
                         {session.first_name
                           ? `${session.first_name} ${session.last_name || ''}`
-                          : session.company_name || session.entity_id.slice(0, 8) + '…'}
+                          : session.company_name || (session.entity_id ? `${session.entity_id.slice(0, 8)}…` : '—')}
                       </td>
                       <td className="px-5 py-3.5">
                         <StatusBadge status={session.admin_override_status || session.status} />

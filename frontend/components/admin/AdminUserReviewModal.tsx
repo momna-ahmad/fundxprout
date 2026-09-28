@@ -79,8 +79,8 @@ export interface DiditSession {
   id?: string;
   didit_session_id: string;
   entity_type?: string;
-  entity_id?: string;
-  session_kind?: string;
+  entity_id: string;
+  session_kind: string;
   status: string;
   decision?: string | null;
   created_at?: string | null;
