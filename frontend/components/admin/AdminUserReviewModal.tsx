@@ -76,13 +76,14 @@ export interface Profile {
 }
 
 export interface DiditSession {
-  id: string;
+  id?: string;
   didit_session_id: string;
-  entity_id: string;
-  session_kind: string;
+  entity_type?: string;
+  entity_id?: string;
+  session_kind?: string;
   status: string;
   decision?: string | null;
-  created_at: string;
+  created_at?: string | null;
   updated_at?: string;
   first_name?: string | null;
   last_name?: string | null;

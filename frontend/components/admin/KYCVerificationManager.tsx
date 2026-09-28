@@ -53,7 +53,7 @@ import {
   adminRefetchDiditSession,
   adminSyncAllDiditSessions,
 } from '@/lib/action';
-import AdminUserReviewModal from './AdminUserReviewModal';
+import AdminUserReviewModal, { type DiditSession } from './AdminUserReviewModal';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -96,53 +96,6 @@ interface Business {
   } | null;
 }
 
-interface DiditSession {
-  didit_session_id: string;
-  entity_type: string;
-  entity_id: string;
-  session_kind: string;
-  status: string;
-  decision?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-  // KYC personal fields
-  first_name?: string | null;
-  last_name?: string | null;
-  date_of_birth?: string | null;
-  nationality?: string | null;
-  document_type?: string | null;
-  document_number?: string | null;
-  personal_number?: string | null;
-  issuing_state?: string | null;
-  expiration_date?: string | null;
-  gender?: string | null;
-  // Check scores
-  liveness_score?: number | null;
-  liveness_status?: string | null;
-  face_match_score?: number | null;
-  face_match_status?: string | null;
-  aml_status?: string | null;
-  aml_hits?: number | null;
-  // Device
-  device_ip?: string | null;
-  device_country?: string | null;
-  device_platform?: string | null;
-  is_vpn?: boolean | null;
-  // KYB
-  company_name?: string | null;
-  registration_number?: string | null;
-  company_type?: string | null;
-  incorporation_date?: string | null;
-  company_status?: string | null;
-  company_country?: string | null;
-  kyb_key_people?: Record<string, unknown>[] | null;
-  // Admin override
-  admin_override_status?: string | null;
-  admin_override_reason?: string | null;
-  admin_override_at?: string | null;
-  // Raw payload
-  didit_decision_payload?: Record<string, unknown> | null;
-}
 
 interface KYCVerificationManagerProps {
   pendingUsers: Profile[];
