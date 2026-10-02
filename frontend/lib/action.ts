@@ -311,6 +311,7 @@ export async function saveCampaignToDb(formData: any) {
     description: formData.description,
     funding_goal: formData.goal,
     duration: formData.duration,
+    deadline: formData.deadline ?? null,
     category: formData.category,
     owner: user.id,
     status: "launched",
@@ -385,6 +386,7 @@ export async function saveDraftCampaign(draftData: any) {
     description: draftData.description,
     funding_goal: draftData.goal,
     duration: draftData.duration,
+    deadline: draftData.deadline ?? null,
     category: draftData.category,
     owner: user.id,
     image_url: draftData.imageUrl ?? null,
@@ -1297,4 +1299,29 @@ export async function adminAuthenticateAction(email: string, secretKey: string, 
 
   revalidatePath("/admin-dashboard");
   return { success: true, redirectTo: "/admin-dashboard" };
+}
+
+// Call this before triggering MetaMask to verify permissions
+export async function verifyCampaignForLaunch(campaignId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data: campaign, error } = await supabase
+    .from("campaigns")
+    .select("*")
+    .eq("id", campaignId)
+    .eq("owner", user?.id)
+    .maybeSingle();
+
+  if (error || !campaign) return { error: error?.message || "Campaign not found" };
+  if (campaign.status !== "approved" && campaign.status !== "adjusted") {
+    return { error: `Campaign must be approved before launch. Status: ${campaign.status}` };
+  }
+
+  return { success: true, campaign };
+}
+
+// Call this after MetaMask transaction succeeds
+export async function finalizeCampaignLaunch(campaignData: any) {
+  return await saveCampaignToDb(campaignData);
 }
