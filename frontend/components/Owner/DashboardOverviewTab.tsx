@@ -26,6 +26,7 @@ export interface CampaignItem {
   equity_offered?: string | number | null;
   equity_retained?: string | number | null;
   campaign_review?: any;
+  funds_withdrawn?: boolean | null;
 }
 
 interface DashboardOverviewTabProps {
@@ -308,13 +309,12 @@ export default function DashboardOverviewTab({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {isGoalReached && campaign.contract_address && (
+                  {isGoalReached && campaign.contract_address && !campaign.funds_withdrawn && (
                     <button
                       onClick={() => handleWithdrawFunds(campaign)}
                       disabled={txPending === campaign.contract_address}
                       className="bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-4 py-2 rounded-full transition flex items-center gap-1.5 disabled:opacity-50"
                     >
-                      <DollarSign className="h-3.5 w-3.5" />
                       {txPending === campaign.contract_address
                         ? "Withdrawing..."
                         : "Withdraw Funds"}
