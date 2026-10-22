@@ -24,13 +24,20 @@ import RiskAssessmentPanel from "@/components/RiskAssessmentPanel";
 import CampaignReview from "@/components/admin/campaign-review";
 import { logTransaction } from "@/utils/investmentUtils";
 
-// shafqaat — Helper: calculate days left from created_at + duration
-function calcDaysLeft(createdAt, durationDays) {
-    const deadline = new Date(
-        new Date(createdAt).getTime() + durationDays * 24 * 60 * 60 * 1000
-    );
-    const diff = Math.ceil((deadline - new Date()) / (1000 * 60 * 60 * 24));
-    return diff > 0 ? diff : 0;
+function calcDaysLeft(deadlineTimestamp) {
+  if (!deadlineTimestamp) return 0;
+
+  const deadline = new Date(deadlineTimestamp);
+  const now = new Date();
+
+  // If already expired
+  if (deadline <= now) return 0;
+
+  // Calculate remaining days (ceil rounds up partial days)
+  const diffTime = deadline.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  return Math.max(0, diffDays);
 }
 
 export default function CampaignDetailPage() {
@@ -175,7 +182,7 @@ export default function CampaignDetailPage() {
         });
 
         // Campaign active check
-        const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration ?? 30);
+        const daysLeft = calcDaysLeft(campaign.deadline);
         checks.push({
             label: "Campaign is still active",
             passed: daysLeft > 0
@@ -352,7 +359,7 @@ export default function CampaignDetailPage() {
         );
     }
 
-    const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration ?? 30);
+    const daysLeft = calcDaysLeft(campaign.deadline);
     const goal = parseFloat(campaign.funding_goal ?? 0).toFixed(4);
     const pledgedAmount = parseFloat(campaign.amount_pledged ?? raisedAmount ?? 0);
     const totalInvestors = Number(campaign.investor_count ?? investorCount ?? 0);
@@ -483,13 +490,17 @@ export default function CampaignDetailPage() {
                                 </div>
 
                                 {/* shafqaat — Days remaining */}
-                                <div>
-                                    <p className="text-xs text-gray-400 mb-1 flex items-center gap-1">
-                                        <Clock className="h-3 w-3" /> Time Remaining
-                                    </p>
-                                    <p className="text-lg font-bold text-white">
-                                        {daysLeft > 0 ? `${daysLeft} days` : "Campaign Ended"}
-                                    </p>
+                                <div
+                                    className={`flex items-center gap-1.5 text-xs ${
+                                    daysLeft > 0 ? "text-gray-400" : "text-amber-500/80 font-medium"
+                                    }`}
+                                >
+                                    <Clock className="h-3 w-3" />
+                                    <span>
+                                    {daysLeft > 0
+                                        ? `${daysLeft} ${daysLeft === 1 ? "day" : "days"} left`
+                                        : "Ended"}
+                                    </span>
                                 </div>
 
                                 {/* shafqaat — Price per token */}
@@ -525,7 +536,7 @@ export default function CampaignDetailPage() {
                                         setInvestModal(true);
                                     }
                                 }}
-                                disabled={daysLeft === 0}
+                                disabled={daysLeft <= 0}
                                 className="w-full bg-[#6f42c1] hover:bg-[#5a3599] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-full transition text-sm"
                             >
                                 {daysLeft > 0 ? (walletAddress ? "Invest Now" : "Connect Wallet") : "Campaign Ended"}

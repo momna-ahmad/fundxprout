@@ -2,7 +2,7 @@
 // shafqaat — Campaign list with real Supabase data, search bar, category filter, and pagination
 import { useEffect, useState } from "react";
 import CampaignCard from "./campaign-card";
-import { getAllCampaigns } from "@/utils/supabase/getCampaigns";
+import { getLaunchedCampaigns } from "@/utils/supabase/getCampaigns";
 import { Loader2, Search, ChevronLeft, ChevronRight } from "lucide-react";
 
 const ITEMS_PER_PAGE = 8; // shafqaat — 8 campaigns per page
@@ -28,7 +28,7 @@ export default function CampaignList({ filterCategory = "all" }) {
   useEffect(() => {
     async function fetchCampaigns() {
       try {
-        const data = await getAllCampaigns();
+        const data = await getLaunchedCampaigns();
         setAllCampaigns(data);
       } catch (err) {
         setError("Failed to load campaigns. Please try again.");

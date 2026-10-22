@@ -3,20 +3,27 @@ import Image from "next/image";
 import Link from "next/link";
 import { Bookmark, Clock } from "lucide-react";
 
-// shafqaat — Helper: calculate days remaining from campaign created_at + duration
-function calcDaysLeft(createdAt, durationDays) {
-	const created = new Date(createdAt);
-	const deadline = new Date(created.getTime() + durationDays * 24 * 60 * 60 * 1000);
-	const now = new Date();
-	const diff = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
-	return diff > 0 ? diff : 0;
+function calcDaysLeft(deadlineTimestamp) {
+  if (!deadlineTimestamp) return 0;
+
+  const deadline = new Date(deadlineTimestamp);
+  const now = new Date();
+
+  // If already expired
+  if (deadline <= now) return 0;
+
+  // Calculate remaining days (ceil rounds up partial days)
+  const diffTime = deadline.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  return Math.max(0, diffDays);
 }
 
 // shafqaat — Campaign card that wraps in a Link to the detail page
 export default function CampaignCard({ campaign }) {
 	// shafqaat — Map Supabase fields to display values
 	const image = campaign.image_url || "/placeholder-campaign.jpg";
-	const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration ?? 30);
+	const daysLeft = calcDaysLeft(campaign.deadline);
 	const goal = parseFloat(campaign.funding_goal ?? 0).toFixed(2);
 	const pledged = parseFloat(campaign.amount_pledged ?? 0).toFixed(2);
 	const investorCount = Number(campaign.investor_count ?? 0);
@@ -71,11 +78,19 @@ export default function CampaignCard({ campaign }) {
 
 					{/* shafqaat — Bottom row: days left + goal */}
 					<div className="mt-auto flex items-center justify-between">
-						<div className="flex items-center gap-1.5 text-xs text-gray-400">
+						<div
+							className={`flex items-center gap-1.5 text-xs ${
+							daysLeft > 0 ? "text-gray-400" : "text-amber-500/80 font-medium"
+							}`}
+						>
 							<Clock className="h-3 w-3" />
-							{daysLeft > 0 ? `${daysLeft} days left` : "Ended"}
+							<span>
+							{daysLeft > 0
+								? `${daysLeft} ${daysLeft === 1 ? "day" : "days"} left`
+								: "Ended"}
+							</span>
 						</div>
-						<span className="text-sm font-bold text-[#a78bfa]">
+												<span className="text-sm font-bold text-[#a78bfa]">
 							{goal} ETH goal
 						</span>
 					</div>
