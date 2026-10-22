@@ -442,6 +442,7 @@ export function CreateCampaignForm() {
             {/* Hidden fields to pass updated equity on launch */}
             <input type="hidden" name="equity_offered" value={equityCalculation.offered} />
             <input type="hidden" name="equity_retained" value={equityCalculation.retained} />
+            <input type="hidden" name="postmoney" value={equityCalculation.postMoney || ""} />
             <input
               type="hidden"
               name="deadline_timestamp"

@@ -416,12 +416,7 @@ export default function DashboardPage() {
                                 >
                                   {statusStyle.label}
                                 </span>
-                                <CampaignReviewInfo review={campaign.campaign_review} />
-                              </div>
-                            </td>
-                            <td className="py-4 px-4">
-                              <div className="flex gap-2">
-                                {["draft", "approved", "adjusted"].includes(campaign.status?.toLowerCase()) && (
+                                   {["draft", "approved", "adjusted"].includes(campaign.status?.toLowerCase()) && (
                                   <Link
                                     href={buildDraftEditHref(campaign)}
                                     className="text-yellow-400 hover:text-yellow-300 text-xs font-medium transition-colors"
@@ -430,6 +425,13 @@ export default function DashboardPage() {
                                       ? "Launch"
                                       : "Edit"}
                                   </Link>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-4 px-4">
+                              <div className="flex gap-2">
+                                {["rejected", "approved", "adjusted"].includes(campaign.status?.toLowerCase()) && (
+                                  <CampaignReviewInfo review={campaign.campaign_review} />
                                 )}
 
                                 {/* Upload Financials for Successful Campaigns */}

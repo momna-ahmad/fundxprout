@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Bookmark, Clock } from "lucide-react";
 
-function calcDaysLeft(deadlineTimestamp) {
+export function calcDaysLeft(deadlineTimestamp) {
   if (!deadlineTimestamp) return 0;
 
   const deadline = new Date(deadlineTimestamp);

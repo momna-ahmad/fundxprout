@@ -8,6 +8,7 @@ import BusinessCampaignJSON from "@/abis/BusinessCampaign.json";
 import CampaignReviewInfo from "@/components/campaign-review-info";
 import { logTransaction } from "@/utils/investmentUtils";
 import { createClient } from "@/utils/supabase/client";
+import { calcDaysLeft } from "@/components/campaign-card";
 
 export interface CampaignItem {
   id: string | number;
@@ -19,6 +20,7 @@ export interface CampaignItem {
   investor_count?: number | string | null;
   price_per_token?: string | number | null;
   created_at: string;
+  deadline: string;
   duration?: number | null;
   contract_address?: string | null;
   transaction_hash?: string | null;
@@ -32,14 +34,6 @@ export interface CampaignItem {
 interface DashboardOverviewTabProps {
   campaigns?: CampaignItem[];
   loading?: boolean;
-}
-
-function calcDaysLeft(createdAt: string, durationDays?: number | null): number {
-  const deadline = new Date(
-    new Date(createdAt).getTime() + (durationDays ?? 30) * 24 * 60 * 60 * 1000
-  );
-  const diff = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  return diff > 0 ? diff : 0;
 }
 
 function getStatusStyle(status?: string): { bg: string; text: string; label: string } {
@@ -185,7 +179,7 @@ export default function DashboardOverviewTab({
       <div className="space-y-4">
         {!loading &&
           campaigns.map((campaign) => {
-            const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration);
+            const daysLeft = calcDaysLeft(campaign.deadline);
             const goal = parseFloat(String(campaign.funding_goal ?? "0"));
             const pledged = parseFloat(String(campaign.amount_pledged ?? "0"));
             const statusStyle = getStatusStyle(campaign.status);
@@ -234,7 +228,7 @@ export default function DashboardOverviewTab({
                 accent: false,
               },
               {
-                label: "Days Left",
+                label: "Duration Left",
                 value: daysLeft > 0 ? `${daysLeft}d` : "Ended",
                 accent: false,
               },
@@ -255,7 +249,7 @@ export default function DashboardOverviewTab({
                 },
                 {
                   label: "Equity Offered / Retained",
-                  value: `${offeredPct.toFixed(2)}% / ${retainedPct.toFixed(2)}%`,
+                  value: `${offeredPct.toFixed(4)}% / ${retainedPct.toFixed(2)}%`,
                   accent: true,
                 }
               );
@@ -276,7 +270,9 @@ export default function DashboardOverviewTab({
                     >
                       {statusStyle.label}
                     </span>
-                    <CampaignReviewInfo review={campaign.campaign_review} />
+                    {["rejected", "approved", "adjusted"].includes(campaign.status?.toLowerCase()) && (
+                      <CampaignReviewInfo review={campaign.campaign_review} />
+                    )}
                   </div>
                 </div>
 
