@@ -13,6 +13,7 @@ type OrderFormProps = {
   campaignId: string;
   tokenAddress?: string | null;
   defaultSide?: 'buy' | 'sell';
+  fixedSide?: 'buy' | 'sell';
   wallet_address?: string;
 };
 
@@ -37,9 +38,9 @@ const ORDER_TYPES = {
   ],
 };
 
-export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy' }: OrderFormProps) {
+export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy', fixedSide }: OrderFormProps) {
   const { walletAddress, connectWallet } = useWallet();
-  const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
+  const [side, setSide] = useState<'buy' | 'sell'>(fixedSide ?? defaultSide);
   const { user } = useAuth();
   const [price, setPrice] = useState('0.001');
   const [quantity, setQuantity] = useState('1');
@@ -175,11 +176,13 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
         </p>
       </div>
       <form className="space-y-4" onSubmit={placeOrder}>
-        <label className="block text-xs font-semibold text-muted-foreground">Side
-          <select value={side} onChange={(event) => setSide(event.target.value as 'buy' | 'sell')} className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground">
-            <option value="buy">Buy</option><option value="sell">Sell</option>
-          </select>
-        </label>
+        {!fixedSide && (
+          <label className="block text-xs font-semibold text-muted-foreground">Side
+            <select value={side} onChange={(event) => setSide(event.target.value as 'buy' | 'sell')} className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground">
+              <option value="buy">Buy</option><option value="sell">Sell</option>
+            </select>
+          </label>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-xs font-semibold text-muted-foreground">Price per token (ETH)
             <input required type="number" min="0" step="any" value={price} onChange={(event) => setPrice(event.target.value)} className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground" />

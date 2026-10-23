@@ -108,6 +108,19 @@ export async function POST(req: Request) {
       },
     ]);
 
+    // Keep the shared trade feed used by portfolio price and 24-hour analytics.
+    const { error: tradeHistoryError } = await supabaseAdminClient
+      .from('token_trades')
+      .insert({
+        campaign_id: order.campaign_id,
+        price: order.price,
+        executed_at: new Date().toISOString(),
+      });
+
+    if (tradeHistoryError) {
+      console.error('[settleTrade] Failed to record token trade history:', tradeHistoryError);
+    }
+
     return NextResponse.json({ success: true, tx_hash });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });

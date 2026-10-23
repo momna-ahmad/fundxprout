@@ -4,7 +4,7 @@ import { getOrderBook } from '@/lib/marketplace-api';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
-export type OrderBookEntry = { price: number; quantity: number; total: number };
+export type OrderBookEntry = { id?: string; price: number; quantity: number; total: number; created_at?: string | number };
 export type TradeEvent = {
   id: string; side: 'buy' | 'sell'; price: number; quantity: number;
   total: number; buyer?: string; seller?: string; timestamp?: string;

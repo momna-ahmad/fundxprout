@@ -139,15 +139,19 @@ async function getOrderBook(req, res) {
     }));
 
     const buyOrders = (dbOrders ?? []).filter((o) => o.side === 'buy').map((o) => ({
+      id: o.id,
       price: Number(o.price),
       quantity: Number(o.quantity_remaining),
       total: Number(o.price) * Number(o.quantity_remaining),
+      created_at: o.created_at,
     }));
 
     const auctionBids = campaignBids.map((b) => ({
+      id: b.id,
       price: Number(b.bid_price_per_token),
       quantity: Number(b.quantity),
       total: Number(b.bid_price_per_token) * Number(b.quantity),
+      created_at: b.created_at,
     }));
 
     const bids = [...buyOrders, ...auctionBids].sort((a, b) => b.price - a.price);
@@ -347,4 +351,52 @@ async function getHoldings(req, res) {
   return res.json(balances);
 }
 
-module.exports = { createOrder, getOrderBook, getOpenSellOrders, cancelOrder, getTokenAnalytics, getTradeHistory, getHoldings };
+async function getCampaignFinancialReports(req, res) {
+  const rawIds = String(req.query.campaignIds || '');
+  const requestedCampaignIds = [...new Set(
+    rawIds.split(',').map((value) => Number(value.trim())).filter((value) => Number.isSafeInteger(value) && value > 0)
+  )];
+
+  if (requestedCampaignIds.length === 0) return res.json({ reports: [] });
+  if (requestedCampaignIds.length > 100) return res.status(400).json({ error: 'Too many campaigns requested' });
+
+  try {
+    // Reports are campaign documents. Investor/token rows are used only to
+    // verify the caller may see the requested campaign's reports.
+    const investorId = req.user.id;
+    const [{ data: investments, error: investmentError }, { data: tokens, error: tokenError }] = await Promise.all([
+      supabaseAdmin.from('investments').select('campaign_id').eq('investor_id', investorId),
+      supabaseAdmin.from('tokens').select('campaign_id').eq('user_id', investorId),
+    ]);
+    if (investmentError || tokenError) throw investmentError || tokenError;
+
+    const investorCampaignIds = new Set([
+      ...(investments ?? []).map((row) => Number(row.campaign_id)),
+      ...(tokens ?? []).map((row) => Number(row.campaign_id)),
+    ]);
+    const authorizedCampaignIds = requestedCampaignIds.filter((campaignId) => investorCampaignIds.has(campaignId));
+    if (authorizedCampaignIds.length === 0) return res.json({ reports: [] });
+
+    const { data: reports, error: reportError } = await supabaseAdmin
+      .from('campaign_financial_reports')
+      .select('id, campaign_id, fiscal_year, period_label, file_url, storage_path, gross_revenue, burn_rate, net_income_loss, beginning_cash, ending_cash, operating_cash_flow, is_audited, status, created_at')
+      .in('campaign_id', authorizedCampaignIds)
+      .order('fiscal_year', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (reportError) throw reportError;
+
+    const reportsWithLinks = await Promise.all((reports ?? []).map(async (report) => {
+      const { data } = await supabaseAdmin.storage
+        .from('financial-reports')
+        .createSignedUrl(report.storage_path || report.file_url, 15 * 60);
+      return { ...report, file_url: data?.signedUrl || null };
+    }));
+
+    return res.json({ reports: reportsWithLinks });
+  } catch (error) {
+    console.error('[getCampaignFinancialReports] error:', error.message || error);
+    return res.status(500).json({ error: 'Unable to load campaign financial reports' });
+  }
+}
+
+module.exports = { createOrder, getOrderBook, getOpenSellOrders, cancelOrder, getTokenAnalytics, getTradeHistory, getHoldings, getCampaignFinancialReports };

@@ -136,6 +136,20 @@ export async function getOpenSellOrders(): Promise<{ orders: MarketplaceSellOrde
   return res.json();
 }
 
+export async function getCampaignFinancialReports(campaignIds: number[]) {
+  if (campaignIds.length === 0) return { reports: [] };
+
+  const res = await fetch(`${API_BASE}/api/marketplace/financial-reports?campaignIds=${encodeURIComponent(campaignIds.join(','))}`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) {
+    let body: any = null;
+    try { body = await res.json(); } catch { /* ignore */ }
+    throw new Error(body?.error || 'Unable to load campaign financial reports');
+  }
+  return res.json();
+}
+
 export async function cancelSellOrder(orderId: string): Promise<{ success: boolean; message: string }> {
   const res = await fetch(`${API_BASE}/api/marketplace/orders/${orderId}/cancel`, {
     method: 'POST',
