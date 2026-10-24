@@ -299,7 +299,7 @@ export default function CampaignDetailPage() {
 
             const contract = new ethers.Contract(
                 campaign.contract_address,
-                BusinessCampaignABI,
+                BusinessCampaignABI.abi,
                 signer
             );
 
