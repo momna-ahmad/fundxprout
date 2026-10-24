@@ -98,6 +98,24 @@ async function placeBid(req, res) {
     return res.status(400).json({ error: 'bid_price_per_token and quantity must be positive numbers' });
   }
 
+  // Overall 10-second timeout so placeBid never hangs the frontend indefinitely
+  let responded = false;
+  const timeoutHandle = setTimeout(() => {
+    if (!responded) {
+      responded = true;
+      console.warn('[placeBid] Handler timed out after 10 s — returning 504');
+      res.status(504).json({ error: 'Request timed out. The bid may or may not have been saved. Please check My Bids.' });
+    }
+  }, 10000);
+
+  const safeRespond = (status, body) => {
+    clearTimeout(timeoutHandle);
+    if (!responded) {
+      responded = true;
+      res.status(status).json(body);
+    }
+  };
+
   try {
     // 1. Verify the listing exists, is a sell order, and is still open
     const { data: listing, error: listingErr } = await supabaseAdmin
@@ -107,23 +125,23 @@ async function placeBid(req, res) {
       .single();
 
     if (listingErr || !listing) {
-      return res.status(404).json({ error: 'Sell listing not found' });
+      return safeRespond(404, { error: 'Sell listing not found' });
     }
     if (listing.side !== 'sell') {
-      return res.status(400).json({ error: 'You can only bid on sell listings' });
+      return safeRespond(400, { error: 'You can only bid on sell listings' });
     }
     if (!['open', 'partially_filled'].includes(listing.status)) {
-      return res.status(400).json({ error: 'This listing is no longer active' });
+      return safeRespond(400, { error: 'This listing is no longer active' });
     }
     if (Number(quantity) > Number(listing.quantity_remaining)) {
-      return res.status(400).json({
+      return safeRespond(400, {
         error: `Requested quantity ${quantity} exceeds available ${listing.quantity_remaining} tokens`,
       });
     }
 
     // 2. Buyer cannot bid on their own listing
     if (listing.investor_id === buyerId) {
-      return res.status(400).json({ error: 'You cannot bid on your own listing' });
+      return safeRespond(400, { error: 'You cannot bid on your own listing' });
     }
 
     // 3. Verify buyer is KYC verified
@@ -134,21 +152,21 @@ async function placeBid(req, res) {
       .single();
 
     if (profileErr || !buyerProfile) {
-      return res.status(404).json({ error: 'Buyer profile not found' });
+      return safeRespond(404, { error: 'Buyer profile not found' });
     }
     if (!buyerProfile.identity_verified) {
-      return res.status(403).json({ error: 'Identity verification (KYC) required before placing bids' });
+      return safeRespond(403, { error: 'Identity verification (KYC) required before placing bids' });
     }
     if (!buyerProfile.profile_complete) {
-      return res.status(403).json({ error: 'Complete your profile before placing bids' });
+      return safeRespond(403, { error: 'Complete your profile before placing bids' });
     }
     if (buyerProfile.trading_restricted) {
-      return res.status(403).json({ error: 'Your account is restricted from trading' });
+      return safeRespond(403, { error: 'Your account is restricted from trading' });
     }
 
     // Validate minimum bid price floor (auto-mode listings may have a floor price)
     if (listing.min_bid_price_per_token && Number(bid_price_per_token) < Number(listing.min_bid_price_per_token)) {
-      return res.status(400).json({
+      return safeRespond(400, {
         error: `Your bid of ${bid_price_per_token} ETH/token is below the seller's minimum bid price of ${listing.min_bid_price_per_token} ETH/token`,
       });
     }
@@ -156,7 +174,7 @@ async function placeBid(req, res) {
     // For auto-mode listings, check if deadline has already passed
     const isAutoMode = listing.listing_mode === 'auto';
     if (isAutoMode && listing.listing_deadline && new Date(listing.listing_deadline) < new Date()) {
-      return res.status(400).json({ error: 'This auction has ended. No more bids are being accepted.' });
+      return safeRespond(400, { error: 'This auction has ended. No more bids are being accepted.' });
     }
 
     // 4. Calculate bid expiry:
@@ -197,95 +215,107 @@ async function placeBid(req, res) {
 
     if (insertErr) throw insertErr;
 
-    const { data: campaign } = await supabaseAdmin
-      .from('campaigns').select('title').eq('id', listing.campaign_id).single();
-    const campaignTitle = campaign?.title || 'a listing';
-
-    // If auto-accepted, auto-cancel other pending bids and notify both parties
+    // ── Respond IMMEDIATELY after the bid is saved ──
+    // All post-save work (notifications, fair price) is fire-and-forget so the
+    // frontend never gets stuck waiting on Supabase notification queries.
     if (isAutoAccepted) {
-      const { data: competingBids } = await supabaseAdmin
-        .from('token_bids')
-        .select('id, buyer_id')
-        .eq('listing_id', listing_id)
-        .eq('status', 'pending')
-        .neq('id', bid.id);
-
-      await supabaseAdmin
-        .from('token_bids')
-        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-        .eq('listing_id', listing_id)
-        .eq('status', 'pending')
-        .neq('id', bid.id);
-
-      if (competingBids && competingBids.length > 0) {
-        await Promise.all(
-          competingBids.map((cb) =>
-            createNotification({
-              userId: cb.buyer_id,
-              type: 'bid_cancelled',
-              title: 'Bid Cancelled',
-              message: `Another offer on "${campaignTitle}" was accepted. Your pending bid has been cancelled.`,
-              link: '/investor-dashboard/my-bids',
-              metadata: { bid_id: cb.id, campaign_id: listing.campaign_id },
-            })
-          )
-        );
-      }
-
-      await Promise.all([
-        createNotification({
-          userId: listing.investor_id,
-          type: 'bid_accepted',
-          title: 'Auto-Accept Triggered',
-          message: `A bid of ${bid_price_per_token} ETH/token met your auto-accept threshold (${listing.auto_accept_price_per_token} ETH) on "${campaignTitle}" and was automatically accepted!`,
-          link: '/investor-dashboard/my-listings',
-          metadata: { bid_id: bid.id, listing_id, campaign_id: listing.campaign_id },
-        }),
-        createNotification({
-          userId: buyerId,
-          type: 'bid_accepted',
-          title: 'Offer Auto-Accepted!',
-          message: `Your bid of ${bid_price_per_token} ETH/token met the seller's auto-accept threshold on "${campaignTitle}" and has been accepted automatically! You have 24 hours to confirm the purchase.`,
-          link: '/investor-dashboard/my-bids',
-          metadata: { bid_id: bid.id, listing_id, campaign_id: listing.campaign_id },
-        }),
-      ]);
-
-      return res.status(201).json({
+      safeRespond(201, {
         bid,
         auto_accepted: true,
         accept_deadline: acceptDeadline.toISOString(),
-        message: 'Your bid met the seller\'s auto-accept threshold and was accepted automatically! You have 24 hours to confirm the purchase.',
+        message: "Your bid met the seller's auto-accept threshold and was accepted automatically! You have 24 hours to confirm the purchase.",
       });
+    } else {
+      safeRespond(201, { bid, message: 'Bid placed successfully. The seller will be notified.' });
     }
 
-    // Standard pending bid notifications
-    await Promise.all([
-      createNotification({
-        userId: listing.investor_id,
-        type: 'bid_received',
-        title: 'New Bid Received',
-        message: `Someone placed a bid of ${bid_price_per_token} ETH/token on your "${campaignTitle}" listing.`,
-        link: '/investor-dashboard/my-listings',
-        metadata: { bid_id: bid.id, listing_id: listing_id, campaign_id: listing.campaign_id },
-      }),
-      createNotification({
-        userId: buyerId,
-        type: 'bid_received',
-        title: 'Bid Placed Successfully',
-        message: `Congratulations! Your offer of ${bid_price_per_token} ETH/token on "${campaignTitle}" has been placed successfully.`,
-        link: '/investor-dashboard/my-bids',
-        metadata: { bid_id: bid.id, listing_id: listing_id, campaign_id: listing.campaign_id },
-      }),
-    ]);
+    // ── Fire-and-forget: campaign title lookup + notifications + fair price ──
+    setImmediate(async () => {
+      try {
+        const { data: campaign } = await supabaseAdmin
+          .from('campaigns').select('title').eq('id', listing.campaign_id).single();
+        const campaignTitle = campaign?.title || 'a listing';
 
-    // Fire-and-forget: debounced fair price recalculation (does NOT delay response)
-    setImmediate(() => _scheduleFairPriceOnBid(listing.campaign_id, listing.price));
+        if (isAutoAccepted) {
+          // Auto-cancel other pending bids
+          const { data: competingBids } = await supabaseAdmin
+            .from('token_bids')
+            .select('id, buyer_id')
+            .eq('listing_id', listing_id)
+            .eq('status', 'pending')
+            .neq('id', bid.id);
 
-    return res.status(201).json({ bid, message: 'Bid placed successfully. The seller will be notified.' });
+          await supabaseAdmin
+            .from('token_bids')
+            .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+            .eq('listing_id', listing_id)
+            .eq('status', 'pending')
+            .neq('id', bid.id);
+
+          if (competingBids && competingBids.length > 0) {
+            await Promise.all(
+              competingBids.map((cb) =>
+                createNotification({
+                  userId: cb.buyer_id,
+                  type: 'bid_cancelled',
+                  title: 'Bid Cancelled',
+                  message: `Another offer on "${campaignTitle}" was accepted. Your pending bid has been cancelled.`,
+                  link: '/investor-dashboard/my-bids',
+                  metadata: { bid_id: cb.id, campaign_id: listing.campaign_id },
+                })
+              )
+            );
+          }
+
+          await Promise.all([
+            createNotification({
+              userId: listing.investor_id,
+              type: 'bid_accepted',
+              title: 'Auto-Accept Triggered',
+              message: `A bid of ${bid_price_per_token} ETH/token met your auto-accept threshold (${listing.auto_accept_price_per_token} ETH) on "${campaignTitle}" and was automatically accepted!`,
+              link: '/investor-dashboard/my-listings',
+              metadata: { bid_id: bid.id, listing_id, campaign_id: listing.campaign_id },
+            }),
+            createNotification({
+              userId: buyerId,
+              type: 'bid_accepted',
+              title: 'Offer Auto-Accepted!',
+              message: `Your bid of ${bid_price_per_token} ETH/token met the seller's auto-accept threshold on "${campaignTitle}" and has been accepted automatically! You have 24 hours to confirm the purchase.`,
+              link: '/investor-dashboard/my-bids',
+              metadata: { bid_id: bid.id, listing_id, campaign_id: listing.campaign_id },
+            }),
+          ]);
+        } else {
+          // Standard pending bid notifications
+          await Promise.all([
+            createNotification({
+              userId: listing.investor_id,
+              type: 'bid_received',
+              title: 'New Bid Received',
+              message: `Someone placed a bid of ${bid_price_per_token} ETH/token on your "${campaignTitle}" listing.`,
+              link: '/investor-dashboard/my-listings',
+              metadata: { bid_id: bid.id, listing_id, campaign_id: listing.campaign_id },
+            }),
+            createNotification({
+              userId: buyerId,
+              type: 'bid_received',
+              title: 'Bid Placed Successfully',
+              message: `Congratulations! Your offer of ${bid_price_per_token} ETH/token on "${campaignTitle}" has been placed successfully.`,
+              link: '/investor-dashboard/my-bids',
+              metadata: { bid_id: bid.id, listing_id, campaign_id: listing.campaign_id },
+            }),
+          ]);
+        }
+
+        // Debounced fair price recalculation
+        _scheduleFairPriceOnBid(listing.campaign_id, listing.price);
+      } catch (bgErr) {
+        console.error('[placeBid] Background post-save work failed (bid was still saved):', bgErr.message);
+      }
+    });
   } catch (err) {
     console.error('[placeBid] error:', err);
-    return res.status(500).json({ error: err?.message || 'Failed to place bid' });
+    safeRespond(500, { error: err?.message || 'Failed to place bid' });
   }
 }
 
@@ -870,6 +900,73 @@ async function completeBid(req, res) {
           executed_at: new Date().toISOString(),
         }]);
 
+        // ── Deduct sold tokens from Seller in `tokens` table ──
+        const { data: sellerToken } = await supabaseAdmin
+          .from('tokens')
+          .select('id, amount')
+          .eq('user_id', listing.investor_id)
+          .eq('campaign_id', bid.campaign_id)
+          .maybeSingle();
+
+        if (sellerToken) {
+          const updatedSellerAmt = Math.max(0, Number(sellerToken.amount) - Number(bid.quantity));
+          await supabaseAdmin
+            .from('tokens')
+            .update({
+              amount: updatedSellerAmt,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', sellerToken.id);
+        }
+
+        // ── Credit purchased tokens to Buyer in `tokens` table ──
+        const { data: buyerToken } = await supabaseAdmin
+          .from('tokens')
+          .select('id, amount')
+          .eq('user_id', bid.buyer_id)
+          .eq('campaign_id', bid.campaign_id)
+          .maybeSingle();
+
+        if (buyerToken) {
+          await supabaseAdmin
+            .from('tokens')
+            .update({
+              amount: Number(buyerToken.amount) + Number(bid.quantity),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', buyerToken.id);
+        } else {
+          await supabaseAdmin
+            .from('tokens')
+            .insert([{
+              user_id: bid.buyer_id,
+              campaign_id: bid.campaign_id,
+              amount: Number(bid.quantity),
+            }]);
+        }
+
+        // ── Record transaction history for buyer & seller ──
+        await supabaseAdmin.from('transactions').insert([
+          {
+            user_id: bid.buyer_id,
+            campaign_id: Number(bid.campaign_id),
+            type: 'secondary_buy',
+            amount: totalPrice,
+            equity_tokens: Number(bid.quantity),
+            status: 'completed',
+            tx_hash: tx_hash,
+          },
+          {
+            user_id: listing.investor_id,
+            campaign_id: Number(bid.campaign_id),
+            type: 'secondary_sell',
+            amount: totalPrice - feeAmount,
+            equity_tokens: Number(bid.quantity),
+            status: 'completed',
+            tx_hash: tx_hash,
+          },
+        ]);
+
         // ── Fair Price: immediate recalc after a real settled trade ────────────
         // A new settled trade is the strongest market signal — recalculate
         // immediately (no debounce) and may promote to Tier 1 pricing.
@@ -882,7 +979,7 @@ async function completeBid(req, res) {
           // Service not yet initialized — safe to ignore
         }
       } catch (tradeErr) {
-        console.warn('[completeBid] Could not insert into token_trades (check migration 0008):', tradeErr.message);
+        console.warn('[completeBid] Error updating trade records or token balances:', tradeErr.message);
       }
     }
 

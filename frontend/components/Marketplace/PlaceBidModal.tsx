@@ -27,6 +27,11 @@ export default function PlaceBidModal({ order, onClose, onBidPlaced }: Props) {
   const askingPrice = Number(order.price);
   const minBidFloor = order.min_bid_price_per_token ? Number(order.min_bid_price_per_token) : null;
   const maxQty = Number(order.quantity_remaining);
+  const isAuctionEnded = isAuto && Boolean(order.listing_deadline && new Date(order.listing_deadline).getTime() <= Date.now());
+  const isSoldOut = maxQty <= 0;
+  const isOrderClosed = order.status ? !['open', 'partially_filled'].includes(order.status) : false;
+  const cannotBid = isAuctionEnded || isSoldOut || isOrderClosed;
+
   const bidPriceNum = Number(bidPrice);
   const quantityNum = Number(quantity);
   const totalEth = bidPriceNum > 0 && quantityNum > 0
@@ -36,6 +41,11 @@ export default function PlaceBidModal({ order, onClose, onBidPlaced }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (cannotBid) {
+      setError('Bidding is closed for this listing.');
+      return;
+    }
 
     let activeWallet = walletAddress;
     if (!activeWallet) {
@@ -115,7 +125,9 @@ export default function PlaceBidModal({ order, onClose, onBidPlaced }: Props) {
               <Gavel size={17} style={{ color: 'var(--ring)' }} />
             </div>
             <div>
-              <h2 className="text-base font-bold text-foreground">Place a Bid</h2>
+              <h2 className="text-base font-bold text-foreground">
+                {isAuctionEnded ? 'Auction Closed' : isSoldOut ? 'Sold Out' : isOrderClosed ? 'Listing Closed' : 'Place a Bid'}
+              </h2>
               <p className="text-xs text-muted-foreground truncate max-w-[220px]">
                 {order.campaign?.title || 'Token listing'}
               </p>
@@ -129,62 +141,94 @@ export default function PlaceBidModal({ order, onClose, onBidPlaced }: Props) {
           </button>
         </div>
 
-        {/* Automated Auction Banner */}
-        {isAuto && (
-          <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3.5 space-y-1 text-xs">
-            <div className="flex items-center justify-between font-bold text-amber-500">
-              <span className="flex items-center gap-1.5">
-                <Trophy size={14} /> Automated Auction
-              </span>
-              {order.listing_deadline && (
-                <span className="flex items-center gap-1 font-normal opacity-90">
-                  <Clock size={12} />
-                  Ends: {new Date(order.listing_deadline).toLocaleString()}
-                </span>
-              )}
-            </div>
-            <p className="text-muted-foreground text-[11px] leading-relaxed">
-              When the deadline passes, the highest bid wins automatically. The winner will then be able to Confirm & Pay for tokens.
-            </p>
-            {minBidFloor && (
-              <p className="text-[11px] font-semibold text-foreground pt-0.5">
-                Minimum bid floor: {minBidFloor} ETH/token
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Listing reference price */}
-        <div
-          className="mb-4 rounded-2xl border px-4 py-3 text-sm"
-          style={{
-            borderColor: 'color-mix(in srgb, var(--ring) 25%, transparent)',
-            background: 'color-mix(in srgb, var(--ring) 6%, transparent)',
-            color: 'var(--ring)',
-          }}
-        >
-          Seller asking: <strong>{askingPrice} ETH/token</strong> · {maxQty} tokens available
-        </div>
-
-        {/* AI Fair Price Panel */}
-        <FairPriceIndicator
-          campaignId={order.campaign_id}
-          listingPrice={askingPrice}
-          onApplyFairPrice={(price) => setBidPrice(String(price))}
-          className="mb-5"
-        />
-
-        {success ? (
+        {cannotBid ? (
           <div className="flex flex-col items-center gap-3 py-6 text-center">
-            <CheckCircle size={40} style={{ color: 'var(--chart-3)' }} />
-            <p className="font-semibold text-foreground">Bid placed!</p>
-            <p className="text-sm text-muted-foreground">
-              {isAuto
-                ? 'The highest bid at the auction deadline will automatically win the auction!'
-                : 'The seller will review your bid and notify you if accepted.'}
+            <div
+              className="flex h-14 w-14 items-center justify-center rounded-2xl border"
+              style={{
+                borderColor: isAuctionEnded ? 'rgba(245, 158, 11, 0.3)' : 'var(--border)',
+                backgroundColor: isAuctionEnded ? 'rgba(245, 158, 11, 0.1)' : 'var(--muted)',
+                color: isAuctionEnded ? '#f59e0b' : 'var(--muted-foreground)',
+              }}
+            >
+              {isAuctionEnded ? <Clock size={28} /> : <AlertCircle size={28} />}
+            </div>
+            <h3 className="font-bold text-foreground text-lg">
+              {isAuctionEnded ? 'Auction Has Ended' : isSoldOut ? 'Listing Sold Out' : 'Listing Closed'}
+            </h3>
+            <p className="text-sm text-muted-foreground max-w-xs leading-relaxed">
+              {isAuctionEnded
+                ? `This automated auction ended on ${order.listing_deadline ? new Date(order.listing_deadline).toLocaleString() : 'the scheduled deadline'}. No more bids are being accepted.`
+                : isSoldOut
+                ? 'All tokens in this listing have been claimed or sold out.'
+                : 'This listing is no longer open for placing bids.'}
             </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-3 rounded-2xl border border-border bg-muted px-6 py-2.5 text-sm font-semibold text-foreground transition hover:bg-accent active:scale-[0.99]"
+            >
+              Close
+            </button>
           </div>
         ) : (
+          <>
+            {/* Automated Auction Banner */}
+            {isAuto && (
+              <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3.5 space-y-1 text-xs">
+                <div className="flex items-center justify-between font-bold text-amber-500">
+                  <span className="flex items-center gap-1.5">
+                    <Trophy size={14} /> Automated Auction
+                  </span>
+                  {order.listing_deadline && (
+                    <span className="flex items-center gap-1 font-normal opacity-90">
+                      <Clock size={12} />
+                      Ends: {new Date(order.listing_deadline).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                <p className="text-muted-foreground text-[11px] leading-relaxed">
+                  When the deadline passes, the highest bid wins automatically. The winner will then be able to Confirm & Pay for tokens.
+                </p>
+                {minBidFloor && (
+                  <p className="text-[11px] font-semibold text-foreground pt-0.5">
+                    Minimum bid floor: {minBidFloor} ETH/token
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Listing reference price */}
+            <div
+              className="mb-4 rounded-2xl border px-4 py-3 text-sm"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--ring) 25%, transparent)',
+                background: 'color-mix(in srgb, var(--ring) 6%, transparent)',
+                color: 'var(--ring)',
+              }}
+            >
+              Seller asking: <strong>{askingPrice} ETH/token</strong> · {maxQty} tokens available
+            </div>
+
+            {/* AI Fair Price Panel */}
+            <FairPriceIndicator
+              campaignId={order.campaign_id}
+              listingPrice={askingPrice}
+              onApplyFairPrice={(price) => setBidPrice(String(price))}
+              className="mb-5"
+            />
+
+            {success ? (
+              <div className="flex flex-col items-center gap-3 py-6 text-center">
+                <CheckCircle size={40} style={{ color: 'var(--chart-3)' }} />
+                <p className="font-semibold text-foreground">Bid placed!</p>
+                <p className="text-sm text-muted-foreground">
+                  {isAuto
+                    ? 'The highest bid at the auction deadline will automatically win the auction!'
+                    : 'The seller will review your bid and notify you if accepted.'}
+                </p>
+              </div>
+            ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {/* Bid Price */}
             <div>
@@ -302,6 +346,8 @@ export default function PlaceBidModal({ order, onClose, onBidPlaced }: Props) {
             </button>
           </form>
         )}
+      </>
+    )}
       </div>
     </div>
   );

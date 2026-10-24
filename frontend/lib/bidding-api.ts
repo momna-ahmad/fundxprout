@@ -104,16 +104,29 @@ export async function placeBid(payload: {
   buyer_wallet: string;
   bid_expires_days?: number;
 }): Promise<{ bid: TokenBid; message: string }> {
-  const res = await fetch(`${API_BASE}/api/marketplace/bids`, {
-    method: 'POST',
-    headers: await authHeaders(),
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Failed to place bid');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const res = await fetch(`${API_BASE}/api/marketplace/bids`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || 'Failed to place bid');
+    }
+    return await res.json();
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw new Error('Request timed out. Please check your backend connection and try again.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
 /** Buyer: get all my bids */

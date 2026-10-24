@@ -2,7 +2,7 @@
 'use client';
 import { usePathname } from 'next/navigation';
 import { Bell, Fuel, ChevronRight, Copy, Sun, Moon, Home } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme-provider';
 import { useWallet } from '@/context/WalletContext';
@@ -38,6 +38,11 @@ export default function Navbar() {
   const { notifications, unreadCount, markAllRead, markOneRead } = useNotifications();
 
   const [copied, setCopied] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const copyAddress = () => {
     if (!walletAddress) return;
@@ -82,8 +87,8 @@ export default function Navbar() {
           <Home size={15} />
         </Link>
 
-        {/* Network badge — shown only when wallet connected */}
-        {net && (
+        {/* Network badge — shown only when wallet connected and mounted */}
+        {mounted && net && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-muted border border-border">
             <span
               className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${net.dot}`}
@@ -93,8 +98,8 @@ export default function Navbar() {
           </div>
         )}
 
-        {/* Gas fee — shown only on Sepolia */}
-        {network === 11155111 && (
+        {/* Gas fee — shown only on Sepolia and mounted */}
+        {mounted && network === 11155111 && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-muted border border-border text-muted-foreground">
             <Fuel size={12} style={{ color: 'var(--chart-4)' }} />
             <span className="font-semibold" style={{ color: 'var(--chart-4)' }}>24</span>
@@ -106,6 +111,7 @@ export default function Navbar() {
         <button
           onClick={toggleTheme}
           aria-label="Toggle theme"
+          suppressHydrationWarning
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-muted border border-border text-muted-foreground hover:bg-card hover:text-foreground hover:border-ring transition-all duration-200 cursor-pointer"
         >
@@ -129,6 +135,7 @@ export default function Navbar() {
             onClick={() => setNotifOpen((v) => !v)}
             title="Notifications"
             aria-label="Notifications"
+            suppressHydrationWarning
             className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-muted border border-border text-muted-foreground hover:bg-card hover:text-foreground hover:border-ring transition-all duration-200 cursor-pointer"
           >
             <Bell size={15} />
@@ -152,9 +159,10 @@ export default function Navbar() {
 
 
         {/* ── Wallet pill / Connect button ── */}
-        {walletAddress ? (
+        {mounted && walletAddress ? (
           <button
             onClick={copyAddress}
+            suppressHydrationWarning
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono font-medium border transition-all duration-200 cursor-pointer"
             style={{
               background:  'color-mix(in srgb, var(--ring) 10%, transparent)',
@@ -186,6 +194,7 @@ export default function Navbar() {
           <button
             onClick={connectWallet}
             disabled={isConnecting}
+            suppressHydrationWarning
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-200 cursor-pointer disabled:opacity-60"
             style={{
               background:  'color-mix(in srgb, var(--chart-5) 12%, transparent)',

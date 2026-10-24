@@ -104,7 +104,14 @@ export default function TokensPage() {
                 <div className="px-[18px] py-4 bg-muted border border-border rounded-xl">
                   <div className="text-[10px] text-muted-foreground uppercase tracking-[0.08em] mb-1.5 font-bold">Balance</div>
                   <div className="text-[22px] font-black text-foreground tracking-tight">{formatNumber(token.balance)}</div>
-                  <div className="text-xs text-muted-foreground">{token.symbol} tokens</div>
+                  <div className="text-xs text-muted-foreground">
+                    {token.symbol} tokens
+                    {Boolean(token.listedBalance && token.listedBalance > 0) && (
+                      <span className="block text-[10.5px] text-amber-500 font-medium mt-0.5">
+                        {token.availableBalance ?? token.balance} available · {token.listedBalance} in active listings
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="px-[18px] py-4 bg-muted border border-border rounded-xl">
                   <div className="text-[10px] text-muted-foreground uppercase tracking-[0.08em] mb-1.5 font-bold">Equity Held</div>

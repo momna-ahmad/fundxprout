@@ -15,6 +15,8 @@ export interface Token {
   priceEth: number;
   pricePerToken: number;
   postmoneyValuation: number;
+  listedBalance?: number;
+  availableBalance?: number;
 }
 
 export interface Campaign {

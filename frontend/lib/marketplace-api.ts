@@ -37,6 +37,7 @@ export type MarketplaceSellOrder = {
   created_at: string;
   token_symbol: string;
   seller_wallet_address: string | null;
+  status?: string | null;
   // Automated auction fields
   listing_mode?: 'manual' | 'auto';
   listing_deadline?: string | null;
@@ -118,30 +119,47 @@ export async function createOrder(payload: OrderRequest): Promise<OrderResponse>
     wallet_address: normalizedWallet,
   };
 
-  const res = await fetch(`${API_BASE}/api/marketplace/orders`, {
-    method: 'POST',
-    headers: await authHeaders(walletAddress),
-    body: JSON.stringify(enrichedPayload),
-  });
+  try {
+    const res = await fetch(`${API_BASE}/api/marketplace/orders`, {
+      method: 'POST',
+      headers: await authHeaders(walletAddress),
+      body: JSON.stringify(enrichedPayload),
+    });
 
-  if (!res.ok) {
-    let errBody: any = null;
-    try { errBody = await res.json(); } catch { /* ignore */ }
-    throw new Error(errBody?.error || res.statusText || 'Marketplace API error');
+    if (!res.ok) {
+      let errBody: any = null;
+      try { errBody = await res.json(); } catch { /* ignore */ }
+      throw new Error(errBody?.error || res.statusText || 'Marketplace API error');
+    }
+    return res.json();
+  } catch (err: any) {
+    if (err.name === 'TypeError' && err.message?.includes('fetch')) {
+      throw new Error(`Unable to connect to the backend server at ${API_BASE}. Please ensure the backend server is running.`);
+    }
+    throw err;
   }
-  return res.json();
 }
 
 export async function getOrderBook(campaignId: string) {
-  const res = await fetch(`${API_BASE}/api/marketplace/orders/book/${campaignId}`);
-  if (!res.ok) throw new Error('Failed to load order book');
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/api/marketplace/orders/book/${campaignId}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to load order book');
+    return await res.json();
+  } catch (err: any) {
+    console.warn('[getOrderBook] warning:', err.message);
+    return { bids: [], asks: [] };
+  }
 }
 
 export async function getOpenSellOrders(): Promise<{ orders: MarketplaceSellOrder[] }> {
-  const res = await fetch(`${API_BASE}/api/marketplace/orders/sell`);
-  if (!res.ok) throw new Error('Failed to load marketplace listings');
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/api/marketplace/orders/sell`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to load marketplace listings');
+    return await res.json();
+  } catch (err: any) {
+    console.warn('[getOpenSellOrders] warning:', err.message);
+    return { orders: [] };
+  }
 }
 
 export async function cancelSellOrder(orderId: string): Promise<{ success: boolean; message: string }> {
@@ -158,15 +176,25 @@ export async function cancelSellOrder(orderId: string): Promise<{ success: boole
 }
 
 export async function getTokenAnalytics(campaignId: string) {
-  const res = await fetch(`${API_BASE}/api/marketplace/analytics/${campaignId}`);
-  if (!res.ok) throw new Error('Failed to load token analytics');
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/api/marketplace/analytics/${campaignId}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to load token analytics');
+    return await res.json();
+  } catch (err: any) {
+    console.warn('[getTokenAnalytics] warning:', err.message);
+    return { history: [] };
+  }
 }
 
 export async function getTradeHistory(campaignId: string) {
-  const res = await fetch(`${API_BASE}/api/marketplace/trades/${campaignId}`);
-  if (!res.ok) throw new Error('Failed to load trade history');
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/api/marketplace/trades/${campaignId}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to load trade history');
+    return await res.json();
+  } catch (err: any) {
+    console.warn('[getTradeHistory] warning:', err.message);
+    return { trades: [] };
+  }
 }
 
 export async function getHoldings(campaignId: string): Promise<{ available_balance: number; locked_balance: number }> {

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Search, Gavel } from 'lucide-react';
+import { ArrowRight, Search, Gavel, Clock } from 'lucide-react';
 import PlaceBidModal from '@/components/Marketplace/PlaceBidModal';
 import { getOpenSellOrders, type MarketplaceSellOrder } from '@/lib/marketplace-api';
 
@@ -26,6 +26,10 @@ function ListingCard({
   const quantity = numeric(order.quantity_remaining);
   const price = numeric(order.price);
   const isAuto = order.listing_mode === 'auto';
+  const isAuctionEnded = isAuto && Boolean(order.listing_deadline && new Date(order.listing_deadline).getTime() <= Date.now());
+  const isSoldOut = quantity <= 0;
+  const isOrderClosed = order.status ? !['open', 'partially_filled'].includes(order.status) : false;
+  const canBid = !isAuctionEnded && !isSoldOut && !isOrderClosed;
 
   return (
     <>
@@ -45,12 +49,18 @@ function ListingCard({
             </div>
             <div className="flex items-center gap-1.5">
               {isAuto && (
-                <span className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-500">
-                  🏆 Auto Auction
-                </span>
+                isAuctionEnded ? (
+                  <span className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-xs font-bold text-rose-500">
+                    ⌛ Auction Ended
+                  </span>
+                ) : (
+                  <span className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-500">
+                    🏆 Auto Auction
+                  </span>
+                )
               )}
               <span className="rounded-2xl border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
-                For sale
+                {isSoldOut ? 'Sold out' : isAuctionEnded ? 'Closed' : 'For sale'}
               </span>
             </div>
           </div>
@@ -76,17 +86,34 @@ function ListingCard({
         </div>
 
         <div className="mt-6 flex items-center gap-3">
-          <button
-            onClick={() => setShowBidModal(true)}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold shadow-md transition hover:opacity-90 active:scale-[0.99]"
-            style={{
-              background: 'var(--ring)',
-              color: 'var(--primary-foreground, #ffffff)',
-            }}
-          >
-            <Gavel size={16} />
-            Place Bid
-          </button>
+          {canBid ? (
+            <button
+              onClick={() => setShowBidModal(true)}
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold shadow-md transition hover:opacity-90 active:scale-[0.99]"
+              style={{
+                background: 'var(--ring)',
+                color: 'var(--primary-foreground, #ffffff)',
+              }}
+            >
+              <Gavel size={16} />
+              Place Bid
+            </button>
+          ) : (
+            <button
+              disabled
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold border border-border bg-muted/60 text-muted-foreground cursor-not-allowed opacity-75"
+              title={
+                isAuctionEnded
+                  ? 'This auction has ended. No more bids are being accepted.'
+                  : isSoldOut
+                  ? 'All tokens have been sold out.'
+                  : 'Bidding is currently unavailable for this listing.'
+              }
+            >
+              <Clock size={16} />
+              {isAuctionEnded ? 'Auction Ended' : isSoldOut ? 'Sold Out' : 'Bidding Closed'}
+            </button>
+          )}
 
           <Link
             href={`/investor-dashboard/marketplace/${order.campaign_id}`}
@@ -97,7 +124,7 @@ function ListingCard({
         </div>
       </article>
 
-      {showBidModal && (
+      {showBidModal && canBid && (
         <PlaceBidModal
           order={order}
           onClose={() => setShowBidModal(false)}
@@ -158,7 +185,13 @@ export default function InvestorMarketplacePage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative flex-1">
           <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search token listings…" className="w-full rounded-3xl border border-border bg-card px-12 py-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search token listings…"
+            suppressHydrationWarning
+            className="w-full rounded-3xl border border-border bg-card px-12 py-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring"
+          />
         </div>
         <div className="text-sm text-muted-foreground">{filteredOrders.length} listing{filteredOrders.length === 1 ? '' : 's'} available</div>
       </div>

@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { ethers } from 'ethers';
+import { toast } from 'sonner';
+import { CheckCircle2, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { createOrder, validateSellOrderBalance } from '@/lib/marketplace-api';
 import { signListing } from '@/lib/bidding-api';
@@ -43,7 +46,8 @@ const ORDER_TYPES = {
 export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy' }: OrderFormProps) {
   const { walletAddress, connectWallet } = useWallet();
   const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
-  const { user } = useAuth();  const [price, setPrice] = useState('0.001');
+  const { user } = useAuth();
+  const [price, setPrice] = useState('0.001');
   const [quantity, setQuantity] = useState('1');
   // shafqaat implemented — Fix P3: Auto-accept threshold price on sell listings
   const [autoAcceptPrice, setAutoAcceptPrice] = useState('');
@@ -53,6 +57,13 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
   const [minBidPrice, setMinBidPrice] = useState('');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successOrder, setSuccessOrder] = useState<{
+    id: string;
+    side: 'buy' | 'sell';
+    quantity: number;
+    price: number;
+    signed: boolean;
+  } | null>(null);
 
   const marketplaceAddress = process.env.NEXT_PUBLIC_MARKETPLACE_CONTRACT_ADDRESS;
 
@@ -174,24 +185,55 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
           // Save signature to DB with expiry for backend EIP-712 verification
           // shafqaat implemented — Fix P1: Pass expiry to signListing
           await signListing(dbOrder.id, signature, nonce, expiry);
-          setStatusMessage('✅ Listing signed and saved. Buyers can now place bids on your listing!');
+          const successMsg = '✅ Listing signed and saved. Buyers can now place bids on your listing!';
+          setStatusMessage(successMsg);
+          toast.success('Sell order listed and signed successfully! Buyers can now place bids.');
+          setSuccessOrder({
+            id: dbOrder.id,
+            side: 'sell',
+            quantity: Number(quantity),
+            price: Number(price),
+            signed: true,
+          });
+          setQuantity('');
+          setAutoAcceptPrice('');
+          setMinBidPrice('');
+          setListingDeadline('');
         } catch (signErr: any) {
           // Non-blocking: order exists but without signature. Show warning.
           console.warn('[OrderForm] Seller rejected signing:', signErr);
-          setStatusMessage(
-            '⚠️ Sell order saved but not signed. Go to My Listings to sign it later — buyers cannot complete purchases until you sign.',
-          );
+          const warnMsg = '⚠️ Sell order saved but not signed. Go to My Listings to sign it later — buyers cannot complete purchases until you sign.';
+          setStatusMessage(warnMsg);
+          toast.warning('Sell order saved, but signature was skipped. Please sign it in My Listings.');
+          setSuccessOrder({
+            id: dbOrder.id,
+            side: 'sell',
+            quantity: Number(quantity),
+            price: Number(price),
+            signed: false,
+          });
+          setQuantity('');
         }
       } else {
-        setStatusMessage(
-          side === 'sell'
-            ? 'Sell order saved. Sign your listing in My Listings to enable bid settlement.'
-            : 'Buy order placed in the order book. Matching happens automatically when a sell order crosses your price.',
-        );
+        const msg = side === 'sell'
+          ? 'Sell order saved. Sign your listing in My Listings to enable bid settlement.'
+          : 'Buy order placed in the order book. Matching happens automatically when a sell order crosses your price.';
+        setStatusMessage(msg);
+        toast.success(side === 'sell' ? 'Sell order saved!' : 'Buy order placed in the order book!');
+        setSuccessOrder({
+          id: dbOrder?.id || 'order',
+          side,
+          quantity: Number(quantity),
+          price: Number(price),
+          signed: true,
+        });
+        setQuantity('');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Order placement failed:', error);
-      setStatusMessage(error instanceof Error ? error.message : 'Order transaction failed.');
+      const errMsg = error instanceof Error ? error.message : 'Order transaction failed.';
+      setStatusMessage(errMsg);
+      toast.error(errMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -207,136 +249,208 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
             : 'Buy orders are placed in the order book and auto-match when a sell order crosses your price.'}
         </p>
       </div>
-      <form className="space-y-4" onSubmit={placeOrder}>
-        <label className="block text-xs font-semibold text-muted-foreground">Side
-          <select value={side} onChange={(event) => setSide(event.target.value as 'buy' | 'sell')} className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground">
-            <option value="buy">Buy</option><option value="sell">Sell</option>
-          </select>
-        </label>
 
-        {/* Sell Mode Selector: Manual vs Automated Auction */}
-        {side === 'sell' && (
-          <div className="rounded-2xl border border-border/80 bg-background/50 p-3.5 space-y-3">
-            <label className="block text-xs font-semibold text-muted-foreground">Listing Mode</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setListingMode('manual')}
-                className={`rounded-xl px-3 py-2 text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
-                  listingMode === 'manual'
-                    ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-                    : 'border-border bg-card text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Manual Pick
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setListingMode('auto');
-                  if (!listingDeadline) setPresetDeadline(72); // default 3 days
-                }}
-                className={`rounded-xl px-3 py-2 text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
-                  listingMode === 'auto'
-                    ? 'border-amber-500 bg-amber-500 text-white shadow-sm'
-                    : 'border-border bg-card text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                🏆 Auto Auction
-              </button>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              {listingMode === 'manual'
-                ? 'Manual: You will review incoming bids and choose the winning bid yourself at any time.'
-                : 'Automated: The system automatically picks the highest bidder when the deadline passes!'}
-            </p>
-
-            {/* Auction Deadline & Floor settings when Auto is selected */}
-            {listingMode === 'auto' && (
-              <div className="space-y-3 pt-2 border-t border-border/50">
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-semibold text-foreground">Auction End Deadline</label>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setPresetDeadline(24)}
-                        className="px-2 py-0.5 rounded-lg border border-border text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition"
-                      >
-                        +24h
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPresetDeadline(72)}
-                        className="px-2 py-0.5 rounded-lg border border-border text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition"
-                      >
-                        +3d
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPresetDeadline(168)}
-                        className="px-2 py-0.5 rounded-lg border border-border text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition"
-                      >
-                        +7d
-                      </button>
-                    </div>
-                  </div>
-                  <input
-                    type="datetime-local"
-                    required
-                    value={listingDeadline}
-                    onChange={(e) => setListingDeadline(e.target.value)}
-                    className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-amber-500 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                    Minimum Bid Floor Price (ETH) — <span className="font-normal opacity-80">Optional</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    placeholder="e.g. 0.001 (bids lower than this will be rejected)"
-                    value={minBidPrice}
-                    onChange={(e) => setMinBidPrice(e.target.value)}
-                    className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground"
-                  />
-                </div>
-              </div>
-            )}
+      {successOrder ? (
+        <div className="rounded-2xl border border-chart-3/30 bg-chart-3/10 p-5 text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-chart-3/20 text-chart-3">
+            <CheckCircle2 size={28} />
           </div>
-        )}
+          <div>
+            <h3 className="text-base font-bold text-foreground">
+              {successOrder.side === 'sell'
+                ? successOrder.signed
+                  ? 'Sell Order Listed & Signed!'
+                  : 'Sell Order Saved!'
+                : 'Buy Order Placed!'}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto leading-relaxed">
+              {successOrder.side === 'sell'
+                ? successOrder.signed
+                  ? `Successfully listed ${successOrder.quantity} token(s) at ${successOrder.price} ETH/token. Buyers can now place bids on your listing.`
+                  : `Successfully listed ${successOrder.quantity} token(s) at ${successOrder.price} ETH/token. Please visit My Listings to sign this order so buyers can settle trades.`
+                : `Your order for ${successOrder.quantity} token(s) at ${successOrder.price} ETH/token has been added to the order book.`}
+            </p>
+          </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block text-xs font-semibold text-muted-foreground">Price per token (ETH)
-            <input required type="number" min="0" step="any" value={price} onChange={(event) => setPrice(event.target.value)} className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground" />
-          </label>
-          <label className="block text-xs font-semibold text-muted-foreground">Quantity
-            <input required type="number" min="0" step="any" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground" />
-          </label>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-1">
+            <Link
+              href={successOrder.side === 'sell' ? '/investor-dashboard/my-listings' : '/investor-dashboard/my-bids'}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-xs font-bold shadow transition hover:opacity-90"
+              style={{
+                background: 'var(--ring)',
+                color: 'var(--primary-foreground, #ffffff)',
+              }}
+            >
+              {successOrder.side === 'sell' ? 'View in My Listings' : 'View in My Bids'} <ArrowRight size={14} />
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setSuccessOrder(null);
+                setStatusMessage(null);
+              }}
+              className="w-full sm:w-auto rounded-2xl border border-border bg-card px-4 py-2.5 text-xs font-semibold text-muted-foreground transition hover:text-foreground hover:bg-muted"
+            >
+              Place Another Order
+            </button>
+          </div>
         </div>
-        {/* shafqaat implemented — Fix P3: Optional auto-accept price field for sellers */}
-        {side === 'sell' && listingMode === 'manual' && (
-          <label className="block text-xs font-semibold text-muted-foreground">
-            Auto-Accept Threshold Price (ETH) — <span className="font-normal opacity-80">Optional</span>
-            <input
-              type="number"
-              min="0"
-              step="any"
-              placeholder="e.g. 0.002 (bids at or above this are accepted instantly)"
-              value={autoAcceptPrice}
-              onChange={(event) => setAutoAcceptPrice(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground"
-            />
+      ) : (
+        <form className="space-y-4" onSubmit={placeOrder}>
+          <label className="block text-xs font-semibold text-muted-foreground">Side
+            <select value={side} onChange={(event) => setSide(event.target.value as 'buy' | 'sell')} className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground">
+              <option value="buy">Buy</option><option value="sell">Sell</option>
+            </select>
           </label>
-        )}
-        <button type="submit" disabled={isSubmitting} className="inline-flex w-full items-center justify-center rounded-3xl bg-ring px-4 py-3 text-sm font-semibold text-background disabled:cursor-not-allowed disabled:opacity-60">
-          {isSubmitting ? 'Submitting…' : `Place ${side} order`}
-        </button>
-        {statusMessage && <div className="rounded-2xl border border-border bg-background/80 px-4 py-3 text-sm text-foreground">{statusMessage}</div>}
-      </form>
+
+          {/* Sell Mode Selector: Manual vs Automated Auction */}
+          {side === 'sell' && (
+            <div className="rounded-2xl border border-border/80 bg-background/50 p-3.5 space-y-3">
+              <label className="block text-xs font-semibold text-muted-foreground">Listing Mode</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setListingMode('manual')}
+                  className={`rounded-xl px-3 py-2 text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
+                    listingMode === 'manual'
+                      ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                      : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Manual Pick
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setListingMode('auto');
+                    if (!listingDeadline) setPresetDeadline(72); // default 3 days
+                  }}
+                  className={`rounded-xl px-3 py-2 text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
+                    listingMode === 'auto'
+                      ? 'border-amber-500 bg-amber-500 text-white shadow-sm'
+                      : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  🏆 Auto Auction
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {listingMode === 'manual'
+                  ? 'Manual: You will review incoming bids and choose the winning bid yourself at any time.'
+                  : 'Automated: The system automatically picks the highest bidder when the deadline passes!'}
+              </p>
+
+              {/* Auction Deadline & Floor settings when Auto is selected */}
+              {listingMode === 'auto' && (
+                <div className="space-y-3 pt-2 border-t border-border/50">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-foreground">Auction End Deadline</label>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setPresetDeadline(24)}
+                          className="px-2 py-0.5 rounded-lg border border-border text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition"
+                        >
+                          +24h
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPresetDeadline(72)}
+                          className="px-2 py-0.5 rounded-lg border border-border text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition"
+                        >
+                          +3d
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPresetDeadline(168)}
+                          className="px-2 py-0.5 rounded-lg border border-border text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition"
+                        >
+                          +7d
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={listingDeadline}
+                      onChange={(e) => setListingDeadline(e.target.value)}
+                      className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-amber-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                      Minimum Bid Floor Price (ETH) — <span className="font-normal opacity-80">Optional</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="e.g. 0.001 (bids lower than this will be rejected)"
+                      value={minBidPrice}
+                      onChange={(e) => setMinBidPrice(e.target.value)}
+                      className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs font-semibold text-muted-foreground">Price per token (ETH)
+              <input required type="number" min="0" step="any" value={price} onChange={(event) => setPrice(event.target.value)} className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground" />
+            </label>
+            <label className="block text-xs font-semibold text-muted-foreground">Quantity
+              <input required type="number" min="0" step="any" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground" />
+            </label>
+          </div>
+          {/* shafqaat implemented — Fix P3: Optional auto-accept price field for sellers */}
+          {side === 'sell' && listingMode === 'manual' && (
+            <label className="block text-xs font-semibold text-muted-foreground">
+              Auto-Accept Threshold Price (ETH) — <span className="font-normal opacity-80">Optional</span>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                placeholder="e.g. 0.002 (bids at or above this are accepted instantly)"
+                value={autoAcceptPrice}
+                onChange={(event) => setAutoAcceptPrice(event.target.value)}
+                className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground"
+              />
+            </label>
+          )}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-3xl bg-ring px-4 py-3 text-sm font-semibold text-background disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              background: 'var(--ring)',
+              color: 'var(--primary-foreground, #ffffff)',
+            }}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 size={15} className="animate-spin" />
+                Submitting…
+              </>
+            ) : (
+              `Place ${side} order`
+            )}
+          </button>
+          {statusMessage && (
+            <div className={`rounded-2xl border px-4 py-3 text-xs flex items-start gap-2 ${
+              statusMessage.includes('⚠️') || statusMessage.includes('failed') || statusMessage.includes('Error')
+                ? 'border-amber-500/30 bg-amber-500/10 text-amber-500'
+                : 'border-border bg-background/80 text-foreground'
+            }`}>
+              <span className="mt-0.5">ℹ️</span>
+              <span>{statusMessage}</span>
+            </div>
+          )}
+        </form>
+      )}
     </div>
   );
 }

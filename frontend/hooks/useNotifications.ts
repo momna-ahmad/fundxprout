@@ -19,6 +19,23 @@ export type AppNotification = {
   created_at: string;
 };
 
+function dedupeNotifications(list: AppNotification[]): AppNotification[] {
+  const result: AppNotification[] = [];
+  for (const item of list) {
+    const isDup = result.some(
+      (r) =>
+        r.id === item.id ||
+        (r.type === item.type &&
+          r.message === item.message &&
+          Math.abs(new Date(r.created_at).getTime() - new Date(item.created_at).getTime()) < 10000)
+    );
+    if (!isDup) {
+      result.push(item);
+    }
+  }
+  return result;
+}
+
 export function useNotifications() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -38,9 +55,10 @@ export function useNotifications() {
         });
 
         if (res.ok) {
-          const { notifications: data, unreadCount: count } = await res.json();
-          setNotifications(data || []);
-          setUnreadCount(count || 0);
+          const { notifications: data } = await res.json();
+          const clean = dedupeNotifications(data || []);
+          setNotifications(clean);
+          setUnreadCount(clean.filter((n) => !n.is_read).length);
           loaded = true;
         }
       } catch { /* fallback to direct Supabase query */ }
@@ -53,8 +71,9 @@ export function useNotifications() {
           .order('created_at', { ascending: false })
           .limit(50);
         if (dbNotifs) {
-          setNotifications(dbNotifs as AppNotification[]);
-          setUnreadCount(dbNotifs.filter((n: any) => !n.is_read).length);
+          const clean = dedupeNotifications(dbNotifs as AppNotification[]);
+          setNotifications(clean);
+          setUnreadCount(clean.filter((n: any) => !n.is_read).length);
         }
       }
     } catch { /* silent */ }
@@ -84,10 +103,17 @@ export function useNotifications() {
 
       socket.on('newNotification', (notification: AppNotification) => {
         setNotifications((prev) => {
-          if (prev.some((n) => n.id === notification.id)) return prev;
+          const isDuplicate = prev.some(
+            (n) =>
+              n.id === notification.id ||
+              (n.type === notification.type &&
+                n.message === notification.message &&
+                Math.abs(new Date(n.created_at).getTime() - new Date(notification.created_at).getTime()) < 10000)
+          );
+          if (isDuplicate) return prev;
+          setUnreadCount((c) => c + 1);
           return [notification, ...prev];
         });
-        setUnreadCount((prev) => prev + 1);
       });
 
       socketRef.current = socket;
@@ -106,10 +132,17 @@ export function useNotifications() {
           (payload) => {
             const newNotif = payload.new as AppNotification;
             setNotifications((prev) => {
-              if (prev.some((n) => n.id === newNotif.id)) return prev;
+              const isDuplicate = prev.some(
+                (n) =>
+                  n.id === newNotif.id ||
+                  (n.type === newNotif.type &&
+                    n.message === newNotif.message &&
+                    Math.abs(new Date(n.created_at).getTime() - new Date(newNotif.created_at).getTime()) < 10000)
+              );
+              if (isDuplicate) return prev;
+              setUnreadCount((c) => c + 1);
               return [newNotif, ...prev];
             });
-            setUnreadCount((prev) => prev + 1);
           }
         )
         .subscribe();

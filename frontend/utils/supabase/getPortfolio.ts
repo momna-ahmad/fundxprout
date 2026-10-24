@@ -187,11 +187,22 @@ export async function getUserTokenHoldings() {
     // 2. Fetch live ETH/USD price for fiat value calculation
     const ethPrice = await getEthPrice();
 
-    // 3. Fetch trade history for campaigns
+    // 3. Fetch trade history and active sell orders for campaigns
     const campaignIds = Array.from(new Set((userTokens ?? []).map(t => t.campaign_id)));
-    const { data: allTrades } = campaignIds.length > 0
-      ? await supabase.from("token_trades").select("campaign_id, price, executed_at").in("campaign_id", campaignIds).order("executed_at", { ascending: true })
-      : { data: [] };
+    const [{ data: allTrades }, { data: openOrders }] = await Promise.all([
+      campaignIds.length > 0
+        ? supabase.from("token_trades").select("campaign_id, price, executed_at").in("campaign_id", campaignIds).order("executed_at", { ascending: true })
+        : Promise.resolve({ data: [] } as any),
+      campaignIds.length > 0
+        ? supabase.from("token_orders").select("campaign_id, quantity_remaining").eq("investor_id", user.id).eq("side", "sell").in("status", ["open", "partially_filled"])
+        : Promise.resolve({ data: [] } as any),
+    ]);
+
+    const listedMap = new Map<string, number>();
+    (openOrders ?? []).forEach((o: any) => {
+      const cid = String(o.campaign_id);
+      listedMap.set(cid, (listedMap.get(cid) || 0) + Number(o.quantity_remaining || 0));
+    });
 
     // 4. Group token holdings by campaign_id
     const holdingsMap = new Map<string, any>();
@@ -208,10 +219,11 @@ export async function getUserTokenHoldings() {
       const pptEth = parseFloat(campaign?.price_per_token || "0.001") || 0.001;
       const pricePerTokenUsd = pptEth * ethPrice;
       const tokenAmount = parseFloat(tokenRecord.amount || "0") || 0;
+      const listedAmount = listedMap.get(campaignId) || 0;
 
       // Extract real trades for this campaign
-      const campTrades = (allTrades ?? []).filter(t => String(t.campaign_id) === campaignId);
-      const priceHistory = campTrades.map(t => ({
+      const campTrades = (allTrades ?? []).filter((t: any) => String(t.campaign_id) === campaignId);
+      const priceHistory = campTrades.map((t: any) => ({
         price: Number(t.price) * ethPrice,
         priceEth: Number(t.price),
         time: new Date(t.executed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -232,6 +244,8 @@ export async function getUserTokenHoldings() {
           symbol: symbol,
           contractAddress: campaign?.contract_address,
           balance: 0,
+          listedBalance: listedAmount,
+          availableBalance: 0,
           price: latestPrice,       // USD per token
           priceEth: pptEth,          // ETH per token
           pricePerToken: pptEth, //ETH per token
@@ -249,6 +263,8 @@ export async function getUserTokenHoldings() {
 
       const holding = holdingsMap.get(campaignId)!;
       holding.balance += tokenAmount;
+      holding.listedBalance = listedAmount;
+      holding.availableBalance = Math.max(0, holding.balance - listedAmount);
       holding.value = holding.balance * holding.price;
       holding.totalInvested += tokenAmount * pricePerTokenUsd;
     });

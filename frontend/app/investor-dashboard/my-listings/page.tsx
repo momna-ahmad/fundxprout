@@ -134,13 +134,15 @@ function ListingRow({ listing, userId, onRefresh }: { listing: Listing; userId: 
   }
 
   const pendingBids = bids.filter((b) => b.status === 'pending');
+  const isAuto = listing.listing_mode === 'auto';
+  const isAuctionEnded = isAuto && Boolean(listing.listing_deadline && new Date(listing.listing_deadline).getTime() <= Date.now());
 
   const filteredAndSortedBids = useMemo(() => {
     let list = [...bids];
     if (filterBy === 'pending') {
       list = list.filter((b) => b.status === 'pending');
     } else if (filterBy === 'accepted') {
-      list = list.filter((b) => ['accepted', 'confirmed', 'completed'].includes(b.status));
+      list = list.filter((b) => ['accepted', 'confirmed', 'completed', 'auto_accepted'].includes(b.status));
     } else if (filterBy === 'kyc') {
       list = list.filter((b) => b.profiles?.identity_verified);
     }
@@ -165,18 +167,24 @@ function ListingRow({ listing, userId, onRefresh }: { listing: Listing; userId: 
             <p className="font-semibold text-foreground truncate">
               {listing.campaign?.title || `Campaign #${listing.campaign_id}`}
             </p>
-            <span
-              className="rounded-xl px-2 py-0.5 text-[10px] font-bold"
-              style={
-                listing.status === 'open'
-                  ? { color: 'var(--chart-3)', background: 'color-mix(in srgb, var(--chart-3) 12%, transparent)' }
-                  : listing.status === 'filled'
-                  ? { color: 'var(--muted-foreground)', background: 'color-mix(in srgb, var(--muted-foreground) 10%, transparent)' }
-                  : { color: 'var(--destructive)', background: 'color-mix(in srgb, var(--destructive) 10%, transparent)' }
-              }
-            >
-              {listing.status.toUpperCase()}
-            </span>
+            {isAuctionEnded && listing.status === 'open' ? (
+              <span className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-500">
+                ⌛ AUCTION ENDED
+              </span>
+            ) : (
+              <span
+                className="rounded-xl px-2 py-0.5 text-[10px] font-bold"
+                style={
+                  listing.status === 'open'
+                    ? { color: 'var(--chart-3)', background: 'color-mix(in srgb, var(--chart-3) 12%, transparent)' }
+                    : listing.status === 'filled'
+                    ? { color: 'var(--muted-foreground)', background: 'color-mix(in srgb, var(--muted-foreground) 10%, transparent)' }
+                    : { color: 'var(--destructive)', background: 'color-mix(in srgb, var(--destructive) 10%, transparent)' }
+                }
+              >
+                {listing.status.toUpperCase()}
+              </span>
+            )}
             {!listing.seller_signature && (
               <span className="flex items-center gap-1 rounded-xl bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-500">
                 <AlertCircle size={9} /> Unsigned
@@ -189,15 +197,25 @@ function ListingRow({ listing, userId, onRefresh }: { listing: Listing; userId: 
               </span>
             )}
             {/* Automated auction mode indicator */}
-            {listing.listing_mode === 'auto' && (
-              <span className="flex items-center gap-1 rounded-xl bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-500 border border-amber-500/30">
-                <Trophy size={9} /> Auto Auction {listing.listing_deadline ? `· Ends ${timeLeft(listing.listing_deadline)}` : ''}
-              </span>
+            {isAuto && (
+              isAuctionEnded ? (
+                <span className="flex items-center gap-1 rounded-xl bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground border border-border">
+                  <Clock size={9} /> Bidding Closed ({new Date(listing.listing_deadline!).toLocaleDateString()})
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 rounded-xl bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-500 border border-amber-500/30">
+                  <Trophy size={9} /> Auto Auction {listing.listing_deadline ? `· Ends ${timeLeft(listing.listing_deadline)}` : ''}
+                </span>
+              )
             )}
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {listing.quantity_remaining} / {listing.quantity} tokens remaining · {listing.price} ETH/token
-            · {timeAgo(listing.created_at)}
+            {isAuctionEnded && listing.listing_deadline ? (
+              <span className="text-amber-500/90 font-medium"> · Deadline passed on {new Date(listing.listing_deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            ) : (
+              ` · ${timeAgo(listing.created_at)}`
+            )}
           </p>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
@@ -206,7 +224,7 @@ function ListingRow({ listing, userId, onRefresh }: { listing: Listing; userId: 
               onClick={handleDelist}
               disabled={cancelling}
               className="flex items-center gap-1 rounded-xl border border-destructive/30 bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive transition hover:bg-destructive hover:text-white disabled:opacity-50"
-              title="Delist this sell order"
+              title={isAuctionEnded ? 'Delist / release unsold tokens back to wallet' : 'Delist this sell order'}
             >
               {cancelling ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
               Delist
@@ -229,6 +247,18 @@ function ListingRow({ listing, userId, onRefresh }: { listing: Listing; userId: 
       {/* Expanded bid list */}
       {expanded && (
         <div className="border-t border-border bg-background/40 px-5 py-4">
+          {isAuctionEnded && (
+            <div className="mb-4 flex items-center justify-between rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-500">
+              <span className="flex items-center gap-2 font-bold">
+                <Clock size={14} /> Auction deadline passed. Bidding is closed.
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                {bids.some((b) => ['auto_accepted', 'accepted', 'confirmed', 'completed'].includes(b.status))
+                  ? 'Winner chosen — awaiting confirmation & on-chain settlement.'
+                  : 'No winning bids were placed. You can delist to return remaining tokens to your balance.'}
+              </span>
+            </div>
+          )}
           {/* Toolbar: Filter & Sort */}
           {bids.length > 0 && (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">

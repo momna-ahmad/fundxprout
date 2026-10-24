@@ -15,16 +15,36 @@ const { supabaseAdmin } = require('../config/supabaseAdmin');
  */
 async function createNotification({ userId, type, title, message, link, metadata = {} }) {
   try {
-    // 1. Persist to Supabase for history
-    const { data: notification, error } = await supabaseAdmin
-      .from('notifications')
-      .insert([{ user_id: userId, type, title, message, link, metadata }])
-      .select()
-      .single();
+    if (!userId) return null;
 
-    if (error) {
-      console.error('[notificationService] DB insert error:', error.message);
-      return null;
+    // 1. De-duplicate: check if a matching notification was already inserted in the last 10 seconds (e.g. by DB trigger)
+    const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
+    const { data: existing } = await supabaseAdmin
+      .from('notifications')
+      .select('id, user_id, type, title, message, link, metadata, is_read, created_at')
+      .eq('user_id', userId)
+      .eq('type', type)
+      .eq('message', message)
+      .gte('created_at', tenSecondsAgo)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let notification = existing;
+
+    if (!notification) {
+      // Persist to Supabase if not already inserted by DB trigger
+      const { data: inserted, error } = await supabaseAdmin
+        .from('notifications')
+        .insert([{ user_id: userId, type, title, message, link, metadata }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[notificationService] DB insert error:', error.message);
+        return null;
+      }
+      notification = inserted;
     }
 
     // 2. Emit live via Socket.IO to the user's private room

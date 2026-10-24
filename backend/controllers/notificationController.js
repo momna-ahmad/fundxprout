@@ -16,8 +16,23 @@ async function getNotifications(req, res) {
       .limit(limit);
 
     if (error) throw error;
-    const unreadCount = (data || []).filter((n) => !n.is_read).length;
-    return res.json({ notifications: data || [], unreadCount });
+
+    // Deduplicate any rows that share the same type and message within 10s of each other
+    const deduplicated = [];
+    for (const notif of (data || [])) {
+      const isDuplicate = deduplicated.some(
+        (existing) =>
+          existing.type === notif.type &&
+          existing.message === notif.message &&
+          Math.abs(new Date(existing.created_at).getTime() - new Date(notif.created_at).getTime()) < 10000
+      );
+      if (!isDuplicate) {
+        deduplicated.push(notif);
+      }
+    }
+
+    const unreadCount = deduplicated.filter((n) => !n.is_read).length;
+    return res.json({ notifications: deduplicated, unreadCount });
   } catch (err) {
     console.error('[getNotifications] error:', err);
     return res.status(500).json({ error: 'Failed to load notifications' });

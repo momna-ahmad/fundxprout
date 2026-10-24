@@ -37,8 +37,10 @@ export default function Sidebar() {
   const router   = useRouter();
   const { walletAddress, network, connectWallet, isConnecting } = useWallet();
   const [profile, setProfile] = useState<any>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     getMyProfile().then((p) => {
       if (p) setProfile(p);
     });
@@ -123,7 +125,7 @@ export default function Sidebar() {
       <div className="px-2.5 pb-4 pt-3 border-t border-sidebar-border flex flex-col gap-2">
 
         {/* Wallet status */}
-        {walletAddress ? (
+        {mounted && walletAddress ? (
           <div
             className="flex items-center gap-2 px-3 py-2 rounded-[10px] text-[12px] font-semibold border"
             style={{
@@ -149,6 +151,7 @@ export default function Sidebar() {
           <button
             onClick={connectWallet}
             disabled={isConnecting}
+            suppressHydrationWarning
             className="flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-[10px] text-[12px] font-semibold border transition-all duration-150 cursor-pointer disabled:opacity-60"
             style={{
               background:  'color-mix(in srgb, var(--chart-5) 10%, transparent)',
@@ -170,10 +173,10 @@ export default function Sidebar() {
           />
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-bold leading-tight text-sidebar-foreground truncate">
-              {profile?.display_name || profile?.full_name || (walletAddress ? truncateAddress(walletAddress) : 'My Profile')}
+              {profile?.display_name || profile?.full_name || (mounted && walletAddress ? truncateAddress(walletAddress) : 'My Profile')}
             </div>
             <div className="text-[10px] text-muted-foreground truncate">
-              {profile?.role === 'owner' ? 'Business Owner' : profile?.role === 'admin' ? 'Administrator' : walletAddress ? truncateAddress(walletAddress) : 'Investor'}
+              {profile?.role === 'owner' ? 'Business Owner' : profile?.role === 'admin' ? 'Administrator' : (mounted && walletAddress) ? truncateAddress(walletAddress) : 'Investor'}
             </div>
           </div>
         </Link>
@@ -181,6 +184,7 @@ export default function Sidebar() {
         {/* Sign out */}
         <button
           onClick={handleSignOut}
+          suppressHydrationWarning
           className="group flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-[10px] text-[12px] font-medium text-muted-foreground bg-transparent border border-sidebar-border hover:text-destructive hover:border-destructive transition-all duration-150 cursor-pointer"
           style={{ '--hover-bg': 'color-mix(in srgb, var(--destructive) 8%, transparent)' } as React.CSSProperties}
           onMouseEnter={(e) => {
