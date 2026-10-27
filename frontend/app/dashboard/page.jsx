@@ -67,13 +67,20 @@ async function handleWithdrawFunds(contractAddress, setTxPending) {
   }
 }
 
-// shafqaat — Calculate days left from created_at + duration
-function calcDaysLeft(createdAt, durationDays) {
-  const deadline = new Date(
-    new Date(createdAt).getTime() + (durationDays ?? 30) * 24 * 60 * 60 * 1000,
-  );
-  const diff = Math.ceil((deadline - new Date()) / (1000 * 60 * 60 * 24));
-  return diff > 0 ? diff : 0;
+function calcDaysLeft(deadlineTimestamp) {
+  if (!deadlineTimestamp) return 0;
+
+  const deadline = new Date(deadlineTimestamp);
+  const now = new Date();
+
+  // If already expired
+  if (deadline <= now) return 0;
+
+  // Calculate remaining days (ceil rounds up partial days)
+  const diffTime = deadline.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  return Math.max(0, diffDays);
 }
 
 // shafqaat — Get status styling based on campaign status
@@ -375,10 +382,7 @@ export default function DashboardPage() {
                     </thead>
                     <tbody>
                       {paginated.map((campaign) => {
-                        const daysLeft = calcDaysLeft(
-                          campaign.created_at,
-                          campaign.duration,
-                        );
+                        const daysLeft = calcDaysLeft(campaign.deadline);
                         const statusStyle = getStatusStyle(campaign.status);
                         return (
                           <tr

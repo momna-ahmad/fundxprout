@@ -10,6 +10,7 @@ type AuthContextValue = {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  role: "owner" | "investor" | "admin" | null;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -20,6 +21,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState<"owner" | "investor" | "admin" | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -78,6 +80,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .select("user_id, role")
           .eq("user_id", authUser.id)
           .single();
+
+        if (profile?.role) {
+          setRole(profile.role);
+        }
 
         if (profile?.role === "admin") {
           setLoading(false);
@@ -138,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [pathname, router]);
 
-  const value = useMemo(() => ({ user, session, loading }), [user, session, loading]);
+  const value = useMemo(() => ({ user, session, loading, role }), [user, session, loading, role]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

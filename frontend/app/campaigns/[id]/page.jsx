@@ -2,7 +2,7 @@
 "use client";
 // shafqaat — Campaign detail page for investor view
 // Route: /campaigns/[id]  — id is the Supabase campaign UUID
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -10,7 +10,7 @@ import { getCampaignById } from "@/utils/supabase/getCampaigns";
 import { createClient } from "@/utils/supabase/client";
 import {
     Loader2, ExternalLink, FileText, Calendar, Target,
-    ArrowLeft, Clock, X, AlertCircle, CheckCircle2, Wallet, Network
+    ArrowLeft, Clock, X, AlertCircle, CheckCircle2, Wallet, Network, ChevronDown
 } from "lucide-react";
 import { ethers } from "ethers";
 import BusinessCampaignABI from "@/abis/BusinessCampaign.json";
@@ -474,7 +474,7 @@ export default function CampaignDetailPage() {
                             </h1>
                             {/* Story / pitch — collapsed by default */}
                             {campaign.description && (
-                                <section className={`${cardClass} p-6 sm:p-8`}>
+                                <section className={"p-6 sm:p-8"}>
                                     <h2 className="mb-4 text-lg font-bold tracking-tight text-white">
                                         About this campaign
                                     </h2>
