@@ -6,6 +6,9 @@ import { Plus, Target, DollarSign, Eye, Edit2 } from "lucide-react";
 import { ethers } from "ethers";
 import BusinessCampaignJSON from "@/abis/BusinessCampaign.json";
 import CampaignReviewInfo from "@/components/campaign-review-info";
+import { logTransaction } from "@/utils/investmentUtils";
+import { createClient } from "@/utils/supabase/client";
+import { calcDaysLeft } from "@/components/campaign-card";
 
 export interface CampaignItem {
   id: string | number;
@@ -17,6 +20,7 @@ export interface CampaignItem {
   investor_count?: number | string | null;
   price_per_token?: string | number | null;
   created_at: string;
+  deadline: string;
   duration?: number | null;
   contract_address?: string | null;
   transaction_hash?: string | null;
@@ -24,19 +28,12 @@ export interface CampaignItem {
   equity_offered?: string | number | null;
   equity_retained?: string | number | null;
   campaign_review?: any;
+  funds_withdrawn?: boolean | null;
 }
 
 interface DashboardOverviewTabProps {
   campaigns?: CampaignItem[];
   loading?: boolean;
-}
-
-function calcDaysLeft(createdAt: string, durationDays?: number | null): number {
-  const deadline = new Date(
-    new Date(createdAt).getTime() + (durationDays ?? 30) * 24 * 60 * 60 * 1000
-  );
-  const diff = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  return diff > 0 ? diff : 0;
 }
 
 function getStatusStyle(status?: string): { bg: string; text: string; label: string } {
@@ -69,39 +66,83 @@ export default function DashboardOverviewTab({
   loading = false,
 }: DashboardOverviewTabProps) {
   const [txPending, setTxPending] = useState<string | null>(null);
+  const supabase = createClient();
 
-  async function handleWithdrawFunds(contractAddress?: string | null) {
-    if (!contractAddress) return;
-    if (typeof window === "undefined" || !(window as any).ethereum) {
-      alert("Please install MetaMask!");
+  async function handleWithdrawFunds(campaign: CampaignItem) {
+  if (!campaign.contract_address) return;
+  if (typeof window === "undefined" || !(window as any).ethereum) {
+    alert("Please install MetaMask!");
+    return;
+  }
+
+  try {
+    setTxPending(String(campaign.id));
+
+    // 1. Get logged-in user from Supabase
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      alert("Please log in to withdraw funds.");
       return;
     }
 
-    try {
-      setTxPending(contractAddress);
-      await (window as any).ethereum.request({ method: "eth_requestAccounts" });
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const signer = await provider.getSigner();
+    // 2. Connect MetaMask Signer
+    await (window as any).ethereum.request({ method: "eth_requestAccounts" });
+    const provider = new ethers.BrowserProvider((window as any).ethereum);
+    const signer = await provider.getSigner();
 
-      const campaignContract = new ethers.Contract(
-        contractAddress,
-        BusinessCampaignJSON.abi,
-        signer
-      );
+    const campaignContract = new ethers.Contract(
+      campaign.contract_address,
+      BusinessCampaignJSON.abi,
+      signer
+    );
 
-      const tx = await campaignContract.withdrawFunds();
-      alert(`Withdrawal transaction submitted! Hash: ${tx.hash}`);
+    // 3. Trigger smart contract withdrawal
+    const tx = await campaignContract.withdrawFunds();
+    alert(`Withdrawal transaction submitted! Hash: ${tx.hash}`);
 
-      await tx.wait();
+    // 4. Wait for on-chain confirmation
+    const receipt = await tx.wait();
+
+    if (receipt && receipt.status === 1) {
+      const withdrawAmount = parseFloat(String(campaign.amount_pledged ?? "0"));
+
+      // 5. Log the transaction in the database
+      try {
+        await logTransaction({
+          userId: user.id,
+          campaignId: campaign.id,
+          type: "withdrawal",
+          txHash: receipt.hash,
+          quantity: withdrawAmount,
+          token: "ETH" as any, // Cast if token type is strictly number in your definitions
+        });
+      } catch (logErr) {
+        console.error("Failed to log transaction:", logErr);
+      }
+
+      // 6. Update funds_withdrawn in campaigns table
+      const { error: updateError } = await supabase
+        .from("campaigns")
+        .update({
+          funds_withdrawn: true,
+          withdrawn_at: new Date().toISOString(),
+        })
+        .eq("id", campaign.id);
+
+      if (updateError) {
+        console.error("Failed to update campaign status:", updateError);
+      }
+
       alert("Funds successfully withdrawn to your wallet!");
       window.location.reload();
-    } catch (err: any) {
-      console.error("Withdrawal error:", err);
-      alert(err.reason || err.message || "Withdrawal failed");
-    } finally {
-      setTxPending(null);
     }
+  } catch (err: any) {
+    console.error("Withdrawal error:", err);
+    alert(err.reason || err.message || "Withdrawal failed");
+  } finally {
+    setTxPending(null);
   }
+}
 
   return (
     <div>
@@ -138,7 +179,7 @@ export default function DashboardOverviewTab({
       <div className="space-y-4">
         {!loading &&
           campaigns.map((campaign) => {
-            const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration);
+            const daysLeft = calcDaysLeft(campaign.deadline);
             const goal = parseFloat(String(campaign.funding_goal ?? "0"));
             const pledged = parseFloat(String(campaign.amount_pledged ?? "0"));
             const statusStyle = getStatusStyle(campaign.status);
@@ -187,7 +228,7 @@ export default function DashboardOverviewTab({
                 accent: false,
               },
               {
-                label: "Days Left",
+                label: "Duration Left",
                 value: daysLeft > 0 ? `${daysLeft}d` : "Ended",
                 accent: false,
               },
@@ -208,7 +249,7 @@ export default function DashboardOverviewTab({
                 },
                 {
                   label: "Equity Offered / Retained",
-                  value: `${offeredPct.toFixed(2)}% / ${retainedPct.toFixed(2)}%`,
+                  value: `${offeredPct.toFixed(4)}% / ${retainedPct.toFixed(2)}%`,
                   accent: true,
                 }
               );
@@ -229,7 +270,9 @@ export default function DashboardOverviewTab({
                     >
                       {statusStyle.label}
                     </span>
-                    <CampaignReviewInfo review={campaign.campaign_review} />
+                    {["rejected", "approved", "adjusted"].includes(campaign.status?.toLowerCase()) && (
+                      <CampaignReviewInfo review={campaign.campaign_review} />
+                    )}
                   </div>
                 </div>
 
@@ -262,13 +305,12 @@ export default function DashboardOverviewTab({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {campaign.status === "ended" && isGoalReached && campaign.contract_address && (
+                  {isGoalReached && campaign.contract_address && !campaign.funds_withdrawn && (
                     <button
-                      onClick={() => handleWithdrawFunds(campaign.contract_address)}
+                      onClick={() => handleWithdrawFunds(campaign)}
                       disabled={txPending === campaign.contract_address}
                       className="bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-4 py-2 rounded-full transition flex items-center gap-1.5 disabled:opacity-50"
                     >
-                      <DollarSign className="h-3.5 w-3.5" />
                       {txPending === campaign.contract_address
                         ? "Withdrawing..."
                         : "Withdraw Funds"}

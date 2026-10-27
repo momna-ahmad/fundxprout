@@ -35,6 +35,7 @@ export interface Campaign {
   fundedPercent: number;
   amount_pledged: number;
   funding_goal: number;
+  deadline: string;
   totalTarget: number;
   roi: number;
   status: 'Active' | 'Completed' | 'Pending';

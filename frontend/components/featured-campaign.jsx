@@ -6,13 +6,20 @@ import Link from "next/link";
 import { Bookmark, Loader2, Clock, Target } from "lucide-react";
 import { getRecommendedCampaigns, getFeaturedCampaigns } from "@/utils/supabase/getCampaigns";
 
-// shafqaat — Helper: calc days left from created_at + duration
-function calcDaysLeft(createdAt, durationDays) {
-	const deadline = new Date(
-		new Date(createdAt).getTime() + (durationDays ?? 30) * 24 * 60 * 60 * 1000
-	);
-	const diff = Math.ceil((deadline - new Date()) / (1000 * 60 * 60 * 24));
-	return diff > 0 ? diff : 0;
+function calcDaysLeft(deadlineTimestamp) {
+  if (!deadlineTimestamp) return 0;
+
+  const deadline = new Date(deadlineTimestamp);
+  const now = new Date();
+
+  // If already expired
+  if (deadline <= now) return 0;
+
+  // Calculate remaining days (ceil rounds up partial days)
+  const diffTime = deadline.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  return Math.max(0, diffDays);
 }
 
 // shafqaat — Get initials from title for avatar placeholder
@@ -26,7 +33,7 @@ function getInitials(title = "") {
 
 // shafqaat — Left panel card (recommended)
 function RecommendedCard({ campaign }) {
-	const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration);
+	const daysLeft = calcDaysLeft(campaign.deadline);
 	const goal = parseFloat(campaign.funding_goal ?? 0).toFixed(2);
 	const pledged = parseFloat(campaign.amount_pledged ?? 0).toFixed(2);
 	const investorCount = Number(campaign.investor_count ?? 0);
@@ -92,7 +99,7 @@ function RecommendedCard({ campaign }) {
 
 // shafqaat — Right panel card (featured/small)
 function SmallCampaignCard({ campaign }) {
-	const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration);
+	const daysLeft = calcDaysLeft(campaign.deadline);
 	const goal = parseFloat(campaign.funding_goal ?? 0).toFixed(2);
 	const pledged = parseFloat(campaign.amount_pledged ?? 0).toFixed(2);
 	const investorCount = Number(campaign.investor_count ?? 0);

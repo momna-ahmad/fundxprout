@@ -14,6 +14,9 @@ export async function handleLaunchSubmit(prevState: any, formData: FormData) {
   const title = formData.get("title") as string;
   const pricePerToken = formData.get("pricePerToken") as string;
   const deadlineTimestamp = Number(formData.get("deadline_timestamp"));
+  const postMoney = formData.get("postmoney");
+  const equityOffered = formData.get("equity_offered");
+  const equityRetained = formData.get("equity_retained");
 
   // 1. Verify with backend first
   const verification = await verifyCampaignForLaunch(campaignId);
@@ -78,10 +81,28 @@ export async function handleLaunchSubmit(prevState: any, formData: FormData) {
       txHash: receipt.hash,
       contractAddress: campaignContractAddress,
       tokenContractAddress,
-      // ... pass remaining metadata
+      // Metadata from the form:
+      title: formData.get("title") as string,
+      description: formData.get("description") as string,
+      category: formData.get("category") as string,
+      goal: formData.get("goal") as string,
+      postMoney,
+      equityOffered,
+      equityRetained,
+      tokenSymbol: formData.get("tokenSymbol") as string,
+      pricePerToken: formData.get("pricePerToken") as string,
+      imageUrl: formData.get("imageUrl") as string,
+      // Accurate UTC ISO deadline:
+      deadline: deadlineTimestamp 
+        ? new Date(deadlineTimestamp * 1000).toISOString() 
+        : undefined,
+      duration: deadlineTimestamp 
+        ? Math.max(1, Math.ceil((deadlineTimestamp - Math.floor(Date.now() / 1000)) / 86400)) 
+        : undefined,
     });
 
     alert("Campaign launched successfully!");
+    return { success: true };
   } catch (err: any) {
     console.error(err);
     alert(err.message || "Transaction rejected or failed");

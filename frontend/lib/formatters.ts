@@ -13,7 +13,7 @@ export const formatNumber = (value: number): string => {
 
 export const formatPercent = (value: number): string => {
   const sign = value >= 0 ? '+' : '';
-  return `${sign}${value.toFixed(2)}%`;
+  return `${sign}${value.toFixed(4)}%`;
 };
 
 export const truncateAddress = (address: string, start = 6, end = 4): string => {

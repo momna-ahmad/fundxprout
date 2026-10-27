@@ -1,6 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { ArrowUpRight } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowUpRight, ArrowDownRight, ExternalLink } from 'lucide-react';
+import {
+  LineChart, Line, ResponsiveContainer, Tooltip,
+  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+} from 'recharts';
 import { formatCurrency, formatNumber, formatPercent, truncateAddress } from '@/lib/formatters';
 import { getUserPortfolioData, getUserTokenHoldings } from '@/utils/supabase/getPortfolio';
 import { Token } from '@/types';

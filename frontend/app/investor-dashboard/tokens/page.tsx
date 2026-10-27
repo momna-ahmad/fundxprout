@@ -168,9 +168,17 @@ export default function TokensPage() {
                 >
                   <ArrowUpRight size={14} /> Sell
                 </Link>
-                <button className="text-muted-foreground hover:text-foreground px-3 py-2.5 rounded-xl border border-border hover:bg-muted transition-all">
-                  <ExternalLink size={14} />
-                </button>
+                {token.contractAddress && (
+                  <a
+                    href={`https://sepolia.etherscan.io/token/${token.contractAddress}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-muted-foreground hover:text-foreground px-3 py-2.5 rounded-xl border border-border hover:bg-muted transition-all inline-flex items-center justify-center"
+                    title="View on Etherscan"
+                  >
+                    <ExternalLink size={14} />
+                  </a>
+                )}
               </div>
             </div>
             );
