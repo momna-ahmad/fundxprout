@@ -175,7 +175,7 @@ export async function getUserTokenHoldings() {
       .from("tokens")
       .select(`
         *,
-        campaign:campaigns(id, title, category, price_per_token, contract_address, token_symbol, postmoney_valuation_eth)
+        campaign:campaigns(id, title, category, price_per_token, contract_address, token_symbol, postmoney_valuation_eth, equity_offered, funding_goal)
       `)
       .eq("user_id", user.id);
 
@@ -214,7 +214,7 @@ export async function getUserTokenHoldings() {
       const priceHistory = campTrades.map(t => ({
         price: Number(t.price) * ethPrice,
         priceEth: Number(t.price),
-        time: new Date(t.executed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: new Date(t.executed_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
       }));
 
       if (priceHistory.length === 0) {
@@ -222,8 +222,15 @@ export async function getUserTokenHoldings() {
       }
 
       const latestPrice = priceHistory[priceHistory.length - 1].price;
-      const firstPrice = priceHistory[0].price;
-      const realChange24h = firstPrice > 0 ? ((latestPrice - firstPrice) / firstPrice) * 100 : 0;
+      const latestPriceEth = priceHistory[priceHistory.length - 1].priceEth;
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      const referenceTrades = campTrades.filter(t => new Date(t.executed_at).getTime() <= cutoff);
+      const referenceTrade = referenceTrades[referenceTrades.length - 1];
+      const latestTrade = campTrades[campTrades.length - 1];
+      const hasRecentTrade = latestTrade && new Date(latestTrade.executed_at).getTime() > cutoff;
+      const realChange24h = referenceTrade && hasRecentTrade && Number(referenceTrade.price) > 0
+        ? ((Number(latestTrade.price) - Number(referenceTrade.price)) / Number(referenceTrade.price)) * 100
+        : null;
 
       if (!holdingsMap.has(campaignId)) {
         holdingsMap.set(campaignId, {
@@ -233,17 +240,20 @@ export async function getUserTokenHoldings() {
           contractAddress: campaign?.contract_address,
           balance: 0,
           price: latestPrice,       // USD per token
-          priceEth: pptEth,          // ETH per token
+          priceLabel: campTrades.length > 0 ? "Latest Recorded Price" : "Launch Reference Price",
+          priceEth: latestPriceEth,  // latest recorded trade price in ETH per token
           pricePerToken: pptEth, //ETH per token
           ethPrice,                  // Live ETH/USD rate
           value: 0,
           amount: tokenAmount,
-          change24h: Number(realChange24h.toFixed(2)),
+          change24h: realChange24h === null ? null : Number(realChange24h.toFixed(2)),
           color: generateColorForToken(campaignId),
           priceHistory,
           campaignId,
           totalInvested: 0,
           postmoneyValuation: parseFloat(String(campaign?.postmoney_valuation_eth || "0")),
+          equityOffered: parseFloat(String(campaign?.equity_offered || "0")),
+          fundingGoal: parseFloat(String(campaign?.funding_goal || "0")),
         });
       }
 
@@ -330,13 +340,48 @@ export async function getPortfolioAllocation() {
   }
 }
 
-// Calculate portfolio value over time (mock data for charts)
-export function generatePortfolioTimeSeries(investments: any[]): any[] {
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
-  const baseValue = investments.reduce((sum, inv) => sum + (parseFloat(inv.amount || "0") || 0), 0);
+// Build a cumulative invested-value series from dated investment records.
+export function generatePortfolioTimeSeries(
+  investments: any[],
+  range: "1M" | "3M" | "6M" | "1Y" = "1Y",
+  ethUsd = 1,
+): { timestamp: number; value: number }[] {
+  const now = Date.now();
+  const events = (investments ?? [])
+    .map((investment) => ({
+      timestamp: new Date(investment.invested_at ?? investment.created_at).getTime(),
+      amountEth: parseFloat(String(investment.amount ?? "0")) || 0,
+    }))
+    .filter((event) => Number.isFinite(event.timestamp) && event.timestamp <= now && event.amountEth > 0)
+    .sort((a, b) => a.timestamp - b.timestamp);
 
-  return months.map((month, index) => ({
-    month,
-    value: baseValue * (1 + (index * 0.02 + (Math.random() - 0.5) * 0.05)), // Mock growth
-  }));
+  if (events.length === 0) return [];
+
+  const rangeMs: Record<typeof range, number> = {
+    "1M": 30 * 24 * 60 * 60 * 1000,
+    "3M": 90 * 24 * 60 * 60 * 1000,
+    "6M": 180 * 24 * 60 * 60 * 1000,
+    "1Y": 365 * 24 * 60 * 60 * 1000,
+  };
+  const start = now - rangeMs[range];
+  let cumulativeEth = events
+    .filter((event) => event.timestamp < start)
+    .reduce((sum, event) => sum + event.amountEth, 0);
+
+  const points: { timestamp: number; value: number }[] = [{
+    timestamp: start,
+    value: cumulativeEth * ethUsd,
+  }];
+
+  for (const event of events) {
+    if (event.timestamp < start) continue;
+    cumulativeEth += event.amountEth;
+    points.push({ timestamp: event.timestamp, value: cumulativeEth * ethUsd });
+  }
+
+  if (points[points.length - 1].timestamp < now) {
+    points.push({ timestamp: now, value: cumulativeEth * ethUsd });
+  }
+
+  return points;
 }

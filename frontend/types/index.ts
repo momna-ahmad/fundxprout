@@ -6,15 +6,19 @@ export interface Token {
   balance: number;
   amount: number;
   price: number;
+  priceLabel: string;
   value: number;
   equity_percent: number;
-  change24h: number;
+  change24h: number | null;
   priceHistory: number[];
   campaignId: string;
   color: string;
   priceEth: number;
   pricePerToken: number;
   postmoneyValuation: number;
+  equityOffered: number;
+  fundingGoal: number;
+  ethPrice: number;
 }
 
 export interface Campaign {

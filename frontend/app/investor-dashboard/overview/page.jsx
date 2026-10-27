@@ -2,14 +2,15 @@
 "use client";
 import { useState, useEffect } from "react";
 import {
-  TrendingUp, Coins, Briefcase, DollarSign, ArrowUpRight,
+  TrendingUp, Coins, Briefcase, Gavel, ArrowUpRight,
   ArrowDownRight, ExternalLink, Wallet,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
-import { getCampaignRecommendations , getUserPortfolioData, generatePortfolioTimeSeries } from "@/utils/supabase/getPortfolio";
+import { getCampaignRecommendations, getUserPortfolioData, getUserTokenHoldings, generatePortfolioTimeSeries } from "@/utils/supabase/getPortfolio";
+import { getMyBids } from "@/lib/bidding-api";
 import RecommnendationCampaigns from "@/components/Investor/RecommendationCampaigns";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -19,6 +20,12 @@ const formatNumber  = (v) => new Intl.NumberFormat("en-US").format(v);
 const formatPercent = (v) => `${v >= 0 ? "+" : ""}${Number(v).toFixed(1)}%`;
 const truncateHash  = (h) => `${h.slice(0, 8)}…${h.slice(-6)}`;
 const formatDate    = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const formatChartDate = (timestamp, range) => new Date(Number(timestamp)).toLocaleDateString(
+  "en-US",
+  range === "1M" || range === "3M"
+    ? { month: "short", day: "numeric" }
+    : { month: "short", year: "2-digit" },
+);
 
 const COLORS = ["#6f42c1", "#a78bfa", "#5a3599", "#7c5cbf", "#c4b5fd", "#3d1f8a"];
 
@@ -48,11 +55,11 @@ function Progress({ value }) {
   );
 }
 
-function CustomTooltip({ active, payload, label }) {
+function CustomTooltip({ active, payload, label, range }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-[#6f42c1]/30 rounded-xl px-3.5 py-2.5">
-      <div className="text-[11px] text-gray-400 mb-1">{label}</div>
+      <div className="text-[11px] text-gray-400 mb-1">{formatChartDate(label, range)}</div>
       <div className="text-[15px] font-bold text-[#a78bfa]">{formatCurrency(payload[0].value)}</div>
     </div>
   );
@@ -61,15 +68,27 @@ function CustomTooltip({ active, payload, label }) {
 // ── Main Component ───────────────────────────────────────────────────
 export default function DashboardPage() {
   const [portfolioData, setPortfolioData] = useState(null);
+  const [tokenHoldings, setTokenHoldings] = useState([]);
+  const [totalBids, setTotalBids] = useState(0);
   const [categoryDistribution, setCategoryDistribution] = useState({});
   const [categoryBreakdownList, setCategoryBreakdownList] = useState([]);
+  const [portfolioRange, setPortfolioRange] = useState("1Y");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
-      const data = await getUserPortfolioData();
+      const [data, holdings] = await Promise.all([
+        getUserPortfolioData(),
+        getUserTokenHoldings(),
+      ]);
+      const bidsResult = await getMyBids().catch((error) => {
+        console.error("[Investor overview] Failed to load bids:", error);
+        return { bids: [] };
+      });
       
       setPortfolioData(data);
+      setTokenHoldings(holdings);
+      setTotalBids(bidsResult.bids?.length ?? 0);
       setCategoryDistribution(data?.categoryDistribution ?? {});
 
       // Map the returned categoryBreakdownList to include colors for Recharts
@@ -91,25 +110,26 @@ export default function DashboardPage() {
   }, []);
 
   // Derive values
-  const totalInvested      = portfolioData?.totalInvested      ?? 0;
+  const totalInvested      = portfolioData?.totalNetWorthUsd   ?? portfolioData?.totalInvested ?? 0;
   const totalInvestedEth   = portfolioData?.totalEthInvested   ?? 0;
   const portfolioValue     = portfolioData?.totalNetWorthUsd     ?? 0;
   const portfolioValueEth  = portfolioData?.portfolioValueEth  ?? 0;
   const totalTokens        = portfolioData?.totalTokens        ?? 0;
   const investmentCount    = portfolioData?.investments.length    ?? 0;
-  const portfolioChange    = portfolioData?.portfolioChange    ?? 0;
   const portfolioChangePct = portfolioData?.portfolioChangePercent ?? 0;
   const walletAddress      = portfolioData?.walletAddress      ?? null;
   const investments        = portfolioData?.investments        ?? [];
   const topCampaignData    = portfolioData?.topCampaign        ?? null;
+  const campaignsHeldCount = tokenHoldings.length;
 
   // Derive live ETH→USD rate from the two values already in portfolio data
   const ethPrice = totalInvestedEth > 0 ? totalInvested / totalInvestedEth : 3000;
 
   // Portfolio history from real investments
-  const portfolioHistory = investments.length > 0
-    ? generatePortfolioTimeSeries(investments)
-    : [{ month: "—", value: 0 }];
+  const portfolioHistory = generatePortfolioTimeSeries(investments, portfolioRange, ethPrice);
+  const chartValue = portfolioHistory.length > 0
+    ? portfolioHistory[portfolioHistory.length - 1].value
+    : 0;
 
   // Build per-campaign token allocation for donut chart
   const tokenAllocData = investments.reduce((acc, inv) => {
@@ -156,9 +176,9 @@ export default function DashboardPage() {
 
   const statCards = [
     { label: "Portfolio Value",   value: formatCurrency(portfolioValue),  change: formatPercent(portfolioChangePct), up: portfolioChangePct >= 0, icon: TrendingUp, sub: "vs. invested" },
-    { label: "Equity Tokens",    value: `${formatNumber(totalTokens)} TKN`, change: `${investmentCount} inv.`,     up: true,                    icon: Coins,      sub: "total held"    },
-    { label: "Active Campaigns", value: String(investmentCount),          change: `${investmentCount} total`,      up: true,                    icon: Briefcase,  sub: "invested in"   },
-    { label: "Total Returns",    value: formatCurrency(portfolioChange),  change: formatPercent(portfolioChangePct), up: portfolioChange >= 0,   icon: DollarSign, sub: "all-time ROI"  },
+    { label: "Total ETH Invested", value: `${Number(totalInvestedEth).toFixed(4)} ETH`, change: `${investmentCount} inv.`, up: true, icon: Coins, sub: "across campaigns" },
+    { label: "Campaigns Held", value: String(campaignsHeldCount), change: `${campaignsHeldCount} total`, up: true, icon: Briefcase, sub: "with token holdings" },
+    { label: "Total Bids", value: String(totalBids), change: "All time", up: true, icon: Gavel, sub: "bids placed" },
   ];
 
   // Extract backed IDs so recommendation engine ignores campaigns the user already holds
@@ -245,45 +265,75 @@ const userBackedCampaignIds = (portfolioData?.investments ?? []).map((inv) => {
             <div className="flex justify-between items-start mb-5">
               <div>
                 <div className="text-[11px] text-gray-500 uppercase tracking-[0.05em] mb-1.5">
-                  Portfolio Performance
+                  Cumulative Invested
                 </div>
                 <div className="text-[26px] font-black tracking-tight text-white">
-                  {formatCurrency(portfolioValue)}
+                  {formatCurrency(chartValue)}
+                </div>
+                <div className="mt-1 text-[11px] text-gray-500">
+                  Dated contributions converted at the current ETH rate
                 </div>
               </div>
-              <Badge color={portfolioChange >= 0 ? "green" : "red"}>
-                {portfolioChange >= 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
-                {formatCurrency(Math.abs(portfolioChange))} ({formatPercent(portfolioChangePct)})
-              </Badge>
+              <div className="flex flex-wrap justify-end gap-1.5">
+                {["1M", "3M", "6M", "1Y"].map((range) => (
+                  <button
+                    key={range}
+                    type="button"
+                    onClick={() => setPortfolioRange(range)}
+                    className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                      portfolioRange === range
+                        ? "border-[#6f42c1]/50 bg-[#6f42c1]/20 text-[#c4b5fd]"
+                        : "border-white/10 text-gray-500 hover:border-white/20 hover:text-white"
+                    }`}
+                  >
+                    {range}
+                  </button>
+                ))}
+              </div>
             </div>
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={portfolioHistory} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#6f42c1" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#6f42c1" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis
-                  tick={{ fill: "#6b7280", fontSize: 10 }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#6f42c1"
-                  strokeWidth={2.5}
-                  fill="url(#portfolioGrad)"
-                  dot={false}
-                  activeDot={{ r: 5, fill: "#a78bfa", stroke: "#ffffff", strokeWidth: 2 }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            {portfolioHistory.length > 0 ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={portfolioHistory} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6f42c1" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#6f42c1" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                  <XAxis
+                    dataKey="timestamp"
+                    type="number"
+                    scale="time"
+                    domain={["dataMin", "dataMax"]}
+                    tick={{ fill: "#6b7280", fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(timestamp) => formatChartDate(timestamp, portfolioRange)}
+                  />
+                  <YAxis
+                    tick={{ fill: "#6b7280", fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(value) => formatCurrency(value)}
+                  />
+                  <Tooltip content={<CustomTooltip range={portfolioRange} />} />
+                  <Area
+                    type="stepAfter"
+                    dataKey="value"
+                    stroke="#6f42c1"
+                    strokeWidth={2.5}
+                    fill="url(#portfolioGrad)"
+                    dot={false}
+                    activeDot={{ r: 5, fill: "#a78bfa", stroke: "#ffffff", strokeWidth: 2 }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[200px] items-center justify-center text-sm text-gray-500">
+                No dated investments available for this time range.
+              </div>
+            )}
           </div>
 
           {/* Top Performer Card */}

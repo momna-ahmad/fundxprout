@@ -1,3 +1,4 @@
+//frontend/app/investor-dashboard/marketplace/page.tsx
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -122,7 +123,8 @@ export default function InvestorMarketplacePage() {
       setLoading(true);
       setError(null);
       const result = await getOpenSellOrders();
-      setOrders(result.orders || []);
+      const nextOrders = result.orders || [];
+      setOrders(nextOrders);
     } catch (err) {
       console.error(err);
       setError('Unable to load token listings.');

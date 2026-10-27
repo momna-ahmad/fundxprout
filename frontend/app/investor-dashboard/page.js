@@ -341,7 +341,7 @@ export default function InvestorDashboardPage() {
 
       const contract = new ethers.Contract(
         investModal.campaign.contract_address,
-        BusinessCampaignABI,
+        BusinessCampaignABI.abi,
         signer,
       );
 

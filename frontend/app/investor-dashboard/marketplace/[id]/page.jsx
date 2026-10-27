@@ -3,65 +3,170 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { useParams } from 'next/navigation';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronDown,
+  Download,
+  ExternalLink,
+  FileText,
+  Loader2,
+} from 'lucide-react';
 import { getCampaignById } from '@/utils/supabase/getCampaigns';
+import { getCampaignFinancialReports } from '@/lib/marketplace-api';
 import OrderBook from '@/components/Marketplace/OrderBook';
-import TradeHistory from '@/components/Marketplace/TradeHistory';
-import ValuationChart from '@/components/Marketplace/ValuationChart';
-import OrderForm from '@/components/Marketplace/OrderForm';
 
-const sampleSnapshots = [
-  {
-    timestamp: Math.floor(Date.now() / 1000) - 3600 * 4,
-    value: 0.92,
-  },
-  {
-    timestamp: Math.floor(Date.now() / 1000) - 3600 * 3,
-    value: 0.98,
-  },
-  {
-    timestamp: Math.floor(Date.now() / 1000) - 3600 * 2,
-    value: 1.05,
-  },
-  {
-    timestamp: Math.floor(Date.now() / 1000) - 3600 * 1,
-    value: 1.12,
-  },
-  {
-    timestamp: Math.floor(Date.now() / 1000),
-    value: 1.08,
-  },
-];
+function formatUsd(value) {
+  const amount = Number(value);
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
 
-function calcDaysLeft(createdAt, durationDays) {
-  if (!createdAt || !durationDays) return 0;
+/* ------------------------------------------------------------------ */
+/*  Financial reports                                                  */
+/* ------------------------------------------------------------------ */
+function FinancialReportsSection({ reports, loading }) {
+  return (
+    <section className="rounded-lg border border-border bg-card">
+      <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-ring">
+            <FileText size={16} />
+          </span>
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Financial reports</h2>
+            <p className="text-xs text-muted-foreground">
+              Revenue, burn rate and cash position shared by the founders.
+            </p>
+          </div>
+        </div>
+        <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
+          {reports.length} report{reports.length === 1 ? '' : 's'}
+        </span>
+      </div>
 
-  const deadline = new Date(
-    new Date(createdAt).getTime() +
-      durationDays * 24 * 60 * 60 * 1000
+      <div className="p-5">
+        {loading ? (
+          <div className="flex items-center gap-2 rounded-md border border-border bg-background/60 px-4 py-4 text-sm text-muted-foreground">
+            <Loader2 size={16} className="animate-spin text-ring" />
+            Loading reports…
+          </div>
+        ) : reports.length === 0 ? (
+          <p className="rounded-md border border-dashed border-border bg-background/50 px-4 py-5 text-sm text-muted-foreground">
+            The founders haven&apos;t submitted a financial report yet.
+          </p>
+        ) : (
+          <div className="divide-y divide-border overflow-hidden rounded-md border border-border bg-background/60">
+            {reports.map((report) => {
+              const isApproved = report.status === 'approved';
+              const isRejected = report.status === 'rejected';
+              const statusLabel = isApproved ? 'Verified' : isRejected ? 'Rejected' : 'Under review';
+              const statusClass = isApproved
+                ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                : isRejected
+                  ? 'bg-destructive/10 text-destructive border-destructive/20'
+                  : 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+              const dotClass = isApproved ? 'bg-green-400' : isRejected ? 'bg-destructive' : 'bg-amber-500';
+
+              return (
+                <details key={report.id} className="group/report">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {report.period_label || `FY ${report.fiscal_year}`}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Fiscal year {report.fiscal_year} &middot; Revenue{' '}
+                        <span className="tabular-nums text-foreground/80">{formatUsd(report.gross_revenue)}</span>
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-[11px] font-medium ${statusClass}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
+                        {statusLabel}
+                      </span>
+                      <ChevronDown
+                        size={15}
+                        className="text-muted-foreground transition-transform duration-200 group-open/report:rotate-180"
+                      />
+                    </div>
+                  </summary>
+
+                  <div className="border-t border-border bg-card/60 px-4 py-4">
+                    <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
+                      {[
+                        ['Gross revenue', report.gross_revenue],
+                        ['Burn rate', report.burn_rate],
+                        ['Net income / loss', report.net_income_loss],
+                        ['Beginning cash', report.beginning_cash],
+                        ['Operating cash flow', report.operating_cash_flow],
+                        ['Ending cash', report.ending_cash],
+                      ].map(([label, value]) => (
+                        <div key={label}>
+                          <dt className="text-xs text-muted-foreground">{label}</dt>
+                          <dd className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
+                            {formatUsd(value)}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+                      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <CheckCircle2
+                          size={14}
+                          className={report.is_audited ? 'text-green-400' : 'text-muted-foreground/50'}
+                        />
+                        {report.is_audited ? 'Audited / independently reviewed' : 'Not marked as audited'}
+                      </span>
+                      {report.file_url ? (
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={report.file_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                          >
+                            <ExternalLink size={12} /> View report
+                          </a>
+                          <a
+                            href={report.file_url}
+                            download
+                            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                          >
+                            <Download size={12} /> Download
+                          </a>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Report file unavailable</span>
+                      )}
+                    </div>
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
   );
-
-  const diff = Math.ceil(
-    (deadline.getTime() - Date.now()) /
-      (1000 * 60 * 60 * 24)
-  );
-
-  return diff > 0 ? diff : 0;
 }
 
 export default function CampaignMarketplacePage() {
   const params = useParams();
-  const searchParams = useSearchParams();
 
   // Because your folder is [id], the parameter is params.id
   const campaignId = params?.id;
-  const defaultSide = searchParams.get('side') === 'sell' ? 'sell' : 'buy';
 
   const [campaign, setCampaign] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [financialReports, setFinancialReports] = useState([]);
+  const [reportsLoading, setReportsLoading] = useState(true);
 
   useEffect(() => {
     if (!campaignId) return;
@@ -72,7 +177,6 @@ export default function CampaignMarketplacePage() {
 
       try {
         const result = await getCampaignById(campaignId);
-        setDescriptionExpanded(false);
 
         if (!result) {
           setError('Campaign not found.');
@@ -91,9 +195,34 @@ export default function CampaignMarketplacePage() {
     loadCampaign();
   }, [campaignId]);
 
+  // Financial reports for this campaign (grouped by campaign_id)
+  useEffect(() => {
+    if (!campaign?.id) return;
+
+    async function loadReports() {
+      setReportsLoading(true);
+      const numericId = Number(campaign.id);
+
+      if (Number.isSafeInteger(numericId) && numericId > 0) {
+        try {
+          const { reports } = await getCampaignFinancialReports([numericId]);
+          setFinancialReports(reports || []);
+        } catch (err) {
+          console.error('[Marketplace campaign financial reports]', err);
+          setFinancialReports([]);
+        }
+      } else {
+        setFinancialReports([]);
+      }
+      setReportsLoading(false);
+    }
+
+    loadReports();
+  }, [campaign?.id]);
+
   if (loading) {
     return (
-      <div className="rounded-3xl border border-border bg-card p-10 text-center text-muted-foreground">
+      <div className="rounded-lg border border-border bg-card p-10 text-center text-muted-foreground">
         <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin" />
         Loading campaign market…
       </div>
@@ -102,183 +231,33 @@ export default function CampaignMarketplacePage() {
 
   if (error || !campaign) {
     return (
-      <div className="rounded-3xl border border-border bg-card p-10 text-center text-destructive">
+      <div className="rounded-lg border border-border bg-card p-10 text-center text-destructive">
         {error || 'Campaign could not be loaded.'}
       </div>
     );
   }
 
-  const raised = parseFloat(campaign.amount_pledged ?? '0');
-  const goal = parseFloat(campaign.funding_goal ?? '0');
-
-  const progress =
-    goal > 0
-      ? Math.min((raised / goal) * 100, 100)
-      : 0;
-
-  const description = campaign.description?.trim();
-  const hasDescription = Boolean(description);
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between gap-4">
         <Link
           href="/investor-dashboard/marketplace"
-          className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm text-muted-foreground transition hover:border-ring"
+          className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm text-muted-foreground transition hover:border-ring hover:text-foreground"
         >
-          <ArrowLeft size={16} />
+          <ArrowLeft size={15} />
           Back to marketplace
         </Link>
 
-        <div className="rounded-3xl border border-border bg-card px-4 py-2 text-sm text-muted-foreground">
+        <div className="rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
           {campaign.secondary_trading_enabled
             ? 'Secondary trading enabled'
             : 'Secondary trading unavailable'}
         </div>
       </div>
 
-      <div className="rounded-3xl border border-border bg-card p-7">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div className="min-w-0">
-            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              Marketplace campaign
-            </p>
+      <OrderBook campaignId={campaign.id} />
 
-            <h1 className="mt-3 text-3xl font-semibold text-foreground">
-              {campaign.title || 'Untitled Campaign'}
-            </h1>
-
-            <div className="mt-4 flex max-w-3xl items-baseline gap-1 text-sm leading-6 text-muted-foreground">
-              <p
-                className={
-                  descriptionExpanded
-                    ? 'min-w-0 flex-1'
-                    : 'min-w-0 flex-1 truncate'
-                }
-              >
-                {description ||
-                  'No detailed campaign description is available for this marketplace listing.'}
-              </p>
-
-              {hasDescription && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setDescriptionExpanded((expanded) => !expanded)
-                  }
-                  className="shrink-0 font-medium text-foreground underline-offset-4 hover:underline"
-                >
-                  {descriptionExpanded ? 'show less' : '...show more'}
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-3xl border border-border bg-background/80 p-4 text-center">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                Goal
-              </div>
-
-              <div className="mt-2 text-xl font-semibold text-foreground">
-                {campaign.funding_goal ?? 'N/A'} ETH
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-border bg-background/80 p-4 text-center">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                Raised
-              </div>
-
-              <div className="mt-2 text-xl font-semibold text-foreground">
-                {campaign.amount_pledged ?? '0'} ETH
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-border bg-background/80 p-4 text-center">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                Investors
-              </div>
-
-              <div className="mt-2 text-xl font-semibold text-foreground">
-                {campaign.investor_count ?? 0}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 overflow-hidden rounded-3xl border border-border bg-background/70">
-          <div className="flex items-center justify-between px-4 py-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            <span>Funding progress</span>
-            <span>{progress.toFixed(0)}%</span>
-          </div>
-
-          <div className="h-3 bg-border">
-            <div
-              className="h-full bg-ring transition-all"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-        <div className="space-y-6">
-          <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
-            <OrderBook campaignId={campaign.id} />
-
-            <TradeHistory trades={[]} />
-          </div>
-
-          <ValuationChart snapshots={sampleSnapshots} />
-        </div>
-
-        <div className="space-y-6">
-          <OrderForm
-            campaignId={campaign.id}
-            tokenAddress={campaign.token_contract_address}
-            defaultSide={defaultSide}
-          />
-
-          <div className="rounded-3xl border border-border bg-card p-6">
-            <div className="text-sm font-semibold text-foreground">
-              Campaign details
-            </div>
-
-            <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-              <div>
-                <span className="font-semibold text-foreground">
-                  Category:{' '}
-                </span>
-                {campaign.category ?? 'Uncategorized'}
-              </div>
-
-              <div>
-                <span className="font-semibold text-foreground">
-                  Duration:{' '}
-                </span>
-                {calcDaysLeft(
-                  campaign.created_at,
-                  campaign.duration
-                )}{' '}
-                days remaining
-              </div>
-
-              <div>
-                <span className="font-semibold text-foreground">
-                  Created:{' '}
-                </span>
-
-                {campaign.created_at
-                  ? new Date(
-                      campaign.created_at
-                    ).toLocaleDateString()
-                  : 'Unknown'}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <FinancialReportsSection reports={financialReports} loading={reportsLoading} />
     </div>
   );
 }
