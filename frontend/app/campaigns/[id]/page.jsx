@@ -40,6 +40,67 @@ function calcDaysLeft(deadlineTimestamp) {
   return Math.max(0, diffDays);
 }
 
+/* ------------------------------------------------------------------ */
+/*  UI helper: long text that collapses to a few lines with a toggle   */
+/* ------------------------------------------------------------------ */
+function ExpandableText({ text, lines = 6 }) {
+    const ref = useRef(null);
+    const [expanded, setExpanded] = useState(false);
+    const [overflows, setOverflows] = useState(false);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const check = () => {
+            if (!expanded) setOverflows(el.scrollHeight > el.clientHeight + 1);
+        };
+        check();
+        window.addEventListener("resize", check);
+        return () => window.removeEventListener("resize", check);
+    }, [text, expanded]);
+
+    const collapsedStyle = {
+        display: "-webkit-box",
+        WebkitLineClamp: lines,
+        WebkitBoxOrient: "vertical",
+        overflow: "hidden",
+    };
+
+    return (
+        <div>
+            <div className="relative">
+                <p
+                    ref={ref}
+                    style={expanded ? undefined : collapsedStyle}
+                    className="whitespace-pre-line text-[15px] leading-7 text-gray-300"
+                >
+                    {text}
+                </p>
+                {!expanded && overflows && (
+                    <div
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#1a2030] to-transparent"
+                    />
+                )}
+            </div>
+
+            {overflows && (
+                <button
+                    type="button"
+                    onClick={() => setExpanded((v) => !v)}
+                    aria-expanded={expanded}
+                    className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-[#6f42c1]/30 bg-[#6f42c1]/10 px-4 py-1.5 text-xs font-semibold text-[#a78bfa] transition hover:bg-[#6f42c1]/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa]"
+                >
+                    {expanded ? "Read less" : "Read more"}
+                    <ChevronDown
+                        className={`h-3.5 w-3.5 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+                    />
+                </button>
+            )}
+        </div>
+    );
+}
+
 export default function CampaignDetailPage() {
     const { id } = useParams(); // shafqaat — get campaign id from URL e.g. /campaigns/abc-123
     const router = useRouter();
@@ -411,9 +472,15 @@ export default function CampaignDetailPage() {
                             <h1 className="text-3xl font-black text-white mt-1 mb-3">
                                 {campaign.title}
                             </h1>
-                            <p className="text-gray-400 text-sm leading-relaxed">
-                                {campaign.description}
-                            </p>
+                            {/* Story / pitch — collapsed by default */}
+                            {campaign.description && (
+                                <section className={`${cardClass} p-6 sm:p-8`}>
+                                    <h2 className="mb-4 text-lg font-bold tracking-tight text-white">
+                                        About this campaign
+                                    </h2>
+                                    <ExpandableText text={campaign.description} lines={6} />
+                                </section>
+                            )}
                         </div>
 
                         {/* shafqaat — IPFS Documents section for investor due diligence */}
