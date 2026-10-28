@@ -115,6 +115,11 @@ export async function POST(req: Request) {
         campaign_id: order.campaign_id,
         price: order.price,
         executed_at: new Date().toISOString(),
+        buyer_id: user.id,
+        settlement_status: 'completed',
+        quantity: amount_bought,
+        seller_id: order.investor_id,
+        fee_amount: 0, // adjust according
       });
 
     if (tradeHistoryError) {

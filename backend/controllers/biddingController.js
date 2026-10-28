@@ -139,9 +139,7 @@ async function placeBid(req, res) {
     if (!buyerProfile.identity_verified) {
       return res.status(403).json({ error: 'Identity verification (KYC) required before placing bids' });
     }
-    if (!buyerProfile.profile_complete) {
-      return res.status(403).json({ error: 'Complete your profile before placing bids' });
-    }
+    
     if (buyerProfile.trading_restricted) {
       return res.status(403).json({ error: 'Your account is restricted from trading' });
     }

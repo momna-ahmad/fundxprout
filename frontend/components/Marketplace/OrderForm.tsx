@@ -246,7 +246,7 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
                     : 'border-border bg-card text-muted-foreground hover:text-foreground'
                 }`}
               >
-                🏆 Auto Auction
+                Auto Auction
               </button>
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">

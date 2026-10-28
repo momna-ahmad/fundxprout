@@ -47,7 +47,7 @@ function ListingCard({
             <div className="flex items-center gap-1.5">
               {isAuto && (
                 <span className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-500">
-                  🏆 Auto Auction
+                  Auto Auction
                 </span>
               )}
               <span className="rounded-2xl border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
