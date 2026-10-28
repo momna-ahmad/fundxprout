@@ -96,13 +96,13 @@ export default function PlaceBidModal({ order, onClose, onBidPlaced }: Props) {
   return (
     // Backdrop
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed scroll-auto inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
       style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
       onClick={onClose}
     >
       {/* Modal */}
       <div
-        className="relative w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl"
+        className="relative max-h-[90vh] overflow-y-auto w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

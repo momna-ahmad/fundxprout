@@ -20,12 +20,14 @@ import {
 import { useWallet } from '@/context/WalletContext';
 import BidCostModal from '@/components/bidding/BidCostModal';
 import ModifyBidModal from '@/components/bidding/ModifyBidModal';
+import {logTransaction} from '@/utils/investmentUtils';
+import { useAuth } from '@/context/auth-context';
 
 // ── Status badge helper ───────────────────────────────────────────
 function StatusBadge({ status }: { status: TokenBid['status'] }) {
   const map: Record<string, { label: string; color: string; bg: string }> = {
     pending:          { label: 'Pending',           color: 'var(--chart-5)', bg: 'color-mix(in srgb, var(--chart-5) 12%, transparent)' },
-    auto_accepted:    { label: '🏆 Auction Won!',    color: '#f59e0b',        bg: 'rgba(245,158,11,0.12)' },
+    auto_accepted:    { label: 'Auction Won!',    color: '#f59e0b',        bg: 'rgba(245,158,11,0.12)' },
     counter_offered:  { label: 'Counter-Offer!',    color: 'var(--chart-4)', bg: 'color-mix(in srgb, var(--chart-4) 15%, transparent)' },
     counter_accepted: { label: 'Counter Accepted',  color: 'var(--chart-3)', bg: 'color-mix(in srgb, var(--chart-3) 12%, transparent)' },
     counter_rejected: { label: 'Counter Declined',  color: 'var(--muted-foreground)', bg: 'color-mix(in srgb, var(--muted-foreground) 10%, transparent)' },
@@ -117,6 +119,7 @@ export default function MyBidsPage() {
   const { walletAddress, connectWallet } = useWallet();
   const [bids, setBids] = useState<TokenBid[]>([]);
   const [loading, setLoading] = useState(true);
+  const {user} = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [progressMsg, setProgressMsg] = useState<Record<string, string>>({});
@@ -287,7 +290,22 @@ export default function MyBidsPage() {
         );
       }
 
-      toast.loading('Waiting for on-chain confirmation…', { id: toastId });
+      // log transaction and settle token amount for seller and buyer
+      //call settle trade marketplace api 
+      await fetch('/api/marketplace/settleTrade', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user,
+          order_id: bid.listing_id,
+          amount_bought: quantity,
+          tx_hash: tx.hash,
+        }),
+      });
+
+      toast.loading('Waiting for on-chain & off-chain confirmation…', { id: toastId });
       const receipt = await tx.wait();
 
       if (receipt.status === 1) {
@@ -419,7 +437,6 @@ export default function MyBidsPage() {
                           style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}
                         >
                           <div className="flex items-center gap-2">
-                            <span>🏆</span>
                             <span>You won the auction! Confirm &amp; Pay within 24 hours to receive your tokens.</span>
                           </div>
                           <CountdownTimer deadline={bid.accept_deadline} label="Pay Before" />
@@ -529,7 +546,10 @@ export default function MyBidsPage() {
                             onClick={() => setCostModalBid(bid)}
                             disabled={isProcessing}
                             className="flex items-center gap-1.5 rounded-2xl px-4 py-2.5 text-sm font-bold text-white transition disabled:opacity-60 shadow-md hover:opacity-95"
-                            style={{ background: 'linear-gradient(135deg, var(--chart-3), var(--ring))' }}
+                            style={{
+                              background: 'var(--ring)',
+                              color: 'var(--primary-foreground, #ffffff)',
+                            }}
                           >
                             {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <ChevronRight size={14} />}
                             {isProcessing ? (step || 'Processing…') : (bid.status === 'confirmed' ? 'Complete Purchase' : 'Review & Confirm Purchase')}
