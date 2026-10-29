@@ -24,6 +24,24 @@ type CampaignReviewProps = {
   };
 };
 
+type FinancialAudit = {
+  id: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  currency?: string | null;
+  unit_scale?: string | null;
+  reporting_type?: string | null;
+  period_label?: string | null;
+  is_audited?: boolean | null;
+  total_revenue?: number | null;
+  revenue_operations?: number | null;
+  other_income?: number | null;
+  net_profit?: number | null;
+  employee_expenses?: number | null;
+  operating_expenses?: number | null;
+  profit_before_tax?: number | null;
+  confidence_score?: number | null;
+};
+
 const scorecard = [
   { label: "Solid idea & prototype", value: 420000, maximum: 500000 },
   { label: "Founding team experience", value: 380000, maximum: 500000 },
@@ -38,40 +56,55 @@ export default function CampaignReview() {
   const { id } = useParams();
   const searchParams = useSearchParams();
   const [campaign, setCampaign] = useState<CampaignReviewProps["campaign"] | null>(null);
+  const [audit, setAudit] = useState<FinancialAudit | null>(null);
   const [loading, setLoading] = useState(true);
+  const [auditLoading, setAuditLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
     async function fetchCampaign() {
       try {
         setLoading(true);
+        setAuditLoading(true);
+        const supabase = createClient();
+
+        // 1. Fetch Campaign
         const data = await getCampaignById(String(id));
         if (!data) {
           setCampaign(null);
           return;
         }
 
+        // 2. Fetch KYB
         const ownerId = searchParams.get("ownerId") || data.owner;
         let kybVerified = false;
         if (ownerId) {
-          const supabase = createClient();
-          const { data: business, error } = await supabase
+          const { data: business } = await supabase
             .from("businesses")
             .select("kyb_verified")
             .eq("owner_id", ownerId)
             .maybeSingle();
 
-          if (error) {
-            console.error("Error fetching campaign owner KYB status:", error);
-          }
           kybVerified = business?.kyb_verified === true;
         }
-
         setCampaign({ ...data, kyb_verified: kybVerified });
+
+        // 3. Fetch Financial Audit Row
+        const { data: auditData, error } = await supabase
+          .from("campaign_financial_audits")
+          .select("*")
+          .eq("campaign_id", Number(id))
+          .limit(1)
+          .maybeSingle();
+
+        console.log("Fetched audit data:", auditData, id, error);
+
+        setAudit(auditData);
       } catch (err) {
-        console.error("Error fetching campaign:", err);
+        console.error("Error fetching campaign data:", err);
       } finally {
         setLoading(false);
+        setAuditLoading(false);
       }
     }
     fetchCampaign();
@@ -88,7 +121,7 @@ export default function CampaignReview() {
   ];
 
   return (
-    <section className="min-h-screen bg-[#181A2A] text-white p-5 sm:p-8 pt-24">
+    <section className="min-h-screen bg-[#181A2A] text-white p-5 sm:p-8 pt-20 sm:pt-20">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-6">
@@ -108,10 +141,6 @@ export default function CampaignReview() {
                 ? `Submitted on ${new Date(campaign.created_at).toLocaleDateString()}`
                 : "Awaiting submission details"}
             </p>
-          </div>
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#1a2030] border border-white/5 text-xs text-gray-300">
-            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-            Admin Review Mode
           </div>
         </div>
 
@@ -146,18 +175,21 @@ export default function CampaignReview() {
 
             <ReviewBox title="Documents" icon={FileText}>
               <div className="divide-y divide-white/5">
-                {documents.map((document) => document.url && (
-                  <a
-                    key={document.label}
-                    href={document.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center justify-between gap-4 py-3 text-xs text-gray-300 hover:text-white"
-                  >
-                    <span>{document.label}</span>
-                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                  </a>
-                ))}
+                {documents.map(
+                  (document) =>
+                    document.url && (
+                      <a
+                        key={document.label}
+                        href={document.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between gap-4 py-3 text-xs text-gray-300 hover:text-white"
+                      >
+                        <span>{document.label}</span>
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                      </a>
+                    )
+                )}
                 {!documents.some((document) => document.url) && (
                   <p className="py-3 text-xs text-gray-500">No campaign documents uploaded.</p>
                 )}
@@ -167,37 +199,81 @@ export default function CampaignReview() {
 
           {/* Right Column */}
           <div className="space-y-6">
-            <ReviewBox title="Valuation - Scorecard Method" icon={Calculator}>
-              <div className="space-y-4">
-                {scorecard.map((item) => (
-                  <div key={item.label} className="space-y-1.5">
-                    <div className="flex justify-between gap-3 text-xs">
-                      <span className="text-gray-400">{item.label}</span>
-                      <span className="text-gray-300 font-medium font-mono">
-                        {formatMoney(item.value)} / {formatMoney(item.maximum)}
+            {/* AI Extracted Financials */}
+            <ReviewBox title="AI Financial Audit" icon={Calculator}>
+              {auditLoading ? (
+                <div className="flex items-center gap-2 text-xs text-gray-400 py-4">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#8b5cf6]" />
+                  <span>Loading extracted financials...</span>
+                </div>
+              ) : !audit ? (
+                <p className="text-xs text-gray-400 py-3">No financial extraction records found.</p>
+              ) : audit.status === "processing" || audit.status === "pending" ? (
+                <div className="flex items-center gap-2 py-3 text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-3 rounded-xl">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>AI extraction in progress ({audit.status})...</span>
+                </div>
+              ) : audit.status === "failed" ? (
+                <div className="py-3 text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-3 rounded-xl">
+                  Extraction failed. Manual review required.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center gap-2 pb-2 border-b border-white/5">
+                    <span className="text-[11px] font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded">
+                      {audit.reporting_type || "Consolidated"}
+                    </span>
+                    <span className="text-[11px] text-gray-300 bg-white/5 border border-white/5 px-2 py-0.5 rounded">
+                      Scale: {audit.unit_scale || "Exact"}
+                    </span>
+                    <span className="text-[11px] text-gray-300 bg-white/5 border border-white/5 px-2 py-0.5 rounded">
+                      {audit.period_label || "Recent"}
+                    </span>
+                    {audit.confidence_score && (
+                      <span className="text-[11px] text-emerald-400 ml-auto font-mono">
+                        {(Number(audit.confidence_score) * 100).toFixed(0)}% Confidence
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="bg-[#0f111a] p-2.5 rounded-xl border border-white/5">
+                      <span className="text-gray-400 block text-[11px]">Total Revenue</span>
+                      <span className="text-base font-bold text-white font-mono mt-0.5 block">
+                        {audit.currency || "$"}{Number(audit.total_revenue || 0).toLocaleString()}
                       </span>
                     </div>
-                    <div className="h-2 w-full bg-[#0d1117] rounded-full overflow-hidden border border-white/5">
-                      <div
-                        className="h-full bg-gradient-to-r from-[#6f42c1] to-[#8b5cf6] rounded-full transition-all duration-500"
-                        style={{ width: `${(item.value / item.maximum) * 100}%` }}
-                      />
+
+                    <div className="bg-[#0f111a] p-2.5 rounded-xl border border-white/5">
+                      <span className="text-gray-400 block text-[11px]">Net Profit (PAT)</span>
+                      <span
+                        className={`text-base font-bold font-mono mt-0.5 block ${
+                          Number(audit.net_profit || 0) >= 0 ? "text-emerald-400" : "text-rose-400"
+                        }`}
+                      >
+                        {audit.currency || "$"}{Number(audit.net_profit || 0).toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="bg-[#0f111a] p-2.5 rounded-xl border border-white/5">
+                      <span className="text-gray-400 block text-[11px]">Staff / Personnel</span>
+                      <span className="text-sm font-semibold text-gray-200 font-mono mt-0.5 block">
+                        {audit.currency || "$"}{Number(audit.employee_expenses || 0).toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="bg-[#0f111a] p-2.5 rounded-xl border border-white/5">
+                      <span className="text-gray-400 block text-[11px]">Operating Expenses</span>
+                      <span className="text-sm font-semibold text-gray-200 font-mono mt-0.5 block">
+                        {audit.currency || "$"}{Number(audit.operating_expenses || 0).toLocaleString()}
+                      </span>
                     </div>
                   </div>
-                ))}
-              </div>
-
-              <div className="mt-6 flex items-center justify-between border-t border-white/10 pt-4">
-                <div>
-                  <span className="text-xs text-gray-400">System-calculated valuation</span>
-                  <p className="text-[11px] text-gray-500">Based on Berkus / Milestone weights</p>
                 </div>
-                <strong className="text-2xl font-bold text-white tracking-tight">
-                  {formatMoney(calculatedValuation)}
-                </strong>
-              </div>
-            </ReviewBox>
+              )}
+            </ReviewBox>         
 
+            {/* Review Actions */}
             <ReviewBox title="Review Actions" icon={FileCheck}>
               <CampaignReviewActions
                 key={String(campaign?.valuation ?? calculatedValuation)}
@@ -250,4 +326,3 @@ function ChecklistRow({ label, verified }: { label: string; verified: boolean })
     </div>
   );
 }
-
