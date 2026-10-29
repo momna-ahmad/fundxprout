@@ -42,12 +42,6 @@ const navItems = [
     exact: false,
   },
   {
-    href: '/admin-dashboard/campaigns',
-    label: 'Campaign Moderation',
-    icon: BarChart2,
-    exact: false,
-  },
-  {
     href: '/admin-dashboard/audit-log',
     label: 'Activity & Audit Log',
     icon: ScrollText,
