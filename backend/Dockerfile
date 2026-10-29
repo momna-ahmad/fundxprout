@@ -6,7 +6,7 @@ ENV NODE_ENV=production
 ENV PORT=5000
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 COPY . .
 
@@ -15,4 +15,4 @@ USER node
 
 EXPOSE 5000
 
-CMD ["node", "index.js"]
+CMD ["node", "index.js"]
