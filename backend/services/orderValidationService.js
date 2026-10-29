@@ -21,11 +21,11 @@ async function validateTradeable(campaignId) {
 
   if (campErr || !campaign) throw new ValidationError('CAMPAIGN_NOT_FOUND', 'Campaign not found');
 
-  const isFunded = campaign.goal_reached === true || 
+  const isFunded = campaign.goal_reached === true ||
     (campaign.funding_goal && Number(campaign.amount_pledged) >= Number(campaign.funding_goal)) ||
     ['successful', 'funded', 'launched'].includes(campaign.status);
 
-  const isClosed = campaign.is_expired === true || 
+  const isClosed = campaign.is_expired === true ||
     (campaign.deadline && new Date(campaign.deadline) <= new Date()) ||
     !campaign.deadline ||
     isFunded;
