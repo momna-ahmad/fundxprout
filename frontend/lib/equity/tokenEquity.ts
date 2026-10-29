@@ -1,16 +1,14 @@
 import { Token } from '@/types';
 
 export function calculateUserEquity(token: Token): number {
-  const postMoney = parseFloat(String(token.postmoneyValuation ?? 0));
+  // The campaign's funding goal is allocated across its offered equity.
+  const fundingGoalEth = Number(token.fundingGoal) || 0;
+  const equityOfferedPct = Number(token.equityOffered) || 0;
+  const balance = Number(token.balance) || 0;
+  const tokenPriceEth = Number(token.pricePerToken) || 0;
 
-  // 1. Calculate investor's total ETH contribution for this token
-  const tokenPriceEth = parseFloat(String(( token.pricePerToken) || 0));
-  const balance = parseFloat(String(token.balance ?? 0));
-  const userInvestedEth = parseFloat(String(tokenPriceEth));
-  // If postMoney is available:
-  if (postMoney > 0 && userInvestedEth > 0) {
-    return Number(((tokenPriceEth / postMoney) * 100).toFixed(4));
-  }
+  if (fundingGoalEth <= 0 || equityOfferedPct <= 0 || balance <= 0 || tokenPriceEth <= 0) return 0;
 
-  return 0;
+  const offeredTokenSupply = fundingGoalEth / tokenPriceEth;
+  return Number(((balance / offeredTokenSupply) * equityOfferedPct).toFixed(4));
 }

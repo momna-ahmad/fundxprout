@@ -97,17 +97,6 @@ export default function Navbar() {
           )}
         </button>
 
-
-        {isLoggedIn && userRole === "owner" && (
-          <Link
-            href="/profile"
-            title="My Profile"
-            className="text-gray-300 hover:text-[#a78bfa] transition-colors"
-          >
-            <UserCircle className="h-5 w-5" />
-          </Link>
-        )}
-
         {isLoggedIn && userRole && (
           <Link
             href={dashboardHref}

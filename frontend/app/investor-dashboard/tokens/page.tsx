@@ -4,10 +4,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ExternalLink, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
-import { formatCurrency, formatNumber, formatPercent, truncateAddress } from '@/lib/formatters';
+import { formatNumber, formatPercent, truncateAddress } from '@/lib/formatters';
 import { getUserTokenHoldings } from '@/utils/supabase/getPortfolio';
 import { Token } from '@/types';
-import { calculateUserEquity } from '@/lib/equity/tokenEquity';
 
 // ── Badge helper ─────────────────────────────────────────────────────
 function Badge({
@@ -27,6 +26,11 @@ function Badge({
       {children}
     </span>
   );
+}
+
+function formatEther(value: number): string {
+  const safeValue = Number.isFinite(value) ? value : 0;
+  return `${safeValue.toLocaleString('en-US', { maximumFractionDigits: 4 })} ETH`;
 }
 
 export default function TokensPage() {
@@ -71,7 +75,10 @@ export default function TokensPage() {
       {/* ── Token Cards ── */}
       {tokenHoldings.length > 0 ? (
         <div className="grid grid-cols-2 gap-5">
-          {tokenHoldings.map((token) => (
+          {tokenHoldings.map((token) => {
+            const changeIsPositive = token.change24h !== null && token.change24h >= 0;
+
+            return (
             <div
               key={token.id}
               className="bg-card border border-border rounded-2xl p-7 hover:border-ring/40 transition-all duration-200"
@@ -93,10 +100,14 @@ export default function TokensPage() {
                     {truncateAddress(token.contractAddress || '0x...', 8, 5)}
                   </div>
                 </div>
-                <Badge variant={token.change24h >= 0 ? 'green' : 'red'}>
-                  {token.change24h >= 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
-                  {formatPercent(token.change24h)}
-                </Badge>
+                {token.change24h === null ? (
+                  <span className="text-[11px] text-muted-foreground">24h change unavailable</span>
+                ) : (
+                  <Badge variant={changeIsPositive ? 'green' : 'red'}>
+                    {changeIsPositive ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+                    {formatPercent(token.change24h)}
+                  </Badge>
+                )}
               </div>
 
               {/* Balance + value */}
@@ -107,31 +118,27 @@ export default function TokensPage() {
                   <div className="text-xs text-muted-foreground">{token.symbol} tokens</div>
                 </div>
                 <div className="px-[18px] py-4 bg-muted border border-border rounded-xl">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-[0.08em] mb-1.5 font-bold">Equity Held</div>
-                  <div className="text-[22px] font-black text-foreground tracking-tight">{calculateUserEquity(token)}%</div>
-                  <div className="text-xs text-muted-foreground">Post Money Valuation: {formatCurrency(token.postmoneyValuation, 2)} ETH</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-[0.08em] mb-1.5 font-bold">Position Value</div>
+                  <div className="text-[22px] font-black text-foreground tracking-tight">
+                    {formatEther(token.balance * token.priceEth)}
+                  </div>
                 </div>
                 <div className="px-[18px] py-4 bg-muted border border-border rounded-xl">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-[0.08em] mb-1.5 font-bold">Price</div>
-                  <div className="text-[22px] font-black text-foreground tracking-tight">
-                    {formatCurrency(token.pricePerToken, 2)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    ≈ {(token.value / (token.pricePerToken)).toFixed(4)} ETH
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">
-                    @ {formatCurrency(token.price, 2)} ({(token.priceEth ?? 0).toFixed(6)} ETH)/token
-                  </div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-[0.08em] mb-1.5 font-bold">{token.priceLabel}</div>
+                  <div className="text-[22px] font-black text-foreground tracking-tight">{formatEther(token.priceEth ?? 0)}</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">per token</div>
                 </div>
               </div>
 
               {/* Sparkline */}
               <div className="mb-5">
-                <div className="text-[11px] text-muted-foreground mb-2 font-semibold">Price History (Real Trade Analytics)</div>
+                <div className="text-[11px] text-muted-foreground mb-2 font-semibold">
+                  {token.priceLabel === 'Launch Reference Price' ? token.priceLabel : 'Recorded Trade History (ETH/token)'}
+                </div>
                 <ResponsiveContainer width="100%" height={56}>
-                  <LineChart data={(token.priceHistory || []).map((item: any, idx: number) => typeof item === 'object' ? { v: Number(item.price.toFixed(4)), time: item.time } : { v: item, time: `P${idx+1}` })}>
+                  <LineChart data={(token.priceHistory || []).map((item: any, idx: number) => typeof item === 'object' ? { v: Number(item.priceEth), time: item.time } : { v: item, time: `P${idx+1}` })}>
                     <Tooltip
-                      formatter={(v: any) => [`$${v}`, 'Price']}
+                      formatter={(v: any) => [formatEther(Number(v)), 'Price']}
                       labelFormatter={(label: any, payload: any) => payload?.[0]?.payload?.time || label}
                       contentStyle={{
                         background:   'var(--card)',
@@ -144,10 +151,10 @@ export default function TokensPage() {
                     <Line
                       type="monotone"
                       dataKey="v"
-                      stroke={token.change24h >= 0 ? 'var(--chart-3)' : 'var(--destructive)'}
+                      stroke={token.change24h === null ? 'var(--muted-foreground)' : changeIsPositive ? 'var(--chart-3)' : 'var(--destructive)'}
                       strokeWidth={2}
                       dot={false}
-                      activeDot={{ r: 4, fill: token.change24h >= 0 ? 'var(--chart-3)' : 'var(--destructive)' }}
+                      activeDot={{ r: 4, fill: token.change24h === null ? 'var(--muted-foreground)' : changeIsPositive ? 'var(--chart-3)' : 'var(--destructive)' }}
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -156,8 +163,8 @@ export default function TokensPage() {
               {/* Actions */}
               <div className="flex gap-2.5">
                 <Link
-                  href={`/investor-dashboard/marketplace/${token.campaignId}?side=sell`}
-                  className="flex-1 justify-center bg-[#6f42c1] hover:bg-[#5a3599] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all inline-flex items-center gap-2 shadow-sm"
+                  href={`/investor-dashboard/marketInvestor/${token.campaignId}`}
+                  className="flex-1 justify-center bg-[#6f42c1] hover:bg-[#5a3599] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all inline-flex items-center gap-2"
                 >
                   <ArrowUpRight size={14} /> Sell
                 </Link>
@@ -174,7 +181,8 @@ export default function TokensPage() {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="bg-card border border-border rounded-2xl text-center px-16 py-16 text-muted-foreground">

@@ -33,9 +33,11 @@ function initMarketplaceSocket(httpServer) {
 
 function formatSide(orders) {
   return orders.map((o) => ({
+    id: o.id,
     price: o.price,
     quantity: o.quantity_remaining,
     total: o.price * o.quantity_remaining,
+    created_at: o.created_at,
   }));
 }
 

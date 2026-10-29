@@ -15,21 +15,17 @@ class ValidationError extends Error {
 async function validateTradeable(campaignId) {
   const { data: campaign, error: campErr } = await supabaseAdmin
     .from('campaigns')
-<<<<<<< HEAD
-    .select('id, status, amount_pledged, funding_goal , goal_reached, is_expired, secondary_trading_enabled, flag_count, last_traded_price, price_per_token')
-=======
-    .select('id, status, goal_reached, is_expired, secondary_trading_enabled, flag_count, last_traded_price, price_per_token, funding_goal, amount_pledged, deadline')
->>>>>>> shafqaat-fyp3
+    .select('id, status, amount_pledged, funding_goal, goal_reached, is_expired, secondary_trading_enabled, flag_count, last_traded_price, price_per_token, deadline')
     .eq('id', campaignId)
     .single();
 
   if (campErr || !campaign) throw new ValidationError('CAMPAIGN_NOT_FOUND', 'Campaign not found');
 
-  const isFunded = campaign.goal_reached === true || 
+  const isFunded = campaign.goal_reached === true ||
     (campaign.funding_goal && Number(campaign.amount_pledged) >= Number(campaign.funding_goal)) ||
     ['successful', 'funded', 'launched'].includes(campaign.status);
 
-  const isClosed = campaign.is_expired === true || 
+  const isClosed = campaign.is_expired === true ||
     (campaign.deadline && new Date(campaign.deadline) <= new Date()) ||
     !campaign.deadline ||
     isFunded;

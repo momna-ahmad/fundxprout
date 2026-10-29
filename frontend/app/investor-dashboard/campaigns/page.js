@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { getAllCampaigns } from "@/utils/supabase/getCampaigns";
 import { fetchInvestmentHistory as fetchHistoryUtil, logTransaction , recordClaimedToken} from "@/utils/investmentUtils";
-import { Target, Users, Clock, DollarSign, ExternalLink, TrendingUp , Filter, CheckCircle2 } from "lucide-react";
+import { Target, DollarSign, TrendingUp, CheckCircle2, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import RiskBadge from "@/components/RiskBadge";
 import { ethers } from "ethers";
@@ -270,6 +270,7 @@ export default function InvestorCampaignsPage() {
 
       setCampaigns(camps || []);
       setInvestmentHistory(history || []);
+
       setLoading(false);
     }
     load();
@@ -287,286 +288,317 @@ export default function InvestorCampaignsPage() {
     ({ campaign }) => calcDaysLeft(campaign.created_at, campaign.duration) > 0
   ).length;
 
+  const filterTabs = [
+    { id: "all", label: "All" },
+    { id: "ongoing", label: "Ongoing" },
+    { id: "ended", label: "Ended" },
+    { id: "recent", label: "Most recent" },
+  ];
+
+  // Display-only counts for the tabs
+  const tabCounts = {
+    all: aggregatedCampaigns.length,
+    ongoing: aggregatedCampaigns.filter(({ campaign }) => calcDaysLeft(campaign.created_at, campaign.duration) > 0).length,
+    ended: aggregatedCampaigns.filter(({ campaign }) => calcDaysLeft(campaign.created_at, campaign.duration) === 0).length,
+  };
+
+  /* ---------------------------- Loading ---------------------------- */
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <p className="text-muted-foreground text-sm">Loading your campaigns...</p>
+      <div className="space-y-6" aria-busy="true">
+        <div className="h-20 animate-pulse rounded-lg border border-border bg-card" />
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
+          <div className="h-11 border-b border-border" />
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex items-center gap-3 border-b border-border px-5 py-4 last:border-b-0">
+              <div className="h-12 w-12 animate-pulse rounded-md bg-muted" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3 w-1/3 animate-pulse rounded bg-muted" />
+                <div className="h-3 w-1/5 animate-pulse rounded bg-muted" />
+              </div>
+            </div>
+          ))}
+        </div>
+        <span className="sr-only">Loading your campaigns...</span>
       </div>
     );
   }
 
+  const rowGrid = "lg:grid-cols-[minmax(0,2.4fr)_1fr_1.5fr_0.9fr_210px]";
+
   return (
     <div className="space-y-6">
-      {/* Summary stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div className="bg-card border border-border rounded-xl p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Total Invested</p>
-              <p className="text-2xl font-bold text-foreground">
-                {totalInvested.toFixed(4)} ETH
+      {/* ------------------------------ Header ------------------------------ */}
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight text-foreground">Your investments</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Track funding progress and claim tokens for every campaign you&apos;ve backed.
+        </p>
+      </div>
+
+      {/* ------------------------ Portfolio summary ------------------------ */}
+      <section
+        aria-label="Portfolio summary"
+        className="grid overflow-hidden rounded-lg border border-border bg-card sm:grid-cols-3 sm:divide-x divide-y sm:divide-y-0 divide-border"
+      >
+        <div className="p-5">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <DollarSign size={14} className="text-ring" />
+            Total invested
+          </div>
+          <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums text-foreground">
+            {totalInvested.toFixed(4)}
+            <span className="ml-1.5 text-sm font-medium text-muted-foreground">ETH</span>
+          </p>
+        </div>
+
+        <div className="p-5">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Target size={14} className="text-ring" />
+            Campaigns backed
+          </div>
+          <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums text-foreground">
+            {filteredCampaigns.length}
+          </p>
+        </div>
+
+        <div className="p-5">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <TrendingUp size={14} className="text-ring" />
+            Still active
+          </div>
+          <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums text-foreground">
+            {activeCampaigns}
+          </p>
+        </div>
+      </section>
+
+      {/* ------------------------- Investments table ------------------------- */}
+      <section className="overflow-hidden rounded-lg border border-border bg-card">
+        {/* Toolbar: filter tabs */}
+        <div className="flex items-center justify-between gap-4 border-b border-border px-4 sm:px-5">
+          <div role="tablist" aria-label="Filter investments" className="flex gap-5 overflow-x-auto">
+            {filterTabs.map((tab) => (
+              <button
+                key={tab.id}
+                role="tab"
+                aria-selected={activeFilter === tab.id}
+                onClick={() => setActiveFilter(tab.id)}
+                className={`-mb-px flex h-11 shrink-0 items-center gap-1.5 border-b-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  activeFilter === tab.id
+                    ? "border-ring text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+                {tabCounts[tab.id] !== undefined && (
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+                    {tabCounts[tab.id]}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {filteredCampaigns.length === 0 ? (
+          <div className="flex flex-col items-start gap-4 px-5 py-10 sm:flex-row sm:items-center">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+              <Target className="h-5 w-5 text-ring" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-foreground">
+                {activeFilter === "all" ? "No investments yet" : "No campaigns match this filter"}
+              </h3>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {activeFilter === "all"
+                  ? "Campaigns you invest in will show up here so you can track them."
+                  : "Try another filter to see the rest of your portfolio."}
               </p>
             </div>
-            <DollarSign className="w-8 h-8 text-ring opacity-60" />
-          </div>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Campaigns Invested</p>
-              <p className="text-2xl font-bold text-foreground">{filteredCampaigns.length}</p>
-            </div>
-            <Target className="w-8 h-8 text-ring opacity-60" />
-          </div>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Active Campaigns</p>
-              <p className="text-2xl font-bold text-foreground">{activeCampaigns}</p>
-            </div>
-            <TrendingUp className="w-8 h-8 text-ring opacity-60" />
-          </div>
-        </div>
-      </div>
-
-      {/* Filter Tabs Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border pb-4">
-        <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-          <Filter className="w-4 h-4 text-ring" /> Filter Investments
-        </h2>
-        <div className="flex flex-wrap gap-2">
-          {[
-            { id: "all", label: "All Campaigns" },
-            { id: "ongoing", label: "Ongoing" },
-            { id: "ended", label: "Ended" },
-            { id: "recent", label: "Most Recent" },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                activeFilter === tab.id
-                  ? "bg-ring text-white"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Campaign cards */}
-      {filteredCampaigns.length === 0 ? (
-        <div className="bg-card border border-border rounded-xl p-12 text-center">
-          <Target className="w-14 h-14 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-bold text-foreground mb-2">No investments yet</h3>
-          <p className="text-muted-foreground text-sm mb-6">
-            Campaigns you invest in will appear here for tracking.
-          </p>
-          <Link
-            href="/homepage"
-            className="inline-block px-6 py-2 rounded-lg text-sm font-semibold text-white transition-colors"
-            style={{ background: "var(--ring)" }}
-          >
-            Browse Campaigns
-          </Link>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {filteredCampaigns.map(({ campaign, ...inv }, idx) => {
-            const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration);
-            const goal = parseFloat(campaign.funding_goal ?? 0);
-            const raised = parseFloat(
-              campaign.amount_pledged ?? campaign.amount_raised ?? 0
-            );
-            const remaining = Math.max(0, goal - raised);
-            const progress = goal > 0 ? Math.min(100, (raised / goal) * 100) : 0;
-            const isActive = daysLeft > 0;
-            const isGoalReached = raised >= goal && goal > 0;
-
-            return (
-              <div
-                key={inv.id || idx}
-                className="bg-card border border-border rounded-xl overflow-hidden hover:border-ring/40 transition-colors"
+            {activeFilter === "all" && (
+              <Link
+                href="/homepage"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md px-4 text-sm font-medium text-white transition-opacity hover:opacity-90"
+                style={{ background: "var(--ring)" }}
               >
-                {/* Campaign image */}
-                <div className="h-32 relative" style={{ background: "linear-gradient(135deg, color-mix(in srgb, var(--ring) 30%, transparent), color-mix(in srgb, var(--chart-5) 30%, transparent))" }}>
-                  {campaign.image_url && (
-                    <img
-                      src={campaign.image_url}
-                      alt={campaign.title}
-                      className="w-full h-full object-cover"
-                    />
-                  )}
-                  <div className="absolute top-3 left-3">
-                    <RiskBadge score={campaign.risk_score} />
-                  </div>
-                  <div className="absolute top-3 right-3">
-                    <span
-                      className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                        isActive
-                          ? "bg-green-500/20 text-green-400"
-                          : "bg-red-500/20 text-red-400"
-                      }`}
-                    >
-                      {isActive ? "Active" : "Ended"}
-                    </span>
-                  </div>
-                </div>
+                Browse campaigns <ArrowUpRight size={14} />
+              </Link>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Column headers (desktop) */}
+            <div className={`hidden border-b border-border bg-muted/30 px-5 py-2.5 text-xs font-medium text-muted-foreground lg:grid lg:gap-x-4 ${rowGrid}`}>
+              <span>Campaign</span>
+              <span>Your investment</span>
+              <span>Funding</span>
+              <span>Status</span>
+              <span className="text-right">Actions</span>
+            </div>
 
-                <div className="p-5">
-                  {/* Title + category */}
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <h3 className="text-base font-bold text-foreground truncate">
-                      {campaign.title}
-                    </h3>
-                    {campaign.category && (
-                      <span
-                        className="text-[11px] px-2 py-0.5 rounded-full flex-shrink-0 border font-semibold"
-                        style={{
-                          background: "color-mix(in srgb, var(--ring) 15%, transparent)",
-                          borderColor: "color-mix(in srgb, var(--ring) 28%, transparent)",
-                          color: "var(--ring)",
-                        }}
-                      >
-                        {campaign.category}
-                      </span>
-                    )}
-                  </div>
-                  {campaign.description && (
-                    <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
-                      {campaign.description}
-                    </p>
-                  )}
+            <ul className="divide-y divide-border">
+              {filteredCampaigns.map(({ campaign, ...inv }, idx) => {
+                const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration);
+                const goal = parseFloat(campaign.funding_goal ?? 0);
+                const raised = parseFloat(
+                  campaign.amount_pledged ?? campaign.amount_raised ?? 0
+                );
+                const remaining = Math.max(0, goal - raised);
+                const progress = goal > 0 ? Math.min(100, (raised / goal) * 100) : 0;
+                const isActive = daysLeft > 0;
+                const isGoalReached = raised >= goal && goal > 0;
 
-                  {/* Funding progress */}
-                  <div className="mb-4">
-                    <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
-                      <span>
-                        {raised.toLocaleString(undefined, { maximumFractionDigits: 4 })} ETH raised
-                      </span>
-                      <span>
-                        {progress.toFixed(0)}% of {goal.toLocaleString()} ETH
-                      </span>
-                    </div>
-                    <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                const showClaimed = inv.status === "claimed";
+                const showClaim = !showClaimed && (inv.status === "completed" || inv.status === "ongoing") && isGoalReached;
+                const showRefund = !isGoalReached;
+
+                const detailHref = `/investor-dashboard/campaignDetail/${campaign.id}`;
+
+                return (
+                  <li
+                    key={inv.id || idx}
+                    className={`grid grid-cols-2 gap-x-4 gap-y-4 px-4 py-4 transition-colors hover:bg-muted/20 sm:px-5 lg:items-center lg:gap-y-0 ${rowGrid}`}
+                  >
+                    {/* Campaign */}
+                    <div className="col-span-2 flex min-w-0 items-center gap-3 lg:col-span-1">
                       <div
-                        className="h-full rounded-full transition-all"
-                        style={{ width: `${progress}%`, background: "var(--ring)" }}
-                      />
+                        className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-border"
+                        style={{ background: "linear-gradient(135deg, color-mix(in srgb, var(--ring) 30%, transparent), color-mix(in srgb, var(--chart-5) 30%, transparent))" }}
+                      >
+                        {campaign.image_url && (
+                          <img
+                            src={campaign.image_url}
+                            alt={campaign.title}
+                            className="h-full w-full object-cover"
+                          />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <Link
+                          href={detailHref}
+                          className="block truncate text-sm font-semibold text-foreground hover:underline"
+                        >
+                          {campaign.title}
+                        </Link>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
+                          {campaign.category && <span className="truncate">{campaign.category}</span>}
+                          <span className="tabular-nums">
+                            {Number(campaign.investor_count ?? 0)} investors
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Stats grid */}
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div className="bg-background rounded-lg p-3 border border-border">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Users size={12} className="text-muted-foreground" />
-                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          Total Investors
-                        </span>
-                      </div>
-                      <p className="text-sm font-bold text-foreground">
-                        {Number(campaign.investor_count ?? 0)}
-                      </p>
-                    </div>
-                    <div className="bg-background rounded-lg p-3 border border-border">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Target size={12} className="text-muted-foreground" />
-                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          Goal Remaining
-                        </span>
-                      </div>
-                      <p className="text-sm font-bold text-foreground">
-                        {remaining.toLocaleString(undefined, { maximumFractionDigits: 4 })} ETH
-                      </p>
-                    </div>
-                    <div className="bg-background rounded-lg p-3 border border-border">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <DollarSign size={12} className="text-muted-foreground" />
-                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          You Invested
-                        </span>
-                      </div>
-                      <p className="text-sm font-bold text-foreground">
+                    {/* Your investment */}
+                    <div>
+                      <p className="mb-1 text-xs text-muted-foreground lg:hidden">Your investment</p>
+                      <p className="text-sm font-semibold tabular-nums text-foreground">
                         {parseFloat(inv.userTotalInvested).toFixed(4)} ETH
                       </p>
                     </div>
-                    <div className="bg-background rounded-lg p-3 border border-border">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Clock size={12} className="text-muted-foreground" />
-                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          Days Left
-                        </span>
-                      </div>
-                      <p
-                        className={`text-sm font-bold ${
-                          daysLeft > 0 ? "text-foreground" : "text-muted-foreground"
+
+                    {/* Status (mobile: sits beside investment) */}
+                    <div className="lg:order-4">
+                      <p className="mb-1 text-xs text-muted-foreground lg:hidden">Status</p>
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                          isActive
+                            ? "bg-green-500/10 text-green-400"
+                            : "bg-red-500/10 text-red-400"
                         }`}
                       >
-                        {daysLeft > 0 ? daysLeft : "Ended"}
+                        <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-green-400" : "bg-red-400"}`} />
+                        {isActive ? "Active" : "Ended"}
+                      </span>
+                      <p className="mt-1 text-xs tabular-nums text-muted-foreground">
+                        {daysLeft > 0 ? `${daysLeft} ${daysLeft === 1 ? "day" : "days"} left` : "Funding closed"}
                       </p>
                     </div>
-                  </div>
 
-                  <div className="px-5 pb-3">
-                    {inv.status === "claimed" ? (
-                      <button
-                        disabled
-                        className="w-full mb-3 py-2 px-4 rounded-lg text-xs font-bold text-green-400 bg-green-500/10 border border-green-500/20 flex items-center justify-center gap-2 cursor-default"
+                    {/* Funding */}
+                    <div className="col-span-2 lg:order-3 lg:col-span-1">
+                      <div className="flex items-baseline justify-between gap-2 text-xs">
+                        <span className="font-medium tabular-nums text-foreground">
+                          {raised.toLocaleString(undefined, { maximumFractionDigits: 4 })} ETH
+                        </span>
+                        <span className="tabular-nums text-muted-foreground">
+                          of {goal.toLocaleString()} ETH
+                        </span>
+                      </div>
+                      <div
+                        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted"
+                        role="progressbar"
+                        aria-valuenow={Math.round(progress)}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
                       >
-                        <CheckCircle2 className="w-4 h-4 text-green-400" /> Tokens Claimed ✓
-                      </button>
-                    ) : (inv.status === "completed" || inv.status === "ongoing") && isGoalReached ? (
-                      <button
-                        onClick={() =>
-                          handleClaimTokens(
-                            campaign.contract_address,
-                            campaign.token_contract_address,
-                            campaign.token_symbol || "EQT",
-                            inv.investmentIds,
-                            campaign.id
-                          )
-                        }
-                        disabled={claimPending === campaign.contract_address}
-                        className="w-full mb-3 py-2 px-4 rounded-lg text-xs font-bold text-white transition duration-200 flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50"
-                      >
-                        {claimPending === campaign.contract_address ? "Claiming Tokens..." : "Claim Equity Tokens"}
-                      </button>
-                    ) : null}
-                  </div>
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{ width: `${progress}%`, background: "var(--ring)" }}
+                        />
+                      </div>
+                      <div className="mt-1.5 flex justify-between gap-2 text-[11px] tabular-nums text-muted-foreground">
+                        <span>{progress.toFixed(0)}% funded</span>
+                        <span>{remaining.toLocaleString(undefined, { maximumFractionDigits: 4 })} ETH left</span>
+                      </div>
+                    </div>
 
-                  {!isGoalReached && (
-                      <button
-                        onClick={() => handleRefund(campaign.contract_address,campaign.id, inv.id)}
-                        disabled={refundPending === campaign.contract_address}
-                        className="w-full py-2.5 px-4 rounded-lg text-xs font-bold text-white transition duration-200 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 disabled:opacity-50"
-                      >
-                        
-                        {refundPending === campaign.contract_address ? "Processing Refund..." : "Withdraw Invested Funds"}
-                      </button>
-                    )}
+                    {/* Actions */}
+                    <div className="col-span-2 flex flex-wrap items-center gap-2 lg:order-5 lg:col-span-1 lg:justify-end">
+                      {showClaimed && (
+                        <button
+                          disabled
+                          className="inline-flex h-8 flex-1 cursor-default items-center justify-center gap-1.5 rounded-md border border-green-500/20 bg-green-500/10 px-3 text-xs font-semibold text-green-400 lg:flex-none"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Claimed
+                        </button>
+                      )}
 
-                  {/* Transaction footer */}
-                  <div className="flex items-center justify-between pt-3 border-t border-border gap-3">
-                    <div className="flex items-center gap-3 flex-shrink-0">
+                      {showClaim && (
+                        <button
+                          onClick={() =>
+                            handleClaimTokens(
+                              campaign.contract_address,
+                              campaign.token_contract_address,
+                              campaign.token_symbol || "EQT",
+                              inv.investmentIds,
+                              campaign.id
+                            )
+                          }
+                          disabled={claimPending === campaign.contract_address}
+                          title="Claim equity tokens"
+                          className="inline-flex h-8 flex-1 items-center justify-center rounded-md bg-purple-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-purple-500 disabled:opacity-50 lg:flex-none"
+                        >
+                          {claimPending === campaign.contract_address ? "Claiming..." : "Claim tokens"}
+                        </button>
+                      )}
+
+                      {showRefund && (
+                        <button
+                          onClick={() => handleRefund(campaign.contract_address, campaign.id, inv.id)}
+                          disabled={refundPending === campaign.contract_address}
+                          title="Withdraw invested funds"
+                          className="inline-flex h-8 flex-1 items-center justify-center rounded-md border border-red-500/40 px-3 text-xs font-semibold text-red-400 transition-colors hover:bg-red-600 hover:text-white disabled:opacity-50 lg:flex-none"
+                        >
+                          {refundPending === campaign.contract_address ? "Processing..." : "Withdraw"}
+                        </button>
+                      )}
+
                       <Link
-                        href={`/campaigns/${campaign.id}`}
-                        className="text-[11px] font-semibold transition-colors hover:underline"
-                        style={{ color: "var(--ring)" }}
+                        href={detailHref}
+                        className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted lg:flex-none"
                       >
-                        View Campaign
+                        View <ArrowUpRight size={13} />
                       </Link>
                     </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+      </section>
     </div>
   );
 }

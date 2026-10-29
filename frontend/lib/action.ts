@@ -1331,6 +1331,9 @@ export async function finalizeCampaignLaunch(formData: any) {
     contract_address: formData.contractAddress,
     token_contract_address: formData.tokenContractAddress,
     transaction_hash: formData.txHash,
+    postmoney_valuation_eth: formData.postMoney, // post-money = pre-money + raise goal
+    equity_offered: formData.equityOffered,
+    equity_retained: formData.equityRetained,
     status: "launched",
   };
 

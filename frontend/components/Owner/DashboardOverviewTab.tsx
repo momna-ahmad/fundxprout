@@ -2,12 +2,13 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Plus, Target, DollarSign, Eye, Edit2 } from "lucide-react";
+import { Plus, Target, DollarSign, Eye, Edit2, ChevronLeft, ChevronRight } from "lucide-react";
 import { ethers } from "ethers";
 import BusinessCampaignJSON from "@/abis/BusinessCampaign.json";
 import CampaignReviewInfo from "@/components/campaign-review-info";
 import { logTransaction } from "@/utils/investmentUtils";
 import { createClient } from "@/utils/supabase/client";
+import { calcDaysLeft } from "@/components/campaign-card";
 
 export interface CampaignItem {
   id: string | number;
@@ -19,6 +20,7 @@ export interface CampaignItem {
   investor_count?: number | string | null;
   price_per_token?: string | number | null;
   created_at: string;
+  deadline: string;
   duration?: number | null;
   contract_address?: string | null;
   transaction_hash?: string | null;
@@ -26,19 +28,12 @@ export interface CampaignItem {
   equity_offered?: string | number | null;
   equity_retained?: string | number | null;
   campaign_review?: any;
+  funds_withdrawn?: boolean | null;
 }
 
 interface DashboardOverviewTabProps {
   campaigns?: CampaignItem[];
   loading?: boolean;
-}
-
-function calcDaysLeft(createdAt: string, durationDays?: number | null): number {
-  const deadline = new Date(
-    new Date(createdAt).getTime() + (durationDays ?? 30) * 24 * 60 * 60 * 1000
-  );
-  const diff = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  return diff > 0 ? diff : 0;
 }
 
 function getStatusStyle(status?: string): { bg: string; text: string; label: string } {
@@ -72,6 +67,15 @@ export default function DashboardOverviewTab({
 }: DashboardOverviewTabProps) {
   const [txPending, setTxPending] = useState<string | null>(null);
   const supabase = createClient();
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const ITEMS_PER_PAGE = 5;
+
+  const totalPages = Math.ceil(campaigns.length / ITEMS_PER_PAGE);
+  const paginated = campaigns.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE,
+  );
 
   async function handleWithdrawFunds(campaign: CampaignItem) {
   if (!campaign.contract_address) return;
@@ -153,6 +157,47 @@ export default function DashboardOverviewTab({
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-bold text-white">Campaign Overview</h2>
+
+        {!loading && totalPages > 1 && (
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 rounded-full bg-white/5 text-gray-400 hover:bg-[#6f42c1]/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                    (page) => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`w-8 h-8 rounded-full text-xs font-bold transition ${
+                          currentPage === page
+                            ? "bg-[#6f42c1] text-white"
+                            : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ),
+                  )}
+                  <button
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
+                    disabled={currentPage === totalPages}
+                    className="p-2 rounded-full bg-white/5 text-gray-400 hover:bg-[#6f42c1]/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                  <span className="text-xs text-gray-500">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                </div>
+              )}
+
+
         <Link
           href="/create-campaign"
           className="w-full sm:w-fit bg-[#6f42c1] hover:bg-[#5a3599] text-white px-4 py-2.5 rounded-full font-semibold transition duration-200 inline-flex items-center justify-center gap-2 text-sm"
@@ -183,8 +228,8 @@ export default function DashboardOverviewTab({
 
       <div className="space-y-4">
         {!loading &&
-          campaigns.map((campaign) => {
-            const daysLeft = calcDaysLeft(campaign.created_at, campaign.duration);
+          paginated.map((campaign) => {
+            const daysLeft = calcDaysLeft(campaign.deadline);
             const goal = parseFloat(String(campaign.funding_goal ?? "0"));
             const pledged = parseFloat(String(campaign.amount_pledged ?? "0"));
             const statusStyle = getStatusStyle(campaign.status);
@@ -233,7 +278,7 @@ export default function DashboardOverviewTab({
                 accent: false,
               },
               {
-                label: "Days Left",
+                label: "Duration Left",
                 value: daysLeft > 0 ? `${daysLeft}d` : "Ended",
                 accent: false,
               },
@@ -254,7 +299,7 @@ export default function DashboardOverviewTab({
                 },
                 {
                   label: "Equity Offered / Retained",
-                  value: `${offeredPct.toFixed(2)}% / ${retainedPct.toFixed(2)}%`,
+                  value: `${offeredPct.toFixed(4)}% / ${retainedPct.toFixed(2)}%`,
                   accent: true,
                 }
               );
@@ -275,7 +320,9 @@ export default function DashboardOverviewTab({
                     >
                       {statusStyle.label}
                     </span>
-                    <CampaignReviewInfo review={campaign.campaign_review} />
+                    {["rejected", "approved", "adjusted"].includes(campaign.status?.toLowerCase()) && (
+                      <CampaignReviewInfo review={campaign.campaign_review} />
+                    )}
                   </div>
                 </div>
 
@@ -308,13 +355,12 @@ export default function DashboardOverviewTab({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {isGoalReached && campaign.contract_address && (
+                  {isGoalReached && campaign.contract_address && !campaign.funds_withdrawn && (
                     <button
                       onClick={() => handleWithdrawFunds(campaign)}
                       disabled={txPending === campaign.contract_address}
                       className="bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-4 py-2 rounded-full transition flex items-center gap-1.5 disabled:opacity-50"
                     >
-                      <DollarSign className="h-3.5 w-3.5" />
                       {txPending === campaign.contract_address
                         ? "Withdrawing..."
                         : "Withdraw Funds"}
@@ -355,6 +401,46 @@ export default function DashboardOverviewTab({
               </div>
             );
           })}
+
+          {!loading && totalPages > 1 && (
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 rounded-full bg-white/5 text-gray-400 hover:bg-[#6f42c1]/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                    (page) => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`w-8 h-8 rounded-full text-xs font-bold transition ${
+                          currentPage === page
+                            ? "bg-[#6f42c1] text-white"
+                            : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ),
+                  )}
+                  <button
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
+                    disabled={currentPage === totalPages}
+                    className="p-2 rounded-full bg-white/5 text-gray-400 hover:bg-[#6f42c1]/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                  <span className="text-xs text-gray-500">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                </div>
+              )}
+              
       </div>
     </div>
   );

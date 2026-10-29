@@ -11,7 +11,7 @@ import { useAuth } from "@/context/auth-context";
 
 export default function OwnerCampaignAnalyticsPage() {
   const router = useRouter();
-  const { role, loading: authLoading } = useAuth();
+  const { role ,loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [campaigns, setCampaigns] = useState([]);
 
@@ -19,9 +19,12 @@ export default function OwnerCampaignAnalyticsPage() {
     let isMounted = true;
 
     async function loadAnalytics() {
+      console.log("Auth loading:", authLoading);
       if (authLoading) {
         return;
       }
+
+      console.log("Role:", role);
 
       if (role === null) {
         router.replace("/login");

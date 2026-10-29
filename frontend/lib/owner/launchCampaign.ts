@@ -14,6 +14,9 @@ export async function handleLaunchSubmit(prevState: any, formData: FormData) {
   const title = formData.get("title") as string;
   const pricePerToken = formData.get("pricePerToken") as string;
   const deadlineTimestamp = Number(formData.get("deadline_timestamp"));
+  const postMoney = formData.get("postmoney");
+  const equityOffered = formData.get("equity_offered");
+  const equityRetained = formData.get("equity_retained");
 
   // 1. Verify with backend first
   const verification = await verifyCampaignForLaunch(campaignId);
@@ -83,6 +86,9 @@ export async function handleLaunchSubmit(prevState: any, formData: FormData) {
       description: formData.get("description") as string,
       category: formData.get("category") as string,
       goal: formData.get("goal") as string,
+      postMoney,
+      equityOffered,
+      equityRetained,
       tokenSymbol: formData.get("tokenSymbol") as string,
       pricePerToken: formData.get("pricePerToken") as string,
       imageUrl: formData.get("imageUrl") as string,

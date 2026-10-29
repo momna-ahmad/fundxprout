@@ -16,6 +16,7 @@ type OrderFormProps = {
   campaignId: string;
   tokenAddress?: string | null;
   defaultSide?: 'buy' | 'sell';
+  fixedSide?: 'buy' | 'sell';
   wallet_address?: string;
 };
 
@@ -40,10 +41,11 @@ const ORDER_TYPES = {
   ],
 };
 
-export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy' }: OrderFormProps) {
+export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy', fixedSide }: OrderFormProps) {
   const { walletAddress, connectWallet } = useWallet();
-  const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
-  const { user } = useAuth();  const [price, setPrice] = useState('0.001');
+  const [side, setSide] = useState<'buy' | 'sell'>(fixedSide ?? defaultSide);
+  const { user } = useAuth();
+  const [price, setPrice] = useState('0.001');
   const [quantity, setQuantity] = useState('1');
   // shafqaat implemented — Fix P3: Auto-accept threshold price on sell listings
   const [autoAcceptPrice, setAutoAcceptPrice] = useState('');
@@ -208,11 +210,13 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
         </p>
       </div>
       <form className="space-y-4" onSubmit={placeOrder}>
-        <label className="block text-xs font-semibold text-muted-foreground">Side
-          <select value={side} onChange={(event) => setSide(event.target.value as 'buy' | 'sell')} className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground">
-            <option value="buy">Buy</option><option value="sell">Sell</option>
-          </select>
-        </label>
+        {!fixedSide && (
+          <label className="block text-xs font-semibold text-muted-foreground">Side
+            <select value={side} onChange={(event) => setSide(event.target.value as 'buy' | 'sell')} className="mt-2 w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground">
+              <option value="buy">Buy</option><option value="sell">Sell</option>
+            </select>
+          </label>
+        )}
 
         {/* Sell Mode Selector: Manual vs Automated Auction */}
         {side === 'sell' && (
@@ -242,7 +246,7 @@ export default function OrderForm({ campaignId, tokenAddress, defaultSide = 'buy
                     : 'border-border bg-card text-muted-foreground hover:text-foreground'
                 }`}
               >
-                🏆 Auto Auction
+                Auto Auction
               </button>
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">

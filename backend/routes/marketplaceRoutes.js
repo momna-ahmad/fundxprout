@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { createOrder, getOrderBook, getOpenSellOrders, cancelOrder, getTokenAnalytics, getTradeHistory, getHoldings } = require('../controllers/marketplaceController');
+const { createOrder, getOrderBook, getOpenSellOrders, cancelOrder, getTokenAnalytics, getTradeHistory, getHoldings, getCampaignFinancialReports } = require('../controllers/marketplaceController');
 const authenticate = require('../middleware/authenticate');
 
 router.post('/orders', authenticate, createOrder);
@@ -10,5 +10,6 @@ router.get('/orders/book/:campaignId', getOrderBook);
 router.get('/analytics/:campaignId', getTokenAnalytics);
 router.get('/trades/:campaignId', getTradeHistory);
 router.get('/holdings/:campaignId', authenticate, getHoldings);
+router.get('/financial-reports', authenticate, getCampaignFinancialReports);
 
 module.exports = router;

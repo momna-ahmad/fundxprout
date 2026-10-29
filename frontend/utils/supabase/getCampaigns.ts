@@ -281,3 +281,33 @@ export async function getMyCampaigns() {
         return [];
     }
 }
+
+export async function getLaunchedCampaigns() {
+    const supabase = createClient();
+
+    try {
+        // Fetch all fields from campaigns table
+        const { data, error } = await supabase
+            .from("campaigns")
+            .select(`*`)
+            .eq("status", "launched") // only launched campaignns
+            .order("created_at", { ascending: false }); // newest first
+
+        if (error) {
+            console.error("[getAllCampaigns] Supabase error:", error);
+            return [];
+        }
+
+        if (data && data.length > 0) {
+            console.log("[getAllCampaigns] First campaign raw:", data[0]);
+            console.log("[getAllCampaigns] First campaign normalized:", normalizeCampaign(data[0]));
+        }
+        
+        // Normalize campaign data to ensure consistent field names
+        const normalized = (data ?? []).map(normalizeCampaign);
+        return await attachCampaignStats(normalized);
+    } catch (err) {
+        console.error("[getAllCampaigns] Exception:", err);
+        return [];
+    }
+}
