@@ -202,34 +202,53 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const decision = payload.decision || payload.decision_status || payload.session?.decision || null;
 
     let entityId = payload.vendor_data || payload.session?.vendor_data;
-    let sessionKind = payload.session_kind || payload.type || payload.session?.session_kind;
+    let sessionKind = payload.session_kind || payload.type || payload.session?.session_kind
+      || payload.workflow_id_type || payload.session?.session_kind;
 
-    // ── Look up our DB session to fill in missing fields ──────────────────
+    console.log(`[Didit Webhook] Raw fields — session_id: ${session_id}, status: ${status}, decision: ${decision}, entityId: ${entityId}, sessionKind: ${sessionKind}`);
+
+    // ── Look up our DB session to fill in missing fields ──────────────────────
+    // This is the PRIMARY source for entityId and sessionKind since Didit may omit them.
     if (session_id) {
-      const { data: dbSession } = await supabaseAdmin
+      const { data: dbSession, error: dbErr } = await supabaseAdmin
         .from('verification_sessions')
-        .select('*')
+        .select('entity_id, session_kind, entity_type')
         .eq('didit_session_id', session_id)
         .maybeSingle();
 
+      if (dbErr) console.warn('[Didit Webhook] DB lookup error:', dbErr.message);
+
       if (dbSession) {
-        if (!entityId) entityId = dbSession.entity_id;
-        if (!sessionKind) sessionKind = dbSession.session_kind;
+        if (!entityId) {
+          entityId = dbSession.entity_id;
+          console.log(`[Didit Webhook] entityId resolved from DB: ${entityId}`);
+        }
+        if (!sessionKind) {
+          sessionKind = dbSession.session_kind;
+          console.log(`[Didit Webhook] sessionKind resolved from DB: ${sessionKind}`);
+        }
+      } else {
+        console.warn(`[Didit Webhook] ⚠ No DB session found for didit_session_id=${session_id}. Session may not have been created via /kyc/create-session.`);
       }
     }
+
+    // Normalize sessionKind: Didit may send 'kyc' or 'KYC' or 'kyb' — uppercase it.
+    if (sessionKind) sessionKind = sessionKind.toUpperCase();
 
     // shafqaat implemented — Strict status classification:
     // ONLY 'Approved' or 'Completed' means the user passed.
     // 'In Review', 'Needs Review', 'In Progress' means admin review is needed — DO NOT set verified.
     // 'Declined' / 'Rejected' means explicitly failed.
-    const statusLower = (status || '').toLowerCase();
-    const decisionLower = (decision || '').toLowerCase();
-    const isApproved = statusLower === 'approved' || statusLower === 'completed' || decisionLower === 'approved';
-    const isDeclined = statusLower === 'declined' || statusLower === 'rejected' || decisionLower === 'declined' || decisionLower === 'rejected';
-    const isInReview = statusLower === 'in review' || statusLower === 'in_review' || statusLower === 'needs review' || statusLower === 'needs_review' || statusLower === 'review' || statusLower === 'in progress';
+    const statusLower = (status || '').toLowerCase().trim();
+    const decisionLower = (decision || '').toLowerCase().trim();
+    const isApproved = ['approved', 'completed', 'success', 'accepted'].includes(statusLower)
+      || ['approved', 'completed', 'success', 'accepted'].includes(decisionLower);
+    const isDeclined = ['declined', 'rejected', 'failed', 'denied'].includes(statusLower)
+      || ['declined', 'rejected', 'failed', 'denied'].includes(decisionLower);
+    const isInReview = ['in review', 'in_review', 'needs review', 'needs_review', 'review', 'in progress', 'in_progress', 'pending'].includes(statusLower);
     const isTerminal = isApproved || isDeclined;
 
-    console.log(`[Didit Webhook] Status: "${status}" Decision: "${decision}" → isApproved=${isApproved} isDeclined=${isDeclined} isInReview=${isInReview}`);
+    console.log(`[Didit Webhook] Parsed — entityId: ${entityId}, sessionKind: ${sessionKind}, isApproved: ${isApproved}, isDeclined: ${isDeclined}, isInReview: ${isInReview}`);
 
     // ── Update session status in DB ────────────────────────────────────────
     if (session_id) {
@@ -361,7 +380,7 @@ router.post('/kyc/create-session', async (req, res) => {
     const session = await response.json();
 
     await supabaseAdmin.from('verification_sessions').upsert({
-      entity_type: 'user',
+      entity_type: 'user',  // CHECK constraint only allows 'user' | 'business'
       entity_id: userId,
       didit_session_id: session.session_id,
       session_kind: 'KYC',
@@ -454,14 +473,18 @@ router.post('/sync-status', async (req, res) => {
         });
         if (diditRes.ok) {
           const diditData = await diditRes.json();
-          const syncStatus = (diditData.status || '').toLowerCase();
-          const syncDecision = (diditData.decision || '').toLowerCase();
-          console.log('[sync-status] Didit session status:', diditData.status, diditData.decision);
+          const syncStatus = (diditData.status || '').toLowerCase().trim();
+          const syncDecision = (diditData.decision || '').toLowerCase().trim();
+          console.log('[sync-status] Didit session status:', diditData.status, '/ decision:', diditData.decision);
 
           // shafqaat implemented — sync-status: same strict rules as webhook
-          const isApproved = syncStatus === 'approved' || syncStatus === 'completed' || syncDecision === 'approved';
-          const isDeclined = syncStatus === 'declined' || syncStatus === 'rejected' || syncDecision === 'declined';
-          const isInReview = syncStatus === 'in review' || syncStatus === 'in_review' || syncStatus === 'needs review' || syncStatus === 'review' || syncStatus === 'in progress';
+          const isApproved = ['approved', 'completed', 'success', 'accepted'].includes(syncStatus)
+            || ['approved', 'completed', 'success', 'accepted'].includes(syncDecision);
+          const isDeclined = ['declined', 'rejected', 'failed', 'denied'].includes(syncStatus)
+            || ['declined', 'rejected', 'failed', 'denied'].includes(syncDecision);
+          const isInReview = ['in review', 'in_review', 'needs review', 'needs_review', 'review', 'in progress', 'in_progress', 'pending'].includes(syncStatus);
+
+          console.log(`[sync-status] isApproved=${isApproved} isDeclined=${isDeclined} isInReview=${isInReview}`);
 
           // Always update session status in DB to reflect actual Didit state
           await supabaseAdmin.from('verification_sessions')
