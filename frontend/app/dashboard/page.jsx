@@ -31,6 +31,7 @@ import { ethers } from "ethers";
 import BusinessCampaignJSON from "@/abis/BusinessCampaign.json";
 import CampaignReviewInfo from "@/components/campaign-review-info";
 import DashboardOverviewTab from "@/components/Owner/DashboardOverviewTab";
+import OwnerCampaignAnalytics from "@/components/owner-campaign-analytics";
 
 const ITEMS_PER_PAGE = 6; // shafqaat — campaigns per page in My Campaigns tab
 
@@ -142,6 +143,14 @@ export default function DashboardPage() {
     loadAll();
   }, []);
 
+  useEffect(() => {
+    const requestedTab = new URLSearchParams(window.location.search).get("tab");
+    const validTabs = ["overview", "campaign-overview", "campaigns", "profile", "financial-documents"];
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (requestedTab === "analytics") setActiveTab("overview");
+    else if (validTabs.includes(requestedTab)) setActiveTab(requestedTab);
+  }, []);
+
   // shafqaat — Compute real stats from the fetched campaigns
   const stats = {
     totalReceived: campaigns.reduce(
@@ -174,8 +183,8 @@ export default function DashboardPage() {
 
   const tabs = [
     { id: "overview", label: "Overview", icon: BarChart3 },
+    { id: "campaign-overview", label: "Campaign Overview", icon: TrendingUp },
     { id: "campaigns", label: "My Campaigns", icon: Target },
-    { id: "analytics", label: "Analytics", icon: TrendingUp },
     { id: "profile", label: "Profile", icon: UserCircle },
     { id: "financial-documents", label: "Financial Documents", icon: FileText },
   ];
@@ -240,57 +249,6 @@ export default function DashboardPage() {
 
         </div>
 
-      {/* shafqaat — Stats cards: real data computed from Supabase */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {[
-          {
-            label: "Total Received (ETH)",
-            value: loading ? "…" : `${stats.totalReceived.toFixed(3)} ETH`,
-            icon: DollarSign,
-            color: "#6f42c1",
-          },
-          {
-            label: "My Campaigns",
-            value: loading ? "…" : stats.totalCampaigns,
-            icon: Target,
-            color: "#037dd6",
-          },
-          {
-            label: "Active Campaigns",
-            value: loading ? "…" : stats.activeCampaigns,
-            icon: TrendingUp,
-            color: "#28a745",
-          },
-          {
-            label: "Profile Complete",
-            value: loading ? "…" : `${stats.profileCompletion}%`,
-            icon: UserCircle,
-            color: "#f6851b",
-          },
-        ].map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <div
-              key={stat.label}
-              className="bg-[#1a2030] rounded-2xl p-5 border border-white/5"
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className="p-2.5 rounded-xl"
-                  style={{ backgroundColor: stat.color + "22" }}
-                >
-                  <Icon className="h-5 w-5" style={{ color: stat.color }} />
-                </div>
-                <div>
-                  <p className="text-2xl font-black text-white">{stat.value}</p>
-                  <p className="text-xs text-gray-400">{stat.label}</p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
       {/* shafqaat — Tabs + Content */}
       <div className="bg-[#1a2030] rounded-3xl border border-white/5 overflow-hidden">
         {/* Tab Nav */}
@@ -301,7 +259,13 @@ export default function DashboardPage() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    const url = new URL(window.location.href);
+                    if (tab.id === "overview") url.searchParams.delete("tab");
+                    else url.searchParams.set("tab", tab.id);
+                    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+                  }}
                   className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold rounded-t-xl border-b-2 transition duration-200 whitespace-nowrap ${
                     activeTab === tab.id
                       ? "border-[#6f42c1] text-[#a78bfa] bg-[#6f42c1]/10"
@@ -328,8 +292,12 @@ export default function DashboardPage() {
         <div className="p-8">
           {/* ── Overview Tab ─────────────────────────────────── */}
           {activeTab === "overview" && (
-              <DashboardOverviewTab campaigns={campaigns} loading={loading} />
-            )}
+            <OwnerCampaignAnalytics campaigns={campaigns} loading={loading} />
+          )}
+
+          {activeTab === "campaign-overview" && (
+            <DashboardOverviewTab campaigns={campaigns} loading={loading} />
+          )}
 
           {activeTab === "financial-documents" && (
             <section aria-labelledby="financial-documents-title" className="mx-auto max-w-4xl">
@@ -571,91 +539,6 @@ export default function DashboardPage() {
             </div>
           )}
 
-            {/* ── Analytics Tab ──────────────────────────────── */}
-            {activeTab === "analytics" && (
-              <div>
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
-                  <div>
-                    <h2 className="text-xl font-bold text-white">Analytics</h2>
-                    <p className="text-sm text-gray-400 mt-1">
-                      Campaign performance for your own projects only.
-                    </p>
-                  </div>
-                  <Link
-                    href="/dashboard/analytics"
-                    className="inline-flex items-center justify-center bg-[#6f42c1] hover:bg-[#5a3599] text-white text-sm font-semibold px-5 py-2.5 rounded-full transition"
-                  >
-                    Open full analytics
-                  </Link>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-[#0d1117] rounded-2xl p-6 border border-white/5">
-                    <h3 className="text-sm font-bold text-white mb-4">
-                      Campaign Summary
-                    </h3>
-                    <div className="space-y-3">
-                      {[
-                        { label: "Total Campaigns", value: campaigns.length },
-                        { label: "Active Now", value: stats.activeCampaigns },
-                        { label: "Ended", value: campaigns.length - stats.activeCampaigns },
-                        { label: "Total Received (ETH)", value: stats.totalReceived.toFixed(4) },
-                      ].map((item) => (
-                        <div key={item.label} className="flex items-center justify-between">
-                          <span className="text-sm text-gray-400">{item.label}</span>
-                          <span className="text-sm font-bold text-[#a78bfa]">{item.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="bg-[#0d1117] rounded-2xl p-6 border border-white/5">
-                    <h3 className="text-sm font-bold text-white mb-4">
-                      Largest Campaigns
-                    </h3>
-                    {campaigns.length === 0 ? (
-                      <p className="text-gray-500 text-sm text-center py-4">
-                        No campaigns yet
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        {[...campaigns]
-                          .sort((a, b) => parseFloat(b.funding_goal ?? "0") - parseFloat(a.funding_goal ?? "0"))
-                          .slice(0, 5)
-                          .map((c) => (
-                            <div key={c.id} className="flex items-center justify-between gap-3">
-                              <span className="text-sm text-gray-300 truncate">
-                                {c.title}
-                              </span>
-                              <span className="text-sm text-[#a78bfa] font-semibold whitespace-nowrap">
-                                {parseFloat(c.funding_goal ?? "0").toFixed(3)} ETH
-                              </span>
-                            </div>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-6 bg-[#0d1117] rounded-2xl p-6 border border-white/5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-white">
-                      Need deeper campaign performance insights?
-                    </p>
-                    <p className="text-sm text-gray-400 mt-1">
-                      View the owner analytics page for status breakdowns, growth trends, and category performance.
-                    </p>
-                  </div>
-                  <Link
-                    href="/dashboard/analytics"
-                    className="inline-flex items-center justify-center bg-white/5 hover:bg-white/10 text-white text-sm font-semibold px-5 py-2.5 rounded-full transition"
-                  >
-                    View owner analytics
-                  </Link>
-                </div>
-              </div>
-            )}
-
           {/* ── Profile Tab ────────────────────────────────── */}
           {activeTab === "profile" && (
             <div>
@@ -762,7 +645,7 @@ export default function DashboardPage() {
                 <div className="text-center py-12">
                   <UserCircle className="h-12 w-12 text-[#6f42c1]/30 mx-auto mb-3" />
                   <p className="text-gray-400 text-sm mb-4">
-                    You haven't set up your creator profile yet.
+                    You haven&apos;t set up your creator profile yet.
                   </p>
                   <Link
                     href="/profile"
