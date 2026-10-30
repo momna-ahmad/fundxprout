@@ -19,6 +19,8 @@ import {
   CheckCircle,
   AlertCircle,
   Edit2,
+  FileText,
+  Upload,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
@@ -153,6 +155,10 @@ export default function DashboardPage() {
     profileCompletion: calcProfileCompletion(profile),
   };
 
+  const financialUploadCampaigns = campaigns.filter(
+    (campaign) => campaign.status?.toLowerCase() === "successful",
+  );
+
   // shafqaat — Filtered + paginated campaigns for My Campaigns tab
   const filtered = campaigns.filter(
     (c) =>
@@ -171,6 +177,7 @@ export default function DashboardPage() {
     { id: "campaigns", label: "My Campaigns", icon: Target },
     { id: "analytics", label: "Analytics", icon: TrendingUp },
     { id: "profile", label: "Profile", icon: UserCircle },
+    { id: "financial-documents", label: "Financial Documents", icon: FileText },
   ];
 
   const displayName =
@@ -206,7 +213,7 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-        <div className="mb-6 grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-4 items-stretch">
+        <div className="mb-6">
 
           {/* shafqaat — Profile completion banner (only if incomplete) */}
           {!loading && stats.profileCompletion < 100 && (
@@ -230,6 +237,7 @@ export default function DashboardPage() {
               </Link>
             </div>
           )}
+
         </div>
 
       {/* shafqaat — Stats cards: real data computed from Supabase */}
@@ -306,6 +314,11 @@ export default function DashboardPage() {
                   {tab.id === "profile" && stats.profileCompletion < 100 && (
                     <span className="ml-1 w-2 h-2 rounded-full bg-[#f6851b] inline-block" />
                   )}
+                  {tab.id === "financial-documents" && financialUploadCampaigns.length > 0 && (
+                    <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 text-[10px] font-bold text-[#181A2A]">
+                      {financialUploadCampaigns.length}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -317,6 +330,58 @@ export default function DashboardPage() {
           {activeTab === "overview" && (
               <DashboardOverviewTab campaigns={campaigns} loading={loading} />
             )}
+
+          {activeTab === "financial-documents" && (
+            <section aria-labelledby="financial-documents-title" className="mx-auto max-w-4xl">
+              <div className="mb-6 flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-400/10 text-amber-300">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 id="financial-documents-title" className="text-xl font-bold text-white">Financial Documents</h2>
+                    {!loading && financialUploadCampaigns.length > 0 && (
+                      <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-xs font-semibold text-amber-200">
+                        {financialUploadCampaigns.length} {financialUploadCampaigns.length === 1 ? "upload needed" : "uploads needed"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-gray-400">Upload and manage financial documents for your successful campaigns.</p>
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="rounded-2xl border border-white/10 bg-[#0d1117] p-6 text-sm text-gray-400">Loading campaigns…</div>
+              ) : financialUploadCampaigns.length === 0 ? (
+                <div className="rounded-2xl border border-white/10 bg-[#0d1117] px-6 py-12 text-center">
+                  <FileText className="mx-auto mb-3 h-8 w-8 text-gray-500" />
+                  <p className="font-semibold text-white">No financial uploads needed</p>
+                  <p className="mt-1 text-sm text-gray-400">Successful campaigns that need financial documents will appear here.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {financialUploadCampaigns.map((campaign) => (
+                    <div key={campaign.id} className="flex flex-col gap-4 rounded-2xl border border-amber-300/20 bg-[#0d1117] p-5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <span className="mt-1 h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-amber-300" />
+                        <div className="min-w-0">
+                          <p className="break-words font-semibold text-white">{campaign.title || "Untitled campaign"}</p>
+                          <p className="mt-1 text-sm text-amber-100/70">Financial documents are needed for this successful campaign.</p>
+                        </div>
+                      </div>
+                      <Link
+                        href={`/dashboard/financials?campaignId=${encodeURIComponent(String(campaign.id))}`}
+                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#6f42c1] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#5a3599] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0d1117]"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Upload documents
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           {/* ── My Campaigns Tab (with search + pagination) ── */}
           {activeTab === "campaigns" && (
