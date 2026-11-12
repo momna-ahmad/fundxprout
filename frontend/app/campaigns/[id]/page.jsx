@@ -23,6 +23,7 @@ import {
 import RiskAssessmentPanel from "@/components/RiskAssessmentPanel";
 import CampaignReview from "@/components/admin/campaign-review";
 import { logTransaction } from "@/utils/investmentUtils";
+import Navbar from "@/components/navbar";
 
 function calcDaysLeft(deadlineTimestamp) {
   if (!deadlineTimestamp) return 0;
@@ -435,8 +436,9 @@ export default function CampaignDetailPage() {
     ].filter((d) => d.url); // shafqaat — only show docs that were uploaded
 
     return (
-        <div className="min-h-screen bg-[#181A2A] py-8 pt-24">
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="min-h-screen bg-[#181A2A]">
+            <Navbar />
+            <div className="w-full px-4 py-6 sm:px-6 lg:px-10 xl:px-14">
 
                 {/* shafqaat — Back button */}
                 <Link
@@ -447,25 +449,27 @@ export default function CampaignDetailPage() {
                     All Campaigns
                 </Link>
 
-                {/* shafqaat — Campaign cover image */}
-                {campaign.image_url && (
-                    <div className="relative w-full aspect-video rounded-2xl overflow-hidden mb-8">
-                        <Image
-                            src={campaign.image_url}
-                            alt={campaign.title}
-                            fill
-                            className="object-cover"
-                            unoptimized
-                        />
-                    </div>
-                )}
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(360px,1fr)] lg:gap-8">
 
                     {/* shafqaat — Left column: title + description */}
-                    <div className="lg:col-span-2 space-y-6">
+                    <div className="min-w-0 space-y-6">
+                        <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-white/5 bg-[#1a2030]">
+                            {campaign.image_url ? (
+                                <Image
+                                    src={campaign.image_url}
+                                    alt={campaign.title}
+                                    fill
+                                    className="object-cover"
+                                    unoptimized
+                                />
+                            ) : (
+                                <div className="flex h-full items-center justify-center px-6 text-center text-sm text-gray-500">
+                                    Campaign image unavailable
+                                </div>
+                            )}
+                        </div>
 
-                        <div>
+                        <section className="rounded-2xl border border-white/5 bg-[#1a2030] p-5 sm:p-7">
                             <span className="text-xs font-semibold text-[#a78bfa] uppercase tracking-widest">
                                 {campaign.category}
                             </span>
@@ -474,14 +478,14 @@ export default function CampaignDetailPage() {
                             </h1>
                             {/* Story / pitch — collapsed by default */}
                             {campaign.description && (
-                                <section className={"p-6 sm:p-8"}>
+                                <div className="mt-6 border-t border-white/10 pt-5">
                                     <h2 className="mb-4 text-lg font-bold tracking-tight text-white">
-                                        About this campaign
+                                        Campaign pitch
                                     </h2>
                                     <ExpandableText text={campaign.description} lines={6} />
-                                </section>
+                                </div>
                             )}
-                        </div>
+                        </section>
 
                         {/* shafqaat — IPFS Documents section for investor due diligence */}
                         {documents.length > 0 && (
@@ -520,9 +524,6 @@ export default function CampaignDetailPage() {
                             <CampaignReview campaign={campaign} />
                         )}
 
-                        {/* AI Risk Assessment Panel */}
-                        <RiskAssessmentPanel campaign={campaign} />
-
                         {/* shafqaat — Blockchain transaction verification link */}
                         {campaign.transaction_hash && (
                             <div className="bg-[#1a2030] rounded-2xl border border-white/5 p-5">
@@ -544,7 +545,8 @@ export default function CampaignDetailPage() {
                     </div>
 
                     {/* shafqaat — Right column: invest box */}
-                    <div className="space-y-4">
+                    <div className="min-w-0 space-y-6">
+                        <RiskAssessmentPanel campaign={campaign} />
                         <div className="bg-[#1a2030] rounded-2xl border border-white/5 p-6 sticky top-24">
 
                             <div className="space-y-4 mb-6">

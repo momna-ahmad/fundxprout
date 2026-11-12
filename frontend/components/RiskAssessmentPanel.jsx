@@ -76,7 +76,7 @@ export default function RiskAssessmentPanel({ campaign: initialCampaign }) {
 
   if (!campaign || campaign.risk_score === null || campaign.risk_score === undefined) {
     return (
-      <div className="bg-[#1a2030] rounded-2xl border border-white/5 p-6 mt-6">
+      <div className="bg-[#1a2030] rounded-2xl border border-white/5 p-6">
         <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
           <Activity className="w-5 h-5 text-[#a78bfa]" />
           AI Risk Assessment
@@ -176,7 +176,7 @@ export default function RiskAssessmentPanel({ campaign: initialCampaign }) {
   };
 
   return (
-    <div className="bg-[#1a2030] rounded-2xl border border-white/5 overflow-hidden mt-6">
+    <div className="bg-[#1a2030] rounded-2xl border border-white/5 overflow-hidden">
       {/* Header */}
       <div className="border-b border-white/5 p-4 flex justify-between items-center bg-[#151a28]">
         <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -191,10 +191,13 @@ export default function RiskAssessmentPanel({ campaign: initialCampaign }) {
         </div>
       </div>
 
-      <div className="p-6 md:p-8 flex flex-col md:flex-row gap-8 items-center md:items-start">
+      <div
+        className="grid min-w-0 items-start gap-6 p-4 sm:p-5"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))" }}
+      >
         
         {/* Left Column: Gauge & High Level Summary */}
-        <div className="flex flex-col items-center flex-shrink-0">
+        <div className="flex min-w-0 flex-col items-center">
           <CircularGauge score={score} />
           
           <div className={`flex items-center gap-2 mt-4 px-3 py-1.5 rounded-full border bg-[#121622] shadow-inner ${tierColor} border-current/20`}>
@@ -215,7 +218,7 @@ export default function RiskAssessmentPanel({ campaign: initialCampaign }) {
         </div>
 
         {/* Right Column: Narrative and Metrics */}
-        <div className="flex-1 w-full">
+        <div className="min-w-0 w-full">
           {/* AI Narrative */}
           <div className="bg-[#121622] rounded-xl p-4 mb-6 border border-white/5">
             <h3 className="text-xs font-bold uppercase tracking-widest text-[#a78bfa] mb-2 flex items-center gap-1.5">
@@ -228,7 +231,10 @@ export default function RiskAssessmentPanel({ campaign: initialCampaign }) {
           </div>
 
           {/* Sub-score Bars */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+          <div
+            className="grid min-w-0 gap-3"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))" }}
+          >
             {metrics.map((metric) => {
               const val = parseFloat(campaign[metric.key]) || 5.0; // fallback to 5.0
               // Calculate bar color dynamically. 
@@ -245,10 +251,11 @@ export default function RiskAssessmentPanel({ campaign: initialCampaign }) {
                 <div 
                   key={metric.key} 
                   onClick={() => setExpandedMetric(isExpanded ? null : metric.key)}
-                  className={`p-3.5 rounded-xl border transition-all duration-300 cursor-pointer ${
+                  style={{ gridColumn: isExpanded ? "1 / -1" : undefined }}
+                  className={`min-w-0 p-3.5 rounded-xl border transition-all duration-300 cursor-pointer ${
                     isExpanded 
-                      ? "col-span-1 sm:col-span-2 bg-[#1f2638] border-white/20 shadow-xl ring-1 ring-[#6f42c1]/30" 
-                      : "col-span-1 bg-[#131926]/40 border-transparent hover:bg-[#1a2030]/50 hover:border-white/5"
+                      ? "bg-[#1f2638] border-white/20 shadow-xl ring-1 ring-[#6f42c1]/30" 
+                      : "bg-[#131926]/40 border-transparent hover:bg-[#1a2030]/50 hover:border-white/5"
                   }`}
                 >
                   <div className="flex justify-between items-center text-xs font-medium text-gray-400 mb-1.5">

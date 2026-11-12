@@ -95,8 +95,7 @@ function buildMonthlyData(campaigns) {
   });
 
   return [...monthlyMap.values()]
-    .sort((a, b) => a.sortKey - b.sortKey)
-    .map(({ sortKey, ...entry }) => entry);
+    .sort((a, b) => a.sortKey - b.sortKey);
 }
 
 function buildCategoryData(campaigns) {
