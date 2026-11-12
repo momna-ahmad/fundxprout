@@ -210,12 +210,28 @@ export default function ProfilePage() {
       // 1. Listen for cross-tab verification completion events from child tab
       const handleStorageChange = async (e) => {
         if (e.key === "didit_verified_event") {
+          setVerifying('sync');
+          setVerificationSuccessMsg("Verification completed in popup tab! Syncing profile status...");
+          try {
+            await fetch('/api/didit/sync-status', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: user.id }),
+            });
+          } catch (syncErr) {
+            console.error('[cross-tab sync error]:', syncErr);
+          }
           const updated = await getMyProfile();
           if (updated) {
             setProfile(updated);
-            setVerifying(false);
-            setVerificationSuccessMsg("Verification completed in popup tab! Profile updated automatically.");
+            setForm((prev) => ({
+              ...prev,
+              full_name: updated.full_name || prev.full_name,
+              country: updated.country || prev.country,
+            }));
+            setVerificationSuccessMsg("Verification completed! Profile updated automatically.");
           }
+          setVerifying(null);
         }
       };
       window.addEventListener("storage", handleStorageChange);
@@ -243,10 +259,15 @@ export default function ProfilePage() {
             const syncData = await syncRes.json();
             if (syncData.updated) {
               setVerificationSuccessMsg('Identity verified successfully! Your profile has been updated.');
+            } else if (syncData.kycStatus === 'In Review' || syncData.kybStatus === 'In Review') {
+              setVerificationSuccessMsg('Verification submission received! Your status is currently in review.');
+            } else if (syncData.kycStatus === 'Declined' || syncData.kybStatus === 'Declined') {
+              setVerificationSuccessMsg('Verification was declined by Didit. Please verify your documents and try again.');
             } else {
-              // Not approved yet — may be In Review or Declined. Let the user see real status.
               setVerificationSuccessMsg(
-                'Verification submission received! Your status will update when our review is complete. Check your notifications for updates.'
+                syncData.message
+                  ? `Didit status: ${syncData.message}`
+                  : `Verification status: ${syncData.kycStatus || 'Pending'}. Complete the verification in Didit and click "Refresh Didit Status".`
               );
             }
           } catch (e) {
@@ -265,7 +286,7 @@ export default function ProfilePage() {
             }, 1500);
           }
 
-          pollUntilVerified(kybParam === 'complete' ? 'kyb' : 'kyc');
+          pollUntilVerified(kybParam === 'complete' ? 'kyb' : 'kyc', 0, user.id);
           window.history.replaceState({}, document.title, window.location.pathname);
         }
       }
@@ -329,13 +350,15 @@ export default function ProfilePage() {
     setSaving(false);
   };
 
-  const pollUntilVerified = async (type, attempts = 0) => {
+  // shafqaat — uid param allows passing user.id directly (avoids stale React state closure on first load)
+  const pollUntilVerified = async (type, attempts = 0, uid = null) => {
+    const effectiveUid = uid || userId;
     try {
-      if (userId) {
+      if (effectiveUid) {
         await fetch('/api/didit/sync-status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId }),
+          body: JSON.stringify({ userId: effectiveUid }),
         });
       }
     } catch (e) {
@@ -350,6 +373,11 @@ export default function ProfilePage() {
 
     if (type === 'kyc' && isKycVerified) {
       setProfile(updated);
+      setForm((prev) => ({
+        ...prev,
+        full_name: updated.full_name || prev.full_name,
+        country: updated.country || prev.country,
+      }));
       setVerifying(null);
       setVerificationSuccessMsg("Biometric identity verified successfully via Didit!");
       return;
@@ -360,11 +388,45 @@ export default function ProfilePage() {
       setVerificationSuccessMsg("Business verified successfully via Didit!");
       return;
     }
-    if (attempts < 15) {
-      setTimeout(() => pollUntilVerified(type, attempts + 1), 2000);
+    if (attempts < 45) {
+      // Pass effectiveUid through recursive calls so it stays non-null
+      setTimeout(() => pollUntilVerified(type, attempts + 1, effectiveUid), 2000);
     } else {
       setVerifying(null);
       setProfile(updated);
+    }
+  };
+
+  const handleManualSync = async () => {
+    if (!userId) return;
+    setVerifying('sync');
+    setVerificationSuccessMsg("Syncing verification status with Didit...");
+    try {
+      const res = await fetch('/api/didit/sync-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await res.json();
+      const updated = await getMyProfile();
+      if (updated) {
+        setProfile(updated);
+        setForm((prev) => ({
+          ...prev,
+          full_name: updated.full_name || prev.full_name,
+          country: updated.country || prev.country,
+        }));
+      }
+      if (data.updated) {
+        setVerificationSuccessMsg("Verification status synced and approved!");
+      } else {
+        setVerificationSuccessMsg(`Status checked: KYC ${data.kycStatus || 'Not Started'}, KYB ${data.kybStatus || 'Not Started'}.`);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Failed to sync verification status from Didit.");
+    } finally {
+      setVerifying(null);
     }
   };
 
@@ -384,21 +446,33 @@ export default function ProfilePage() {
       setVerificationSuccessMsg(`Starting ${type.toUpperCase()} verification session...`);
       // Connect via internal Next.js API route with external backend fallback
       let res;
+      const origin = typeof window !== "undefined" ? window.location.origin : undefined;
+      const reqBody = JSON.stringify({ userId, origin });
       try {
         res = await fetch(`/api/didit/${type}/create-session`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId }),
+          body: reqBody,
         });
+        if (!res.ok) throw new Error(`Internal route returned status ${res.status}`);
       } catch (err) {
+        console.warn("[startDiditVerification] Internal route failed, trying backend fallback:", err.message);
         const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
         res = await fetch(`${apiBase}/api/didit/${type}/create-session`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId }),
+          body: reqBody,
         });
       }
-      const data = await res.json();
+
+      let data;
+      const contentType = res?.headers?.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(text.slice(0, 150) || `Server returned ${res?.status || "error"}`);
+      }
 
       if (!res.ok || !data.url) {
         throw new Error(data.error || "Failed to create verification session");
@@ -406,7 +480,7 @@ export default function ProfilePage() {
 
       window.open(data.url, "_blank");
       setVerificationSuccessMsg(`Didit ${type.toUpperCase()} verification opened in a new tab! Complete verification on your phone or tab, and your status will automatically update here...`);
-      pollUntilVerified(type);
+      pollUntilVerified(type, 0, userId);
     } catch (err) {
       console.error(err);
       setVerifying(null);
@@ -532,12 +606,20 @@ export default function ProfilePage() {
               </div>
             ) : (
               <div className="space-y-2">
-                <button onClick={(e) => { e.preventDefault(); startDiditVerification('kyc'); }} 
-                  disabled={verifying === 'kyc'}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-[#6f42c1] hover:bg-[#5a3599] disabled:opacity-50 text-white rounded-xl text-sm font-bold transition shadow-lg shadow-[#6f42c1]/20">
-                  {verifying === 'kyc' ? <Loader2 className="h-5 w-5 animate-spin" /> : <ShieldCheck className="h-5 w-5" />}
-                  {verifying === 'kyc' ? "Verifying..." : "Verify Identity with Didit"}
-                </button>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button onClick={(e) => { e.preventDefault(); startDiditVerification('kyc'); }}
+                    disabled={!!verifying}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-[#6f42c1] hover:bg-[#5a3599] disabled:opacity-50 text-white rounded-xl text-sm font-bold transition shadow-lg shadow-[#6f42c1]/20">
+                    {verifying === 'kyc' ? <Loader2 className="h-5 w-5 animate-spin" /> : <ShieldCheck className="h-5 w-5" />}
+                    {verifying === 'kyc' ? "Verifying..." : "Verify Identity with Didit"}
+                  </button>
+                  <button onClick={(e) => { e.preventDefault(); handleManualSync(); }}
+                    disabled={!!verifying}
+                    className="inline-flex items-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 rounded-xl text-sm font-medium transition">
+                    {verifying === 'sync' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Refresh Didit Status
+                  </button>
+                </div>
                 <p className="text-xs text-gray-400">
                   Secured by Didit. Scans government-issued ID and performs live liveness check automatically.
                 </p>
@@ -570,12 +652,18 @@ export default function ProfilePage() {
                   <CheckCircle className="h-5 w-5" /> Business Verified (Didit) ✓
                 </div>
               ) : (
-                <div>
-                  <button onClick={(e) => { e.preventDefault(); startDiditVerification('kyb'); }} 
-                    disabled={verifying === 'kyb'}
+                <div className="flex flex-wrap items-center gap-3">
+                  <button onClick={(e) => { e.preventDefault(); startDiditVerification('kyb'); }}
+                    disabled={!!verifying}
                     className="inline-flex items-center gap-2 px-5 py-3 bg-[#6f42c1] hover:bg-[#5a3599] disabled:opacity-50 text-white rounded-xl text-sm font-bold transition shadow-lg shadow-[#6f42c1]/20">
                     {verifying === 'kyb' ? <Loader2 className="h-5 w-5 animate-spin" /> : <Building2 className="h-5 w-5" />}
                     {verifying === 'kyb' ? "Verifying..." : "Verify Business with Didit"}
+                  </button>
+                  <button onClick={(e) => { e.preventDefault(); handleManualSync(); }}
+                    disabled={!!verifying}
+                    className="inline-flex items-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 rounded-xl text-sm font-medium transition">
+                    {verifying === 'sync' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Refresh Didit Status
                   </button>
                 </div>
               )}
@@ -590,7 +678,7 @@ export default function ProfilePage() {
               <DocUpload fieldKey="bank_statement_cid" label="Bank Statement (3 months)" required
                 hint="Shows financial activity — required by AML standards" accept=".pdf"
                 currentUrl={profile?.bank_statement_url} onUploaded={handleDocUploaded} />
-              
+
               {/* Business Logo Upload via Cloudinary */}
               <ImageUpload
                 label="Business Logo"
