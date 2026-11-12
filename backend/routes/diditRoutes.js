@@ -589,7 +589,6 @@ router.post('/sync-status', async (req, res) => {
 
           if (isApproved) {
             const bizUpdates = { kyb_verified: true };
-            if (enrichment?.company_name) bizUpdates.business_name = enrichment.company_name;
             if (enrichment?.registration_number) bizUpdates.registration_number = enrichment.registration_number;
 
             if (businessIds.length > 0) {
@@ -597,7 +596,7 @@ router.post('/sync-status', async (req, res) => {
             } else {
               await supabaseAdmin.from('businesses').insert({
                 owner_id: userId,
-                business_name: enrichment?.company_name || 'My Business',
+                business_name: 'My Business',
                 registration_number: enrichment?.registration_number || null,
                 kyb_verified: true,
               });

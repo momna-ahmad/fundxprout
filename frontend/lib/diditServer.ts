@@ -362,16 +362,9 @@ export async function syncDiditStatus(userId: string) {
         const enrichment = await fetchAndStoreDiditDecision(kycSession.didit_session_id);
 
         if (isApproved) {
-          const profileUpdates: Record<string, any> = { identity_verified: true };
-          if (enrichment?.first_name || enrichment?.last_name) {
-            const fullName = [enrichment.first_name, enrichment.last_name].filter(Boolean).join(' ').trim();
-            if (fullName) profileUpdates.full_name = fullName;
-          }
-          if (enrichment?.nationality || enrichment?.device_country) {
-            profileUpdates.country = enrichment.nationality || enrichment.device_country;
-          }
-
-          await supabaseAdmin.from('profiles').update(profileUpdates).eq('user_id', userId);
+          // Keep user's manually entered name & country in profiles.
+          // Vendor-extracted document data (e.g. sandbox simulated data) is preserved in verification_sessions.
+          await supabaseAdmin.from('profiles').update({ identity_verified: true }).eq('user_id', userId);
           await notifyUser(
             'Identity Verified ✓',
             'Your KYC identity verification has been approved by Didit! You can now invest and trade on FundXprout.'
@@ -428,8 +421,9 @@ export async function syncDiditStatus(userId: string) {
         const enrichment = await fetchAndStoreDiditDecision(kybSession.didit_session_id);
 
         if (isApproved) {
+          // Keep user's manually entered business name in businesses table.
+          // Extracted company data is safely stored in verification_sessions.
           const bizUpdates: Record<string, any> = { kyb_verified: true };
-          if (enrichment?.company_name) bizUpdates.business_name = enrichment.company_name;
           if (enrichment?.registration_number) bizUpdates.registration_number = enrichment.registration_number;
 
           if (businessIds.length > 0) {
@@ -438,7 +432,7 @@ export async function syncDiditStatus(userId: string) {
             // If user did not have a business record created yet, create it now
             await supabaseAdmin.from('businesses').insert({
               owner_id: userId,
-              business_name: enrichment?.company_name || 'My Business',
+              business_name: 'My Business',
               registration_number: enrichment?.registration_number || null,
               kyb_verified: true,
             });
