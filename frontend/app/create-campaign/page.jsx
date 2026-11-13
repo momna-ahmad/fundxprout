@@ -69,7 +69,7 @@ const CAMPAIGN_DOCS = [
     key: "financials_cid",
     label: "Financial Projections (3–5 Years) *",
     hint: "Revenue model, cost structure, and ROI projections (required)",
-    accept: ".pdf",
+    accept: ".pdf,.xlsx",
     required: true,
   },
   {
