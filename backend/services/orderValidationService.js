@@ -77,12 +77,14 @@ async function validateInvestor(investorId) {
     .from('verification_sessions')
     .select('status, created_at')
     .eq('entity_id', investorId)
-    .eq('entity_type', 'profile')
+    .eq('entity_type', 'user')  // DB CHECK constraint only allows 'user' | 'business'
     .order('created_at', { ascending: false })
     .limit(1);
 
   const latestSession = sessions?.[0];
-  if (latestSession && ['pending', 'rejected'].includes(latestSession.status)) {
+  // Didit returns title-case statuses ('Pending', 'Rejected') — compare case-insensitively
+  const sessionStatusLower = (latestSession?.status || '').toLowerCase();
+  if (latestSession && ['pending', 'rejected', 'declined'].includes(sessionStatusLower)) {
     throw new ValidationError('VERIFICATION_PENDING', `Latest verification session is ${latestSession.status}`);
   }
 

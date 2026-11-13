@@ -48,7 +48,24 @@ export async function getMyProfile() {
         return null;
     }
 
-    return data;
+    // Fetch related verification sessions (KYC & KYB) for this user/business
+    const candidateIds: string[] = [user.id];
+    if (Array.isArray(data?.businesses)) {
+        data.businesses.forEach((b: any) => { if (b?.id) candidateIds.push(b.id); });
+    } else if (data?.businesses?.id) {
+        candidateIds.push(data.businesses.id);
+    }
+
+    const { data: sessions } = await supabase
+        .from("verification_sessions")
+        .select("*")
+        .in("entity_id", candidateIds)
+        .order("created_at", { ascending: false });
+
+    return {
+        ...data,
+        verification_sessions: sessions || [],
+    };
 }
 
 // ── Update investor profile in Supabase ─────────────────────────────

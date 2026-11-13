@@ -365,6 +365,12 @@ export async function saveCampaignToDb(formData: any) {
   }
 
   console.log("[saveCampaignToDb] Saved campaign id:", data?.id);
+  if (data?.id) {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    fetch(`${apiBase}/api/campaigns/${data.id}/analyze`, { method: "POST" }).catch((e) =>
+      console.warn("[saveCampaignToDb] Auto-analyze trigger error:", e.message)
+    );
+  }
   return { success: true, campaignId: data?.id };
 }
 
@@ -452,6 +458,12 @@ export async function saveDraftCampaign(draftData: any) {
   }
 
   console.log("[saveDraftCampaign] Saved draft campaign id:", data?.id);
+  if (data?.id) {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    fetch(`${apiBase}/api/campaigns/${data.id}/analyze`, { method: "POST" }).catch((e) =>
+      console.warn("[saveDraftCampaign] Auto-analyze trigger error:", e.message)
+    );
+  }
   return { success: true, campaignId: data?.id };
 }
 
@@ -475,6 +487,13 @@ export async function submitCampaignForReview(campaignId: string) {
 
   if (error) return { error: error.message };
   if (!data) return { error: "Only an owned draft campaign can be submitted for review." };
+
+  if (campaignId) {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    fetch(`${apiBase}/api/campaigns/${campaignId}/analyze`, { method: "POST" }).catch((e) =>
+      console.warn("[submitCampaignForReview] Auto-analyze trigger error:", e.message)
+    );
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/create-campaign");
