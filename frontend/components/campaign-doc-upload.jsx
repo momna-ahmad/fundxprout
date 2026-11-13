@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, CheckCircle, FileText, AlertCircle } from "lucide-react";
+import { validateDocumentBeforeUpload } from "@/utils/documentGatekeeper";
 
 export default function CampaignDocUpload({
   docKey,
@@ -30,9 +31,15 @@ export default function CampaignDocUpload({
     setCid("");
 
     try {
+      const validation = await validateDocumentBeforeUpload(file, docKey);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
+
       const uploadData = new FormData();
       uploadData.append("file", file);
       uploadData.append("name", `${docKey}-${file.name}`);
+      uploadData.append("docKey", docKey);
 
       const response = await fetch("/api/ipfs-upload", {
         method: "POST",
