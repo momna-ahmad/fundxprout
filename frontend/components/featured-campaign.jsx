@@ -169,8 +169,8 @@ export default function FeaturedCampaign() {
 	if (recommended.length === 0 && featured.length === 0) return null;
 
 	return (
-		<section className="bg-[#181A2A] py-8 px-4">
-			<div className="max-w-7xl mx-auto">
+		<section className="bg-[#181A2A] py-8 px-4 sm:px-6 lg:px-8">
+			<div className="w-full">
 				<p className="text-xs font-semibold tracking-widest text-gray-400 uppercase mb-4">
 					Featured Campaign
 				</p>

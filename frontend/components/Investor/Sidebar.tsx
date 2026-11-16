@@ -37,8 +37,10 @@ export default function Sidebar() {
   const router   = useRouter();
   const { walletAddress, network, connectWallet, isConnecting } = useWallet();
   const [profile, setProfile] = useState<any>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     getMyProfile().then((p) => {
       if (p) setProfile(p);
     });
@@ -123,7 +125,19 @@ export default function Sidebar() {
       <div className="px-2.5 pb-4 pt-3 border-t border-sidebar-border flex flex-col gap-2">
 
         {/* Wallet status */}
-        {walletAddress ? (
+        {!mounted ? (
+          <div
+            className="flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-[10px] text-[12px] font-semibold border"
+            style={{
+              background:  'color-mix(in srgb, var(--chart-5) 10%, transparent)',
+              borderColor: 'color-mix(in srgb, var(--chart-5) 28%, transparent)',
+              color:       'var(--chart-5)',
+            }}
+          >
+            <Wallet size={13} />
+            Connect Wallet
+          </div>
+        ) : walletAddress ? (
           <div
             className="flex items-center gap-2 px-3 py-2 rounded-[10px] text-[12px] font-semibold border"
             style={{
