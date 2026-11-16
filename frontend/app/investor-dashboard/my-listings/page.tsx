@@ -15,6 +15,7 @@ import {
   Handshake, Sparkles, XCircle,
 } from 'lucide-react';
 import CounterOfferModal from '@/components/bidding/CounterOfferModal';
+import SellerProceedsCard from '@/components/Investor/SellerProceedsCard';
 
 type Listing = {
   id: string;
@@ -499,6 +500,9 @@ export default function MyListingsPage() {
           Review bids placed on your sell listings. Click on a listing to expand and see all bids — ranked by highest offer. Accept the best bid to notify the buyer.
         </p>
       </div>
+
+      {/* Sales Proceeds Summary — only shown when seller has completed trades */}
+      <SellerProceedsCard />
 
       {loading ? (
         <div className="flex items-center justify-center rounded-3xl border border-border bg-card p-12">

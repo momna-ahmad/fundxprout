@@ -47,10 +47,26 @@ async function fetchAndStoreDiditDecision(sessionId) {
     try {
       const dRes = await fetch(`https://verification.didit.me/v3/session/${sessionId}/decision/`, {
         headers: { 'x-api-key': process.env.DIDIT_API_KEY },
+        cache: 'no-store',
       });
       if (dRes.ok) d = await dRes.json();
     } catch (e) {
       console.warn('[Didit] Error fetching session decision:', e);
+    }
+
+    if (!d || Object.keys(d).length === 0 || !d.status) {
+      try {
+        const sRes = await fetch(`https://verification.didit.me/v3/session/${sessionId}/`, {
+          headers: { 'x-api-key': process.env.DIDIT_API_KEY },
+          cache: 'no-store',
+        });
+        if (sRes.ok) {
+          const sData = await sRes.json();
+          d = { ...sData, ...d };
+        }
+      } catch (e) {
+        console.warn('[Didit] Error fetching session root:', e);
+      }
     }
 
     if (Object.keys(d).length === 0) {
@@ -153,45 +169,47 @@ async function fetchAndStoreDiditDecision(sessionId) {
     }
 
     const warnings = d.warnings || [];
+    const rawDecisionVal = d.decision_trace?.status || d.decision || (warnings.length > 0 ? (typeof warnings[0] === 'string' ? warnings[0] : warnings[0].message || warnings[0].code) : null);
+    const textDecision = typeof rawDecisionVal === 'string' ? rawDecisionVal : (rawDecisionVal ? JSON.stringify(rawDecisionVal) : null);
 
     const enrichment = {
       didit_decision_payload: d,
       status: d.status || undefined,
-      decision: d.decision_trace || (d.decision ? { status: d.decision } : (warnings.length > 0 ? { warning: typeof warnings[0] === 'string' ? warnings[0] : warnings[0].message || warnings[0].code } : null)),
+      decision: textDecision,
       updated_at: new Date().toISOString(),
 
-      first_name:         kyc.first_name        || kyc.firstName        || d.first_name        || null,
-      last_name:          kyc.last_name         || kyc.lastName         || d.last_name         || null,
-      date_of_birth:      kyc.date_of_birth     || kyc.dateOfBirth      || kyc.dob             || d.date_of_birth     || null,
-      nationality:        kyc.nationality       || kyc.nationality_code || d.nationality       || null,
-      document_type:      kyc.document_type     || kyc.documentType     || d.document_type     || null,
-      document_number:    kyc.document_number   || kyc.documentNumber   || d.document_number   || null,
-      personal_number:    kyc.personal_number   || kyc.personalNumber   || d.personal_number   || null,
-      issuing_state:      kyc.issuing_state     || kyc.issuingState     || kyc.issuing_country || kyc.issuingCountry || d.issuing_state || null,
-      expiration_date:    kyc.expiration_date   || kyc.expirationDate   || kyc.expiry_date     || d.expiration_date   || null,
-      gender:             kyc.gender            || d.gender             || null,
+      first_name: kyc.first_name || kyc.firstName || d.first_name || null,
+      last_name: kyc.last_name || kyc.lastName || d.last_name || null,
+      date_of_birth: kyc.date_of_birth || kyc.dateOfBirth || kyc.dob || d.date_of_birth || null,
+      nationality: kyc.nationality || kyc.nationality_code || d.nationality || null,
+      document_type: kyc.document_type || kyc.documentType || d.document_type || null,
+      document_number: kyc.document_number || kyc.documentNumber || d.document_number || null,
+      personal_number: kyc.personal_number || kyc.personalNumber || d.personal_number || null,
+      issuing_state: kyc.issuing_state || kyc.issuingState || kyc.issuing_country || kyc.issuingCountry || d.issuing_state || null,
+      expiration_date: kyc.expiration_date || kyc.expirationDate || kyc.expiry_date || d.expiration_date || null,
+      gender: kyc.gender || d.gender || null,
 
-      liveness_score:     livenessScore,
-      liveness_status:    liveness.status       || liveness.result     || null,
+      liveness_score: livenessScore,
+      liveness_status: liveness.status || liveness.result || null,
 
-      face_match_score:   faceMatchScore,
-      face_match_status:  faceMatch.status      || faceMatch.result    || null,
+      face_match_score: faceMatchScore,
+      face_match_status: faceMatch.status || faceMatch.result || null,
 
-      aml_status:         aml.status            || aml.result          || null,
-      aml_hits:           Number(aml.hits_count || aml.hits || 0),
+      aml_status: aml.status || aml.result || null,
+      aml_hits: Number(aml.hits_count || aml.hits || 0),
 
-      device_ip:          device.ip             || device.ip_address   || null,
-      device_country:     device.country        || device.country_name || null,
-      device_platform:    device.platform       || device.device_platform || device.os || null,
-      is_vpn:             device.is_vpn         === true || device.vpn === true,
+      device_ip: device.ip || device.ip_address || null,
+      device_country: device.country || device.country_name || null,
+      device_platform: device.platform || device.device_platform || device.os || null,
+      is_vpn: device.is_vpn === true || device.vpn === true,
 
-      company_name:        kyb.company_name        || kyb.companyName        || kyb.name            || d.company_name        || null,
-      registration_number: kyb.registration_number || kyb.registrationNumber || kyb.reg_number     || d.registration_number || null,
-      company_type:        kyb.company_type        || kyb.companyType        || d.company_type        || null,
-      incorporation_date:  kyb.incorporation_date  || kyb.incorporationDate  || d.incorporation_date  || null,
-      company_status:      kyb.status              || kyb.company_status     || d.company_status      || null,
-      company_country:     kyb.country             || kyb.company_country    || d.company_country     || null,
-      kyb_key_people:      keyPeople ? JSON.parse(JSON.stringify(keyPeople)) : null,
+      company_name: kyb.company_name || kyb.companyName || kyb.name || d.company_name || null,
+      registration_number: kyb.registration_number || kyb.registrationNumber || kyb.reg_number || d.registration_number || null,
+      company_type: kyb.company_type || kyb.companyType || d.company_type || null,
+      incorporation_date: kyb.incorporation_date || kyb.incorporationDate || d.incorporation_date || null,
+      company_status: kyb.status || kyb.company_status || d.company_status || null,
+      company_country: kyb.country || kyb.company_country || d.company_country || null,
+      kyb_key_people: keyPeople ? JSON.parse(JSON.stringify(keyPeople)) : null,
     };
 
     const { error } = await supabaseAdmin
@@ -529,13 +547,32 @@ router.post('/sync-status', async (req, res) => {
     // ── KYC Sync ──
     if (kycSession) {
       try {
-        const diditRes = await fetch(`https://verification.didit.me/v3/session/${kycSession.didit_session_id}/decision/`, {
-          headers: { 'x-api-key': process.env.DIDIT_API_KEY },
-        });
-        if (diditRes.ok) {
-          const diditData = await diditRes.json();
+        let diditData = null;
+        try {
+          const diditRes = await fetch(`https://verification.didit.me/v3/session/${kycSession.didit_session_id}/decision/`, {
+            headers: { 'x-api-key': process.env.DIDIT_API_KEY },
+            cache: 'no-store',
+          });
+          if (diditRes.ok) diditData = await diditRes.json();
+        } catch (e) { }
+
+        if (!diditData || !diditData.status) {
+          try {
+            const sRes = await fetch(`https://verification.didit.me/v3/session/${kycSession.didit_session_id}/`, {
+              headers: { 'x-api-key': process.env.DIDIT_API_KEY },
+              cache: 'no-store',
+            });
+            if (sRes.ok) {
+              const sData = await sRes.json();
+              diditData = { ...sData, ...(diditData || {}) };
+            }
+          } catch (e) { }
+        }
+
+        if (diditData) {
           const syncStatus = (diditData.status || '').toLowerCase().trim();
-          const syncDecision = (diditData.decision_trace?.status || diditData.decision || '').toLowerCase().trim();
+          const rawDec = diditData.decision_trace?.status || diditData.decision || '';
+          const syncDecision = (typeof rawDec === 'string' ? rawDec : (rawDec?.status || JSON.stringify(rawDec))).toLowerCase().trim();
           console.log('[sync-status KYC] Didit status:', diditData.status, '/ decision:', diditData.decision);
 
           const isApproved = ['approved', 'completed', 'success', 'accepted'].includes(syncStatus)
@@ -543,10 +580,10 @@ router.post('/sync-status', async (req, res) => {
           const isDeclined = ['declined', 'rejected', 'failed', 'denied'].includes(syncStatus)
             || ['declined', 'rejected', 'failed', 'denied'].includes(syncDecision);
 
-          const decisionJson = diditData.decision_trace || (diditData.decision ? { status: diditData.decision } : null);
+          const textDecision = typeof rawDec === 'string' ? rawDec : (rawDec ? JSON.stringify(rawDec) : null);
 
           await supabaseAdmin.from('verification_sessions')
-            .update({ status: diditData.status || kycSession.status, decision: decisionJson, updated_at: new Date().toISOString() })
+            .update({ status: diditData.status || kycSession.status, decision: textDecision, updated_at: new Date().toISOString() })
             .eq('didit_session_id', kycSession.didit_session_id);
 
           if (isApproved) {
@@ -565,13 +602,32 @@ router.post('/sync-status', async (req, res) => {
     // ── KYB Sync ──
     if (kybSession) {
       try {
-        const diditRes = await fetch(`https://verification.didit.me/v3/session/${kybSession.didit_session_id}/decision/`, {
-          headers: { 'x-api-key': process.env.DIDIT_API_KEY },
-        });
-        if (diditRes.ok) {
-          const diditData = await diditRes.json();
+        let diditData = null;
+        try {
+          const diditRes = await fetch(`https://verification.didit.me/v3/session/${kybSession.didit_session_id}/decision/`, {
+            headers: { 'x-api-key': process.env.DIDIT_API_KEY },
+            cache: 'no-store',
+          });
+          if (diditRes.ok) diditData = await diditRes.json();
+        } catch (e) { }
+
+        if (!diditData || !diditData.status) {
+          try {
+            const sRes = await fetch(`https://verification.didit.me/v3/session/${kybSession.didit_session_id}/`, {
+              headers: { 'x-api-key': process.env.DIDIT_API_KEY },
+              cache: 'no-store',
+            });
+            if (sRes.ok) {
+              const sData = await sRes.json();
+              diditData = { ...sData, ...(diditData || {}) };
+            }
+          } catch (e) { }
+        }
+
+        if (diditData) {
           const syncStatus = (diditData.status || '').toLowerCase().trim();
-          const syncDecision = (diditData.decision_trace?.status || diditData.decision || '').toLowerCase().trim();
+          const rawDec = diditData.decision_trace?.status || diditData.decision || '';
+          const syncDecision = (typeof rawDec === 'string' ? rawDec : (rawDec?.status || JSON.stringify(rawDec))).toLowerCase().trim();
           console.log('[sync-status KYB] Didit status:', diditData.status, '/ decision:', diditData.decision);
 
           const isApproved = ['approved', 'completed', 'success', 'accepted'].includes(syncStatus)
@@ -579,10 +635,10 @@ router.post('/sync-status', async (req, res) => {
           const isDeclined = ['declined', 'rejected', 'failed', 'denied'].includes(syncStatus)
             || ['declined', 'rejected', 'failed', 'denied'].includes(syncDecision);
 
-          const decisionJson = diditData.decision_trace || (diditData.decision ? { status: diditData.decision } : null);
+          const textDecision = typeof rawDec === 'string' ? rawDec : (rawDec ? JSON.stringify(rawDec) : null);
 
           await supabaseAdmin.from('verification_sessions')
-            .update({ status: diditData.status || kybSession.status, decision: decisionJson, updated_at: new Date().toISOString() })
+            .update({ status: diditData.status || kybSession.status, decision: textDecision, updated_at: new Date().toISOString() })
             .eq('didit_session_id', kybSession.didit_session_id);
 
           const enrichment = await fetchAndStoreDiditDecision(kybSession.didit_session_id);
@@ -679,7 +735,7 @@ router.get('/admin/entity/:entityId', async (req, res) => {
     // For sessions missing decision data, trigger a background re-fetch
     for (const session of sessions || []) {
       if (session.status === 'Approved' && !session.didit_decision_payload) {
-        fetchAndStoreDiditDecision(session.didit_session_id).catch(() => {});
+        fetchAndStoreDiditDecision(session.didit_session_id).catch(() => { });
       }
     }
 
