@@ -1,6 +1,11 @@
 //frontend/app/api/ipfs-upload/route.ts
 //purpose of this file is to handle the POST request to upload a file to IPFS using Pinata's API. It receives a file and an optional name from the request, uploads the file to Pinata, and returns the CID and URL of the uploaded file. If any errors occur during the process, it returns an appropriate error message.
 import { NextRequest, NextResponse } from "next/server";
+import {
+  validateDocumentBeforeUpload,
+  validateFileSignature,
+  isDocumentKind,
+} from "@/utils/documentGatekeeper";
 
 export async function POST(request: NextRequest) {
     try {
@@ -10,6 +15,23 @@ export async function POST(request: NextRequest) {
 
         if (!file) {
             return NextResponse.json({ error: "No file provided" }, { status: 400 });
+        }
+
+        const docKey = formData.get("docKey");
+        if (typeof docKey === "string") {
+            if (!isDocumentKind(docKey)) {
+                return NextResponse.json({ error: "Invalid document type." }, { status: 400 });
+            }
+
+            const validation = await validateDocumentBeforeUpload(file, docKey);
+            if (!validation.valid) {
+                return NextResponse.json({ error: validation.error }, { status: 400 });
+            }
+        } else {
+            const signatureValidation = await validateFileSignature(file);
+            if (!signatureValidation.valid) {
+                return NextResponse.json({ error: signatureValidation.error }, { status: 400 });
+            }
         }
 
         const bytes = await file.arrayBuffer();
