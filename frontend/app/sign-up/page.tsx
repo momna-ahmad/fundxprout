@@ -1,17 +1,24 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useActionState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signup } from '@/lib/action';
 import GoogleSignIn from "@/components/google-signIn";
+import { Check, X } from 'lucide-react';
 
 const initialState = { error: '', success: '' };
 
 export default function Page() {
   const router = useRouter();
   const [state, formAction] = useActionState(signup, initialState);
+  const [password, setPassword] = useState('');
+
+  const hasMinLength = password.length >= 8;
+  const hasUppercase = /[A-Z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecial = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
 
   useEffect(() => {
     if (!state?.success) return;
@@ -41,6 +48,7 @@ export default function Page() {
               name="email"
               type="email"
               id="email"
+              required
               className="w-full px-4 py-3 bg-[#0d1117] border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#6f42c1] focus:border-transparent transition text-sm"
               placeholder="you@example.com"
             />
@@ -54,9 +62,32 @@ export default function Page() {
               name="password"
               type="password"
               id="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 bg-[#0d1117] border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#6f42c1] focus:border-transparent transition text-sm"
               placeholder="••••••••"
             />
+
+            {/* Password conditions checklist */}
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div className={`flex items-center gap-1.5 ${hasMinLength ? 'text-emerald-400 font-medium' : 'text-gray-400'}`}>
+                {hasMinLength ? <Check size={12} className="text-emerald-400 shrink-0" /> : <X size={12} className="text-gray-500 shrink-0" />}
+                <span>8+ Characters</span>
+              </div>
+              <div className={`flex items-center gap-1.5 ${hasUppercase ? 'text-emerald-400 font-medium' : 'text-gray-400'}`}>
+                {hasUppercase ? <Check size={12} className="text-emerald-400 shrink-0" /> : <X size={12} className="text-gray-500 shrink-0" />}
+                <span>Uppercase (A-Z)</span>
+              </div>
+              <div className={`flex items-center gap-1.5 ${hasNumber ? 'text-emerald-400 font-medium' : 'text-gray-400'}`}>
+                {hasNumber ? <Check size={12} className="text-emerald-400 shrink-0" /> : <X size={12} className="text-gray-500 shrink-0" />}
+                <span>Number (0-9)</span>
+              </div>
+              <div className={`flex items-center gap-1.5 ${hasSpecial ? 'text-emerald-400 font-medium' : 'text-gray-400'}`}>
+                {hasSpecial ? <Check size={12} className="text-emerald-400 shrink-0" /> : <X size={12} className="text-gray-500 shrink-0" />}
+                <span>Special Char (!@#$)</span>
+              </div>
+            </div>
           </div>
 
           {state?.success && (

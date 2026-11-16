@@ -45,8 +45,8 @@ export default function CategoriesNav({ onCategoryChange }) {
 	};
 
 	return (
-		<nav className="bg-[#181A2A] px-4 py-4 border-b border-white/5 sticky top-0 z-10 backdrop-blur-sm">
-			<div className="max-w-7xl mx-auto">
+		<nav className="bg-[#181A2A] px-4 sm:px-6 lg:px-8 py-4 border-b border-white/5 sticky top-0 z-10 backdrop-blur-sm">
+			<div className="w-full">
 				{/* shafqaat — Horizontally scrollable pill row */}
 				<div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
 					{CATEGORIES.map(({ name, value, Icon }) => {

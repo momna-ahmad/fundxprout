@@ -200,7 +200,7 @@ const userBackedCampaignIds = (portfolioData?.investments ?? []).map((inv) => {
       <div className="max-w-[1280px] mx-auto">
 
         {/* ── Page Header ── */}
-        <div className="flex items-end justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
           <div>
             <div className="text-[12px] text-[#a78bfa] font-semibold tracking-[0.08em] uppercase mb-1.5">
               Investor Dashboard
@@ -226,7 +226,7 @@ const userBackedCampaignIds = (portfolioData?.investments ?? []).map((inv) => {
         </div>
 
         {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-4 gap-4 mb-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
           {statCards.map((s) => {
             const Icon = s.icon;
             return (
@@ -258,7 +258,7 @@ const userBackedCampaignIds = (portfolioData?.investments ?? []).map((inv) => {
         </div>
 
         {/* ── Main grid: chart + top performer ── */}
-        <div className="grid grid-cols-[1fr_300px] gap-4 mb-5">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 mb-5">
 
           {/* Portfolio Chart */}
           <div className="bg-card border border-white/5 rounded-2xl px-6 py-[22px]">
@@ -381,8 +381,8 @@ const userBackedCampaignIds = (portfolioData?.investments ?? []).map((inv) => {
           )}
         </div>
 
-        {/* ── Bottom grid: donut + transactions + quick stats ── */}
-        <div className="grid grid-cols-[280px_1fr_260px] gap-4 mb-5">
+        {/* ── Bottom grid: donut + transactions ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 mb-5">
 
           {/* Token Allocation Donut */}
           {/* Token / Industry Allocation Donut */}
@@ -490,7 +490,7 @@ const userBackedCampaignIds = (portfolioData?.investments ?? []).map((inv) => {
           </div>
 
           {investedCampaigns.length > 0 ? (
-            <div className="grid grid-cols-3 gap-3.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {investedCampaigns.map((camp) => (
                 <div
                   key={camp.id}

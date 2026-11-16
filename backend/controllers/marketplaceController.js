@@ -426,4 +426,69 @@ async function getCampaignFinancialReports(req, res) {
   }
 }
 
-module.exports = { createOrder, getOrderBook, getOpenSellOrders, cancelOrder, getTokenAnalytics, getTradeHistory, getHoldings, getCampaignFinancialReports };
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/marketplace/seller/proceeds
+// Returns the authenticated seller's completed token_trades (settlement_status='settled').
+// Security: sellerId is ALWAYS taken from req.user.id (verified JWT via authenticate
+// middleware) — never from req.query or req.body. This prevents user A from reading
+// user B's earnings by spoofing a userId param.
+// ─────────────────────────────────────────────────────────────────────────────
+async function getSellerProceeds(req, res) {
+  const sellerId = req.user?.id;
+  if (!sellerId) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    // Pull only columns the frontend actually needs — no personal buyer data exposed
+    const { data: trades, error } = await supabaseAdmin
+      .from('token_trades')
+      .select(
+        'id, campaign_id, price, quantity, fee_amount, tx_hash, executed_at, settlement_status'
+      )
+      .eq('seller_id', sellerId)
+      .eq('settlement_status', 'settled')
+      .order('executed_at', { ascending: false });
+
+    if (error) throw error;
+
+    if (!trades || trades.length === 0) {
+      return res.json({ trades: [], totalEarned: 0, totalFees: 0, tradeCount: 0 });
+    }
+
+    // Fetch campaign titles separately to avoid joining buyer PII
+    const campaignIds = [...new Set(trades.map((t) => t.campaign_id))];
+    const { data: campaigns } = await supabaseAdmin
+      .from('campaigns')
+      .select('id, title')
+      .in('id', campaignIds);
+
+    const titleMap = new Map((campaigns || []).map((c) => [String(c.id), c.title || `Campaign #${c.id}`]));
+
+    const enriched = trades.map((t) => ({
+      id: t.id,
+      campaignTitle: titleMap.get(String(t.campaign_id)) || `Campaign #${t.campaign_id}`,
+      campaignId: t.campaign_id,
+      price: Number(t.price),
+      quantity: Number(t.quantity),
+      feeAmount: Number(t.fee_amount || 0),
+      // Net earned per trade: gross - platform fee
+      earned: Number(t.price) * Number(t.quantity) - Number(t.fee_amount || 0),
+      txHash: t.tx_hash || null,
+      executedAt: t.executed_at,
+    }));
+
+    const totalEarned = enriched.reduce((sum, t) => sum + t.earned, 0);
+    const totalFees   = enriched.reduce((sum, t) => sum + t.feeAmount, 0);
+
+    return res.json({
+      trades: enriched,
+      totalEarned: Number(totalEarned.toFixed(8)),
+      totalFees: Number(totalFees.toFixed(8)),
+      tradeCount: enriched.length,
+    });
+  } catch (err) {
+    console.error('[getSellerProceeds] error:', err);
+    return res.status(500).json({ error: 'Failed to load seller proceeds' });
+  }
+}
+
+module.exports = { createOrder, getOrderBook, getOpenSellOrders, cancelOrder, getTokenAnalytics, getTradeHistory, getHoldings, getCampaignFinancialReports, getSellerProceeds };

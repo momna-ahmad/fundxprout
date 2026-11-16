@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { createOrder, getOrderBook, getOpenSellOrders, cancelOrder, getTokenAnalytics, getTradeHistory, getHoldings, getCampaignFinancialReports } = require('../controllers/marketplaceController');
+const { createOrder, getOrderBook, getOpenSellOrders, cancelOrder, getTokenAnalytics, getTradeHistory, getHoldings, getCampaignFinancialReports, getSellerProceeds } = require('../controllers/marketplaceController');
 const authenticate = require('../middleware/authenticate');
 
 router.post('/orders', authenticate, createOrder);
@@ -11,5 +11,7 @@ router.get('/analytics/:campaignId', getTokenAnalytics);
 router.get('/trades/:campaignId', getTradeHistory);
 router.get('/holdings/:campaignId', authenticate, getHoldings);
 router.get('/financial-reports', authenticate, getCampaignFinancialReports);
+// Seller proceeds: authenticated — sellerId always from verified JWT, never from query params
+router.get('/seller/proceeds', authenticate, getSellerProceeds);
 
 module.exports = router;

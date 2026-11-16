@@ -229,7 +229,15 @@ export default function ProfilePage() {
               full_name: updated.full_name || prev.full_name,
               country: updated.country || prev.country,
             }));
-            setVerificationSuccessMsg("Verification completed! Profile updated automatically.");
+            const isKyc = !!updated.identity_verified;
+            const isKyb = Array.isArray(updated.businesses)
+              ? !!updated.businesses[0]?.kyb_verified
+              : !!updated.businesses?.kyb_verified;
+            if (isKyc || isKyb) {
+              setVerificationSuccessMsg("Verification approved! Profile updated automatically.");
+            } else {
+              setVerificationSuccessMsg("Verification session completed in Didit. Click 'Refresh Didit Status' to pull the final approved decision.");
+            }
           }
           setVerifying(null);
         }
@@ -444,15 +452,26 @@ export default function ProfilePage() {
           headers: { "Content-Type": "application/json" },
           body: reqBody,
         });
-        if (!res.ok) throw new Error(`Internal route returned status ${res.status}`);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          throw new Error(errData?.error || `Internal route returned status ${res.status}`);
+        }
       } catch (err) {
         console.warn("[startDiditVerification] Internal route failed, trying backend fallback:", err.message);
         const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-        res = await fetch(`${apiBase}/api/didit/${type}/create-session`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: reqBody,
-        });
+        try {
+          res = await fetch(`${apiBase}/api/didit/${type}/create-session`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: reqBody,
+          });
+        } catch (backendErr) {
+          throw new Error(err.message || "Failed to reach verification service.");
+        }
+      }
+
+      if (!res) {
+        throw new Error("No response from verification service.");
       }
 
       let data;

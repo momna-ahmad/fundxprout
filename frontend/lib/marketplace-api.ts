@@ -183,6 +183,44 @@ export async function getTradeHistory(campaignId: string) {
   return res.json();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Seller Proceeds
+// Security: No userId is sent in the request. The backend reads sellerId
+// from the verified JWT (req.user.id), so a user can only ever see their
+// own completed trades — never another seller's data.
+// ─────────────────────────────────────────────────────────────────────────────
+export type SellerTrade = {
+  id: string;
+  campaignTitle: string;
+  campaignId: string;
+  price: number;
+  quantity: number;
+  feeAmount: number;
+  earned: number;
+  txHash: string | null;
+  executedAt: string;
+};
+
+export type SellerProceedsResponse = {
+  trades: SellerTrade[];
+  totalEarned: number;
+  totalFees: number;
+  tradeCount: number;
+};
+
+export async function getSellerProceeds(): Promise<SellerProceedsResponse> {
+  const res = await fetch(`${API_BASE}/api/marketplace/seller/proceeds`, {
+    method: 'GET',
+    headers: await authHeaders(), // sends Bearer JWT — backend extracts sellerId from it
+  });
+  if (!res.ok) {
+    let errBody: any = null;
+    try { errBody = await res.json(); } catch { /* ignore */ }
+    throw new Error(errBody?.error || 'Failed to load seller proceeds');
+  }
+  return res.json();
+}
+
 export async function getHoldings(campaignId: string): Promise<{ available_balance: number; locked_balance: number }> {
   const res = await fetch(`${API_BASE}/api/marketplace/holdings/${campaignId}`, {
     method: 'GET',

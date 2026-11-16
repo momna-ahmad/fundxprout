@@ -74,8 +74,8 @@ export default function MarketAnalytics() {
   }
 
   return (
-    <section className="bg-[#181A2A] py-12 px-4">
-      <div className="max-w-7xl mx-auto">
+    <section className="bg-[#181A2A] py-12 px-4 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-8">
           <p className="text-xs font-semibold tracking-widest text-gray-400 uppercase mb-1">Platform Analytics</p>
