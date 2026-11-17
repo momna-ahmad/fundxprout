@@ -61,7 +61,7 @@ export default function Navbar() {
             alt="FundXProut Logo"
             width={40}
             height={40}
-            className="object-cover scale-[1.35]"
+            className="object-cover scale-[1.35] w-auto h-auto"
           />
         </div>
         <span className="text-2xl font-bold text-white">FundXprout</span>

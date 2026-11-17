@@ -5,6 +5,7 @@ export async function uploadToIPFS(
     const formData = new FormData();
     formData.append("file", file);
     formData.append("name", name);
+    formData.append("docKey", "document");
 
     const res = await fetch("/api/ipfs-upload", {
         method: "POST",

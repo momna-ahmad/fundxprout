@@ -38,7 +38,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (typeof docKey !== "string" || !isServerDocumentKind(docKey)) {
+    const normalizedDocKey = typeof docKey === "string" && docKey.trim() ? docKey.trim() : "document";
+
+    if (!isServerDocumentKind(normalizedDocKey)) {
       return NextResponse.json(
         { error: "Invalid document type." },
         { status: 400 },
@@ -57,7 +59,7 @@ export async function POST(request: NextRequest) {
     const safeFileName =
       typeof fileName === "string" && fileName.trim()
         ? fileName
-        : `${docKey}-${file.name}`;
+        : `${normalizedDocKey}-${file.name}`;
 
     const pinataJwt = process.env.PINATA_JWT;
 

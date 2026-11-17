@@ -1,20 +1,42 @@
 export type ServerDocumentKind =
+  // Campaign documents
   | "pitch_deck_cid"
   | "financials_cid"
   | "business_plan_cid"
   | "use_of_funds_cid"
-  | "product_demo_cid";
+  | "product_demo_cid"
+  // KYC verification documents
+  | "national_id_cid"
+  | "passport_cid"
+  | "selfie_cid"
+  | "proof_of_address_cid"
+  // KYB business verification documents
+  | "business_reg_cid"
+  | "tax_cert_cid"
+  | "bank_statement_cid"
+  // General fallback
+  | "document";
+
+const VALID_DOCUMENT_KINDS: string[] = [
+  "pitch_deck_cid",
+  "financials_cid",
+  "business_plan_cid",
+  "use_of_funds_cid",
+  "product_demo_cid",
+  "national_id_cid",
+  "passport_cid",
+  "selfie_cid",
+  "proof_of_address_cid",
+  "business_reg_cid",
+  "tax_cert_cid",
+  "bank_statement_cid",
+  "document",
+];
 
 export function isServerDocumentKind(
   value: unknown,
 ): value is ServerDocumentKind {
-  return [
-    "pitch_deck_cid",
-    "financials_cid",
-    "business_plan_cid",
-    "use_of_funds_cid",
-    "product_demo_cid",
-  ].includes(value as ServerDocumentKind);
+  return typeof value === "string" && VALID_DOCUMENT_KINDS.includes(value);
 }
 
 export async function validateServerFileSignature(file: File) {

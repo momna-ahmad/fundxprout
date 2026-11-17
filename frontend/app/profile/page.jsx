@@ -97,6 +97,7 @@ function DocUpload({ fieldKey, label, hint, accept, currentUrl, onUploaded, requ
       const fd = new FormData();
       fd.append("file", file);
       fd.append("name", `profile-${fieldKey}-${file.name}`);
+      fd.append("docKey", fieldKey);
       const res = await fetch("/api/ipfs-upload", { method: "POST", body: fd });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Upload failed");
