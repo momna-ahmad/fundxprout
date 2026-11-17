@@ -45,6 +45,7 @@ export type MarketplaceSellOrder = {
     id: string;
     title: string | null;
     category: string | null;
+    token_symbol?: string | null;
     token_contract_address: string | null;
     secondary_trading_enabled: boolean;
   } | null;

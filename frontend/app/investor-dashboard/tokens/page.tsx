@@ -66,7 +66,7 @@ export default function TokensPage() {
           <span className="text-muted-foreground font-medium">Ethereum Mainnet</span>
         </div>  
         <div className="ml-auto">
-          <button className="bg-[#6f42c1] hover:bg-[#5a3599] text-white text-xs font-semibold px-[18px] py-2 rounded-xl transition-all">
+          <button className="rounded-full border border-ring px-4 py-1.5 text-xs font-semibold text-ring transition-colors hover:bg-ring/10">
             + Import Token
           </button>
         </div>
@@ -74,29 +74,28 @@ export default function TokensPage() {
 
       {/* ── Token Cards ── */}
       {tokenHoldings.length > 0 ? (
-        <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           {tokenHoldings.map((token) => {
             const changeIsPositive = token.change24h !== null && token.change24h >= 0;
 
             return (
             <div
               key={token.id}
-              className="bg-card border border-border rounded-2xl p-7 hover:border-ring/40 transition-all duration-200"
+              className="flex min-w-0 flex-col rounded-2xl border border-border bg-card p-4 transition-colors hover:border-ring/50"
             >
               {/* Token header */}
-              <div className="flex items-center gap-3.5 mb-5">
+              <div className="mb-4 flex items-center gap-3">
                 <div
-                  className="w-[52px] h-[52px] rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                  className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full border border-ring/30 px-1 text-center text-[10px] font-bold text-white"
                   style={{
                     background: `linear-gradient(135deg, ${token.color}, rgba(0,0,0,0.4))`,
-                    boxShadow:  `0 0 24px ${token.color}33`,
                   }}
                 >
-                  {token.symbol.slice(0, 2)}
+                  <span className="line-clamp-2 break-all">{token.symbol || '—'}</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[16px] font-bold text-foreground">{token.name}</div>
-                  <div className="font-mono text-[11px] text-muted-foreground mt-0.5">
+                  <div className="line-clamp-2 break-words text-sm font-semibold leading-snug text-foreground">{token.name}</div>
+                  <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
                     {truncateAddress(token.contractAddress || '0x...', 8, 5)}
                   </div>
                 </div>
@@ -111,69 +110,69 @@ export default function TokensPage() {
               </div>
 
               {/* Balance + value */}
-              <div className="grid grid-cols-3 gap-3.5 mb-5">
-                <div className="px-[18px] py-4 bg-muted border border-border rounded-xl">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-[0.08em] mb-1.5 font-bold">Balance</div>
-                  <div className="text-[22px] font-black text-foreground tracking-tight">{formatNumber(token.balance)}</div>
-                  <div className="text-xs text-muted-foreground">{token.symbol} tokens</div>
+              <div className="mb-3 grid grid-cols-2 gap-x-3 gap-y-2 border-y border-border py-3">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Balance</div>
+                  <div className="mt-0.5 truncate text-sm font-semibold tabular-nums text-foreground">{formatNumber(token.balance)}</div>
                 </div>
-                <div className="px-[18px] py-4 bg-muted border border-border rounded-xl">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-[0.08em] mb-1.5 font-bold">Position Value</div>
-                  <div className="text-[22px] font-black text-foreground tracking-tight">
+                <div className="text-right">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Position Value</div>
+                  <div className="mt-0.5 truncate text-sm font-semibold tabular-nums text-foreground">
                     {formatEther(token.balance * token.priceEth)}
                   </div>
                 </div>
-                <div className="px-[18px] py-4 bg-muted border border-border rounded-xl">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-[0.08em] mb-1.5 font-bold">{token.priceLabel}</div>
-                  <div className="text-[22px] font-black text-foreground tracking-tight">{formatEther(token.priceEth ?? 0)}</div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">per token</div>
+                <div className="col-span-2 flex items-center justify-between gap-2 border-t border-border/60 pt-2">
+                  <div className="truncate text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{token.priceLabel}</div>
+                  <div className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatEther(token.priceEth ?? 0)} <span className="text-xs font-normal text-muted-foreground">/ token</span></div>
                 </div>
               </div>
 
-              {/* Sparkline */}
-              <div className="mb-5">
-                <div className="text-[11px] text-muted-foreground mb-2 font-semibold">
-                  {token.priceLabel === 'Launch Reference Price' ? token.priceLabel : 'Recorded Trade History (ETH/token)'}
+              {/* Show a chart only when there are recorded trades, not just the launch reference price. */}
+              {token.priceLabel !== 'Launch Reference Price' && (token.priceHistory?.length ?? 0) > 1 && (
+                <div className="mb-3">
+                  <div className="mb-2 text-[11px] font-semibold text-muted-foreground">
+                    Recorded Trade History (ETH/token)
+                  </div>
+                  <ResponsiveContainer width="100%" height={56}>
+                    <LineChart data={(token.priceHistory || []).map((item: any, idx: number) => typeof item === 'object' ? { v: Number(item.priceEth), time: item.time } : { v: item, time: `P${idx + 1}` })}>
+                      <Tooltip
+                        formatter={(v: any) => [formatEther(Number(v)), 'Price']}
+                        labelFormatter={(label: any, payload: any) => payload?.[0]?.payload?.time || label}
+                        contentStyle={{
+                          background: 'var(--card)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          fontSize: 11,
+                          color: 'var(--foreground)',
+                        }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="v"
+                        stroke={token.change24h === null ? 'var(--muted-foreground)' : changeIsPositive ? 'var(--chart-3)' : 'var(--destructive)'}
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{ r: 4, fill: token.change24h === null ? 'var(--muted-foreground)' : changeIsPositive ? 'var(--chart-3)' : 'var(--destructive)' }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
                 </div>
-                <ResponsiveContainer width="100%" height={56}>
-                  <LineChart data={(token.priceHistory || []).map((item: any, idx: number) => typeof item === 'object' ? { v: Number(item.priceEth), time: item.time } : { v: item, time: `P${idx+1}` })}>
-                    <Tooltip
-                      formatter={(v: any) => [formatEther(Number(v)), 'Price']}
-                      labelFormatter={(label: any, payload: any) => payload?.[0]?.payload?.time || label}
-                      contentStyle={{
-                        background:   'var(--card)',
-                        border:       '1px solid var(--border)',
-                        borderRadius: 12,
-                        fontSize:     11,
-                        color:        'var(--foreground)',
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="v"
-                      stroke={token.change24h === null ? 'var(--muted-foreground)' : changeIsPositive ? 'var(--chart-3)' : 'var(--destructive)'}
-                      strokeWidth={2}
-                      dot={false}
-                      activeDot={{ r: 4, fill: token.change24h === null ? 'var(--muted-foreground)' : changeIsPositive ? 'var(--chart-3)' : 'var(--destructive)' }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              )}
 
               {/* Actions */}
-              <div className="flex gap-2.5">
+              <div className="mt-2 flex items-center gap-2">
                 <Link
                   href={`/investor-dashboard/marketInvestor/${token.campaignId}`}
-                  className="flex-1 justify-center bg-[#6f42c1] hover:bg-[#5a3599] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all inline-flex items-center gap-2"
+                  className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full border border-ring px-3 text-xs font-semibold text-ring transition-colors hover:bg-ring/10"
                 >
-                  <ArrowUpRight size={14} /> Sell
+                  Sell <ArrowUpRight size={13} />
                 </Link>
                 {token.contractAddress && (
                   <a
                     href={`https://sepolia.etherscan.io/token/${token.contractAddress}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-muted-foreground hover:text-foreground px-3 py-2.5 rounded-xl border border-border hover:bg-muted transition-all inline-flex items-center justify-center"
+                    className="inline-flex h-8 w-9 shrink-0 items-center justify-center rounded-full border border-green-500/60 text-green-500 transition-colors hover:bg-green-500/10"
                     title="View on Etherscan"
                   >
                     <ExternalLink size={14} />

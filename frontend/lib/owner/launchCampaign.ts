@@ -3,7 +3,11 @@
 
 import { ethers } from "ethers";
 import CampaignFactoryJSON from "@/abis/CampaignFactory.json";
-import { verifyCampaignForLaunch, finalizeCampaignLaunch } from "@/lib/action";
+import {
+  evaluatePrelaunchCampaign,
+  verifyCampaignForLaunch,
+  finalizeCampaignLaunch,
+} from "@/lib/action";
 
 const CONTRACT_ADDRESS = "0x600259B2D79720FCd98632641C3a6951d03fb500";
 
@@ -22,6 +26,28 @@ export async function handleLaunchSubmit(prevState: any, formData: FormData) {
   const verification = await verifyCampaignForLaunch(campaignId);
   if (verification.error) {
     alert(verification.error);
+    return;
+  }
+
+  // Re-score the exact values being launched so edits made after an earlier
+  // preview are included in the final pre-launch feedback.
+  const description = formData.get("description") as string;
+  if (!description || description.trim().length < 30) {
+    alert("Campaign description must contain at least 30 characters before the final AI evaluation.");
+    return;
+  }
+  const prelaunchResult = await evaluatePrelaunchCampaign({
+    title,
+    description,
+    category: formData.get("category") as string,
+    goal,
+    duration: deadlineTimestamp
+      ? Math.max(1, Math.ceil((deadlineTimestamp - Math.floor(Date.now() / 1000)) / 86400))
+      : 30,
+    hasDemo: Boolean(formData.get("product_demo_cid")),
+  });
+  if (prelaunchResult.error || !prelaunchResult.evaluation) {
+    alert(prelaunchResult.error || "Could not refresh the AI evaluation. Launch was stopped.");
     return;
   }
 

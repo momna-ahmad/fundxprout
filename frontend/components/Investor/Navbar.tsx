@@ -1,7 +1,7 @@
 // components/Investor/Navbar.tsx
 'use client';
 import { usePathname } from 'next/navigation';
-import { Bell, Fuel, ChevronRight, Copy, Sun, Moon, Home } from 'lucide-react';
+import { Bell, ChevronRight, Copy, Sun, Moon, Home } from 'lucide-react';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme-provider';
@@ -31,7 +31,7 @@ export default function Navbar() {
   const { theme, toggleTheme } = useTheme();
 
   // ── Wallet (from WalletProvider in dashboard layout) ──
-  const { walletAddress, network, isConnecting, connectWallet } = useWallet();
+  const { walletAddress, isConnecting, connectWallet } = useWallet();
 
   // ── Real-Time Notifications ──
   const [notifOpen, setNotifOpen] = useState(false);
@@ -45,15 +45,6 @@ export default function Navbar() {
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
-
-  // Network label helper
-  const networkLabel = () => {
-    if (!walletAddress) return null;
-    if (network === 11155111) return { text: 'Sepolia ✓', cls: 'text-[var(--chart-3)]', dot: 'bg-[var(--chart-3)]' };
-    if (network)             return { text: 'Wrong Network', cls: 'text-destructive',       dot: 'bg-destructive'       };
-    return                          { text: 'Checking…',    cls: 'text-muted-foreground',   dot: 'bg-muted-foreground'  };
-  };
-  const net = networkLabel();
 
   return (
     <header className="sticky top-0 z-40 flex items-center gap-3 px-7 h-16 border-b border-border bg-background/90 backdrop-blur-xl">
@@ -81,26 +72,6 @@ export default function Navbar() {
         >
           <Home size={15} />
         </Link>
-
-        {/* Network badge — shown only when wallet connected */}
-        {net && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-muted border border-border">
-            <span
-              className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${net.dot}`}
-              style={{ boxShadow: network === 11155111 ? '0 0 5px var(--chart-3)' : undefined }}
-            />
-            <span className={net.cls + ' font-medium'}>{net.text}</span>
-          </div>
-        )}
-
-        {/* Gas fee — shown only on Sepolia */}
-        {network === 11155111 && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-muted border border-border text-muted-foreground">
-            <Fuel size={12} style={{ color: 'var(--chart-4)' }} />
-            <span className="font-semibold" style={{ color: 'var(--chart-4)' }}>24</span>
-            <span>gwei</span>
-          </div>
-        )}
 
         {/* ── Theme toggle ── */}
         <button

@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Search, Gavel } from 'lucide-react';
+import { ArrowRight, Search } from 'lucide-react';
 import PlaceBidModal from '@/components/Marketplace/PlaceBidModal';
 import { getOpenSellOrders, type MarketplaceSellOrder } from '@/lib/marketplace-api';
 
@@ -14,6 +14,12 @@ function numeric(value: string | number) {
 
 function shortAddress(address: string | null) {
   return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : 'Unknown';
+}
+
+function tokenColor(campaignId: string) {
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B88B', '#AED6F1'];
+  const hash = String(campaignId).split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return colors[hash % colors.length];
 }
 
 function ListingCard({
@@ -30,70 +36,71 @@ function ListingCard({
 
   return (
     <>
-      <article className="overflow-hidden rounded-3xl border border-border bg-card p-6 flex flex-col justify-between">
+      <article className="flex min-w-0 flex-col rounded-2xl border border-border bg-card p-4 transition-colors hover:border-ring/50">
         <div>
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h2 className="truncate text-xl font-semibold text-foreground">{order.campaign?.title || 'Token listing'}</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
+          <div className="flex items-start gap-3">
+            <div
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-white/20 px-1 text-center text-xs font-bold text-white"
+              style={{
+                background: `linear-gradient(135deg, ${tokenColor(order.campaign_id)}, rgba(0,0,0,0.4))`,
+                boxShadow: `0 0 18px ${tokenColor(order.campaign_id)}33`,
+              }}
+            >
+              <span className="line-clamp-2 break-all">{order.campaign?.token_symbol || '—'}</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="line-clamp-2 break-words text-base font-semibold leading-snug text-foreground">{order.campaign?.title || 'Token listing'}</h2>
+              <p className="mt-1 truncate text-xs text-muted-foreground">
                 {order.campaign?.category || 'Uncategorized'} · seller {shortAddress(order.seller_wallet_address)}
               </p>
               {!order.seller_wallet_address && (
-                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
                   Seller must link their wallet before this order can be traded.
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex shrink-0 flex-col items-end gap-1.5">
               {isAuto && (
-                <span className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-500">
+                <span className="rounded-lg border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[10px] font-bold text-green-500">
                   Auto Auction
                 </span>
               )}
-              <span className="rounded-2xl border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
-                For sale
-              </span>
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-3 gap-3">
-            <div className="rounded-2xl border border-border bg-background/80 p-3">
-              <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Tokens</div>
-              <div className="mt-1 font-semibold text-foreground">{quantity}</div>
+          <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border pt-3">
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Tokens available</div>
+              <div className="mt-0.5 text-sm font-semibold text-foreground">{quantity}</div>
             </div>
-            <div className="rounded-2xl border border-border bg-background/80 p-3">
-              <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Asking Price</div>
-              <div className="mt-1 font-semibold text-foreground">{price} ETH</div>
+            <div className="text-right">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Asking price</div>
+              <div className="mt-0.5 text-sm font-semibold text-foreground">{price} ETH</div>
             </div>
-            <div className="rounded-2xl border border-border bg-background/80 p-3">
+            <div className="col-span-2 flex items-center justify-between border-t border-border/60 pt-2">
               <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                 {order.min_bid_price_per_token ? 'Min Bid Floor' : 'Total'}
               </div>
-              <div className="mt-1 font-semibold text-foreground">
+              <div className="text-sm font-semibold text-foreground">
                 {order.min_bid_price_per_token ? `${numeric(order.min_bid_price_per_token)} ETH` : `${(quantity * price).toFixed(6)} ETH`}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="mt-6 flex items-center gap-3">
+        <div className="mt-4 flex items-center gap-2">
           <button
             onClick={() => setShowBidModal(true)}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold shadow-md transition hover:opacity-90 active:scale-[0.99]"
-            style={{
-              background: 'var(--ring)',
-              color: 'var(--primary-foreground, #ffffff)',
-            }}
+            className="inline-flex h-8 flex-1 items-center justify-center rounded-full border border-ring px-3 text-xs font-semibold text-ring transition-colors hover:bg-ring/10 active:bg-ring/15"
           >
-            <Gavel size={16} />
             Place Bid
           </button>
 
           <Link
             href={`/investor-dashboard/marketplace/${order.campaign_id}`}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold text-muted-foreground transition hover:border-ring hover:text-foreground"
+            className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full border border-green-500/60 bg-transparent px-3 text-xs font-semibold text-green-500 transition-colors hover:bg-green-500/10"
           >
-            Market <ArrowRight size={15} />
+            Market <ArrowRight size={15} className="text-green-500" />
           </Link>
         </div>
       </article>
@@ -172,7 +179,7 @@ export default function InvestorMarketplacePage() {
       ) : filteredOrders.length === 0 ? (
         <div className="rounded-3xl border border-border bg-card p-8 text-center text-muted-foreground">No active token sell orders match your search.</div>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredOrders.map((order) => (
             <ListingCard
               key={order.id}

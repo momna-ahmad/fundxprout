@@ -324,7 +324,7 @@ export default function InvestorCampaignsPage() {
     );
   }
 
-  const rowGrid = "lg:grid-cols-[minmax(0,2.4fr)_1fr_1.5fr_0.9fr_210px]";
+  const rowGrid = "lg:grid-cols-[minmax(0,1.7fr)_1fr_0.9fr_210px]";
 
   return (
     <div className="space-y-6">
@@ -332,7 +332,7 @@ export default function InvestorCampaignsPage() {
       <div>
         <h2 className="text-lg font-semibold tracking-tight text-foreground">Your investments</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Track funding progress and claim tokens for every campaign you&apos;ve backed.
+          Track your campaign investments and claim tokens.
         </p>
       </div>
 
@@ -431,8 +431,7 @@ export default function InvestorCampaignsPage() {
             {/* Column headers (desktop) */}
             <div className={`hidden border-b border-border bg-muted/30 px-5 py-2.5 text-xs font-medium text-muted-foreground lg:grid lg:gap-x-4 ${rowGrid}`}>
               <span>Campaign</span>
-              <span>Your investment</span>
-              <span>Funding</span>
+              <span className="lg:pl-4">Your investment</span>
               <span>Status</span>
               <span className="text-right">Actions</span>
             </div>
@@ -444,8 +443,6 @@ export default function InvestorCampaignsPage() {
                 const raised = parseFloat(
                   campaign.amount_pledged ?? campaign.amount_raised ?? 0
                 );
-                const remaining = Math.max(0, goal - raised);
-                const progress = goal > 0 ? Math.min(100, (raised / goal) * 100) : 0;
                 const isActive = daysLeft > 0;
                 const isGoalReached = raised >= goal && goal > 0;
 
@@ -477,7 +474,7 @@ export default function InvestorCampaignsPage() {
                       <div className="min-w-0">
                         <Link
                           href={detailHref}
-                          className="block truncate text-sm font-semibold text-foreground hover:underline"
+                          className="line-clamp-2 whitespace-normal break-words text-sm font-semibold leading-snug text-foreground hover:underline"
                         >
                           {campaign.title}
                         </Link>
@@ -491,7 +488,7 @@ export default function InvestorCampaignsPage() {
                     </div>
 
                     {/* Your investment */}
-                    <div>
+                    <div className="lg:pl-4">
                       <p className="mb-1 text-xs text-muted-foreground lg:hidden">Your investment</p>
                       <p className="text-sm font-semibold tabular-nums text-foreground">
                         {parseFloat(inv.userTotalInvested).toFixed(4)} ETH
@@ -499,7 +496,7 @@ export default function InvestorCampaignsPage() {
                     </div>
 
                     {/* Status (mobile: sits beside investment) */}
-                    <div className="lg:order-4">
+                    <div className="lg:order-3">
                       <p className="mb-1 text-xs text-muted-foreground lg:hidden">Status</p>
                       <span
                         className={`inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px] font-medium ${
@@ -516,36 +513,8 @@ export default function InvestorCampaignsPage() {
                       </p>
                     </div>
 
-                    {/* Funding */}
-                    <div className="col-span-2 lg:order-3 lg:col-span-1">
-                      <div className="flex items-baseline justify-between gap-2 text-xs">
-                        <span className="font-medium tabular-nums text-foreground">
-                          {raised.toLocaleString(undefined, { maximumFractionDigits: 4 })} ETH
-                        </span>
-                        <span className="tabular-nums text-muted-foreground">
-                          of {goal.toLocaleString()} ETH
-                        </span>
-                      </div>
-                      <div
-                        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted"
-                        role="progressbar"
-                        aria-valuenow={Math.round(progress)}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                      >
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{ width: `${progress}%`, background: "var(--ring)" }}
-                        />
-                      </div>
-                      <div className="mt-1.5 flex justify-between gap-2 text-[11px] tabular-nums text-muted-foreground">
-                        <span>{progress.toFixed(0)}% funded</span>
-                        <span>{remaining.toLocaleString(undefined, { maximumFractionDigits: 4 })} ETH left</span>
-                      </div>
-                    </div>
-
                     {/* Actions */}
-                    <div className="col-span-2 flex flex-wrap items-center gap-2 lg:order-5 lg:col-span-1 lg:justify-end">
+                    <div className="col-span-2 flex flex-wrap items-center gap-2 lg:order-4 lg:col-span-1 lg:justify-end">
                       {showClaimed && (
                         <button
                           disabled

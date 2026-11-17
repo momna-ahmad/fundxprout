@@ -10,7 +10,7 @@ import { getCampaignById } from "@/utils/supabase/getCampaigns";
 import { createClient } from "@/utils/supabase/client";
 import {
     Loader2, ExternalLink, FileText, Calendar, Target,
-    ArrowLeft, Clock, X, AlertCircle, CheckCircle2, Wallet, Network, ChevronDown
+    ArrowLeft, Clock, X, AlertCircle, CheckCircle2, Wallet, Network, ChevronDown, Users
 } from "lucide-react";
 import { ethers } from "ethers";
 import BusinessCampaignABI from "@/abis/BusinessCampaign.json";
@@ -18,7 +18,6 @@ import {
     checkNetwork,
     switchToSepolia,
     recordInvestment,
-    getInvestmentsByCampaign,
 } from "@/utils/investmentUtils";
 import RiskAssessmentPanel from "@/components/RiskAssessmentPanel";
 import CampaignReview from "@/components/admin/campaign-review";
@@ -118,6 +117,9 @@ export default function CampaignDetailPage() {
     const [investmentError, setInvestmentError] = useState("");
     const [investorCount, setInvestorCount] = useState(0);
     const [raisedAmount, setRaisedAmount] = useState(0);
+    const [campaignInvestors, setCampaignInvestors] = useState([]);
+    const [investorsLoading, setInvestorsLoading] = useState(false);
+    const [investmentRefresh, setInvestmentRefresh] = useState(0);
     const supabase = createClient();
 
     // shafqaat — Fetch campaign data from Supabase on load
@@ -147,30 +149,37 @@ export default function CampaignDetailPage() {
         checkAuth();
     }, []);
 
-    // shafqaat — Load total campaign investment info from Supabase
+    // Load completed investments and public investor profile details for this campaign.
     useEffect(() => {
         if (!campaign?.id) return;
 
-        async function loadInvestments() {
+        let cancelled = false;
+        async function loadInvestments(showLoader = false) {
+            if (showLoader) setInvestorsLoading(true);
             try {
-                const investments = await getInvestmentsByCampaign(campaign.id);
-                const total = investments.reduce(
-                    (sum, inv) => sum + (parseFloat(inv.amount) || 0),
-                    0
-                );
-                const uniqueInvestors = new Set(
-                    investments.map((inv) => inv.investor_id || inv.investor_address)
-                );
+                const response = await fetch(`/api/campaigns/${campaign.id}/investors`, { cache: "no-store" });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || "Unable to load campaign investors.");
 
-                setRaisedAmount(total);
-                setInvestorCount(uniqueInvestors.size);
+                if (!cancelled) {
+                    setRaisedAmount(Number(result.totalAmount) || 0);
+                    setInvestorCount(Number(result.investorCount) || 0);
+                    setCampaignInvestors(result.investors || []);
+                }
             } catch (err) {
                 console.error("Error loading campaign investments:", err);
+            } finally {
+                if (!cancelled) setInvestorsLoading(false);
             }
         }
 
-        loadInvestments();
-    }, [campaign?.id]);
+        loadInvestments(true);
+        const refreshInterval = window.setInterval(() => loadInvestments(), 15000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(refreshInterval);
+        };
+    }, [campaign?.id, investmentRefresh]);
 
     // shafqaat — Connect MetaMask wallet
     async function connectWallet() {
@@ -250,6 +259,11 @@ export default function CampaignDetailPage() {
             passed: daysLeft > 0
         });
 
+        checks.push({
+            label: "Funding goal has not been reached",
+            passed: !goalReached
+        });
+
         // Campaign deployed check
         checks.push({
             label: "Campaign smart contract deployed",
@@ -262,6 +276,10 @@ export default function CampaignDetailPage() {
     // shafqaat — Execute investment on blockchain
     async function investInCampaign() {
         setInvestmentError("");
+        if (goalReached) {
+            setInvestmentError("This campaign has reached its funding goal and is closed to new investments.");
+            return;
+        }
         setIsInvesting(true);
 
         try {
@@ -325,10 +343,12 @@ export default function CampaignDetailPage() {
                     campaign.id,
                     investmentAmount,
                     receipt.hash,
-                    walletAddress
+                    walletAddress,
+                    String(campaign.price_per_token ?? "0")
                 );
 
                 if (recorded) {
+                    setInvestmentRefresh((version) => version + 1);
                     setInvestmentError("");
                     setInvestmentAmount("");
                     setInvestModal(false);
@@ -422,8 +442,10 @@ export default function CampaignDetailPage() {
     }
 
     const daysLeft = calcDaysLeft(campaign.deadline);
-    const goal = parseFloat(campaign.funding_goal ?? 0).toFixed(4);
-    const pledgedAmount = parseFloat(campaign.amount_pledged ?? raisedAmount ?? 0);
+    const fundingGoal = parseFloat(campaign.funding_goal ?? 0);
+    const goal = fundingGoal.toFixed(4);
+    const pledgedAmount = Math.max(parseFloat(campaign.amount_pledged ?? 0) || 0, raisedAmount);
+    const goalReached = fundingGoal > 0 && pledgedAmount >= fundingGoal;
     const totalInvestors = Number(campaign.investor_count ?? investorCount ?? 0);
 
     // shafqaat — List of all IPFS documents to display as download links
@@ -596,7 +618,63 @@ export default function CampaignDetailPage() {
                                 </div>
                             </div>
 
-                            {/* shafqaat — Invest button (wiring to blockchain comes in Week 5) */}
+                            {/* Recent investors */}
+                            <section className="mb-5 overflow-hidden rounded-xl border border-white/10 bg-[#0d1117]/70">
+                                <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                                    <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+                                        <Users className="h-4 w-4 text-[#c4b5fd]" />
+                                        Recent investors
+                                    </h2>
+                                    <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-xs text-gray-400">
+                                        {investorCount}
+                                    </span>
+                                </div>
+                                {investorsLoading ? (
+                                    <div role="status" aria-label="Loading investors" className="flex justify-center py-6">
+                                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-[#a78bfa]" />
+                                    </div>
+                                ) : campaignInvestors.length > 0 ? (
+                                    <div className="max-h-64 divide-y divide-white/[0.06] overflow-y-auto">
+                                        {campaignInvestors.slice(0, 5).map((investor, index) => {
+                                            const name = investor.name || "Investor";
+                                            return (
+                                                <div key={`${name}-${index}`} className="flex items-center justify-between gap-3 px-4 py-3">
+                                                    <div className="flex min-w-0 items-center gap-3">
+                                                        {investor.avatarUrl ? (
+                                                            <Image
+                                                                src={investor.avatarUrl}
+                                                                alt={name}
+                                                                width={38}
+                                                                height={38}
+                                                                unoptimized
+                                                                className="h-10 w-10 shrink-0 rounded-full border border-white/10 object-cover"
+                                                            />
+                                                        ) : (
+                                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#6f42c1]/20 text-sm font-semibold text-[#c4b5fd]">
+                                                                {name.slice(0, 1).toUpperCase()}
+                                                            </div>
+                                                        )}
+                                                        <div className="min-w-0">
+                                                            <p className="truncate text-sm font-medium text-white">{name}</p>
+                                                            <p className="mt-0.5 truncate text-xs text-gray-400">
+                                                                {investor.tokens.toLocaleString(undefined, { maximumFractionDigits: 4 })} tokens
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="shrink-0 text-right">
+                                                        <p className="text-sm font-semibold tabular-nums text-white">{investor.amount.toFixed(4)} ETH</p>
+                                                        <p className="mt-0.5 text-[10px] text-emerald-300">✓ Completed</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <p className="px-4 py-5 text-center text-xs text-gray-500">No completed investments yet.</p>
+                                )}
+                            </section>
+
+                            {/* Invest button */}
                             <button
                                 onClick={() => {
                                     if (!walletAddress) {
@@ -605,10 +683,10 @@ export default function CampaignDetailPage() {
                                         setInvestModal(true);
                                     }
                                 }}
-                                disabled={daysLeft <= 0}
+                                disabled={daysLeft <= 0 || goalReached}
                                 className="w-full bg-[#6f42c1] hover:bg-[#5a3599] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-full transition text-sm"
                             >
-                                {daysLeft > 0 ? (walletAddress ? "Invest Now" : "Connect Wallet") : "Campaign Ended"}
+                                {goalReached ? "Funding Goal Reached" : daysLeft > 0 ? (walletAddress ? "Invest Now" : "Connect Wallet") : "Campaign Ended"}
                             </button>
 
                             <p className="text-xs text-gray-600 text-center mt-3">
@@ -703,7 +781,11 @@ export default function CampaignDetailPage() {
                         )}
 
                         {/* shafqaat — Action buttons */}
-                        {!walletAddress ? (
+                        {goalReached ? (
+                            <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-center text-sm font-medium text-emerald-200">
+                                This campaign has reached its funding goal and is closed to new investments.
+                            </div>
+                        ) : !walletAddress ? (
                             <button
                                 onClick={connectWallet}
                                 className="w-full bg-[#6f42c1] hover:bg-[#5a3599] text-white font-bold py-3 px-4 rounded-lg transition flex items-center justify-center gap-2"

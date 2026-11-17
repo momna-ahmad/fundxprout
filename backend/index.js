@@ -78,7 +78,7 @@ setInterval(async () => {
 function runRiskAssessmentForCampaign(campaignId) {
   return new Promise((resolve, reject) => {
     const scriptPath = path.resolve(__dirname, '..', 'ai', 'score_campaigns.py');
-    const pythonBin = process.env.PYTHON_BIN || 'python';
+    const pythonBin = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
 
     if (!fs.existsSync(scriptPath)) {
       reject(new Error(`AI scorer not found at ${scriptPath}`));

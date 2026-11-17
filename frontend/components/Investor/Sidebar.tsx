@@ -35,7 +35,7 @@ function truncateAddress(addr: string) {
 export default function Sidebar() {
   const pathname = usePathname();
   const router   = useRouter();
-  const { walletAddress, network, connectWallet, isConnecting } = useWallet();
+  const { walletAddress, connectWallet, isConnecting } = useWallet();
   const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
@@ -43,8 +43,6 @@ export default function Sidebar() {
       if (p) setProfile(p);
     });
   }, []);
-
-  const networkOk = network === 11155111;
 
   const handleSignOut = async () => {
     const supabase = createClient();
@@ -123,29 +121,7 @@ export default function Sidebar() {
       <div className="px-2.5 pb-4 pt-3 border-t border-sidebar-border flex flex-col gap-2">
 
         {/* Wallet status */}
-        {walletAddress ? (
-          <div
-            className="flex items-center gap-2 px-3 py-2 rounded-[10px] text-[12px] font-semibold border"
-            style={{
-              background:  networkOk
-                ? 'color-mix(in srgb, var(--chart-3) 8%, transparent)'
-                : 'color-mix(in srgb, var(--destructive) 8%, transparent)',
-              borderColor: networkOk
-                ? 'color-mix(in srgb, var(--chart-3) 20%, transparent)'
-                : 'color-mix(in srgb, var(--destructive) 20%, transparent)',
-              color: networkOk ? 'var(--chart-3)' : 'var(--destructive)',
-            }}
-          >
-            <span
-              className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-              style={{
-                background: networkOk ? 'var(--chart-3)' : 'var(--destructive)',
-                boxShadow:  networkOk ? '0 0 5px var(--chart-3)' : '0 0 5px var(--destructive)',
-              }}
-            />
-            {networkOk ? 'Sepolia Connected' : network ? 'Wrong Network' : 'Wallet Connected'}
-          </div>
-        ) : (
+        {!walletAddress && (
           <button
             onClick={connectWallet}
             disabled={isConnecting}

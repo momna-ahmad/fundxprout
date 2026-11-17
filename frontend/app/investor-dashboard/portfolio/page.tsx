@@ -6,7 +6,7 @@ import {
   LineChart, Line, ResponsiveContainer, Tooltip,
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
-import { formatCurrency, formatNumber, formatPercent, truncateAddress } from '@/lib/formatters';
+import { formatNumber, formatPercent, truncateAddress } from '@/lib/formatters';
 import { getUserPortfolioData, getUserTokenHoldings } from '@/utils/supabase/getPortfolio';
 import { Token } from '@/types';
 import { calculateUserEquity } from '@/lib/equity/tokenEquity';
@@ -76,14 +76,10 @@ export default function PortfolioPage() {
     );
   }
 
-  // Derive live ETH→USD rate from portfolio data (same approach as overview page)
-  const ethPrice: number =
-    (portfolioData.totalInvestedEth ?? 0) > 0
-      ? (portfolioData.totalInvested ?? 0) / (portfolioData.totalInvestedEth ?? 1)
-      : 3000;
-
-  // totalValue: token holdings are already in USD (price = pricePerTokenEth × ethPrice)
-  const totalValue = tokenHoldings.reduce((s: number, t: any) => s + t.value, 0) || portfolioData.portfolioValue;
+  const totalValueEth = tokenHoldings.reduce(
+    (sum: number, token) => sum + (Number(token.balance) || 0) * (Number(token.priceEth) || 0),
+    0,
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -99,10 +95,7 @@ export default function PortfolioPage() {
               Total Portfolio Value
             </div>
             <div className="text-[40px] font-bold tracking-tight text-foreground">
-              {formatCurrency(totalValue)}
-            </div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              ≈ {(totalValue / ethPrice).toFixed(4)} ETH
+              {totalValueEth.toFixed(4)} ETH
             </div>
             <div className="flex items-center gap-2.5 mt-2">
               <Badge variant="green">
@@ -131,7 +124,7 @@ export default function PortfolioPage() {
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-border">
-                {['Token', 'Balance', 'Price', 'Value (USD)', 'Equity %'].map((h) => (
+                {['Token', 'Balance', 'Price (ETH)', 'Value (ETH)', 'Equity %'].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
                     {h}
                   </th>
@@ -163,15 +156,15 @@ export default function PortfolioPage() {
                       <div className="text-[11px] text-muted-foreground">{token.symbol}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-foreground font-semibold">{formatCurrency(token.price, 2)}</div>
-                      <div className="text-[11px] text-muted-foreground">{(token.price / ethPrice).toFixed(6)} ETH</div>
+                      <div className="text-foreground font-semibold">{Number(token.priceEth).toFixed(3)} ETH</div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-foreground font-bold text-sm">{formatCurrency(token.value)}</div>
-                      <div className="text-[11px] text-muted-foreground">{(token.value / ethPrice).toFixed(4)} ETH</div>
+                      <div className="text-foreground font-bold text-sm">{(Number(token.balance) * Number(token.priceEth)).toFixed(4)} ETH</div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-foreground font-bold text-sm">{userEquityPct.toFixed(4)}%</div>
+                      <div className="text-foreground font-bold text-sm">
+                        {userEquityPct === null ? 'Unavailable' : `${userEquityPct.toFixed(4)}%`}
+                      </div>
                     </td>
                   </tr>
                 );

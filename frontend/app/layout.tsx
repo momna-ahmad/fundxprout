@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Poppins } from "next/font/google";
 import ThemeProvider from "@/components/theme-provider";
 import { AuthProvider } from "@/context/auth-context";
 import { Toaster } from "@/components/ui/Toaster";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const poppins = Poppins({
+  variable: "--font-poppins",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800", "900"],
 });
 
 const geistMono = Geist_Mono({
@@ -44,7 +45,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" data-theme="dark" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#0d1221] text-white min-h-screen`}
+        className={`${poppins.variable} ${geistMono.variable} antialiased bg-[#0d1221] text-white min-h-screen`}
         suppressHydrationWarning
       >
         <AuthProvider>

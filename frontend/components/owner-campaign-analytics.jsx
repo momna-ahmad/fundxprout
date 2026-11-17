@@ -28,15 +28,15 @@ const TOOLTIP_STYLE = {
 };
 
 const STATUS_COLORS = {
-  launched: "#28a745",
-  draft: "#f59e0b",
+  launched: "#a78bfa",
+  draft: "#8b6bd1",
   ended: "#6b7280",
-  completed: "#0ea5e9",
-  cancelled: "#ef4444",
+  completed: "#c4b5fd",
+  cancelled: "#8b6bd1",
   default: "#a78bfa",
 };
 
-const PIE_COLORS = ["#a78bfa", "#6f42c1", "#28a745", "#f59e0b", "#ef4444"];
+const PIE_COLORS = ["#6f42c1", "#8b6bd1", "#a78bfa", "#c4b5fd", "#ddd6fe"];
 
 function toNumber(value) {
   const parsed = Number.parseFloat(value ?? "0");
@@ -153,7 +153,7 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
-export default function OwnerCampaignAnalytics({ campaigns = [] }) {
+export default function OwnerCampaignAnalytics({ campaigns = [], loading = false }) {
   const totalGoal = campaigns.reduce((sum, campaign) => sum + toNumber(campaign.funding_goal), 0);
   const totalPledged = campaigns.reduce((sum, campaign) => sum + toNumber(campaign.amount_pledged), 0);
   const activeCampaigns = campaigns.filter((campaign) => normalizeStatus(campaign.status) === "launched").length;
@@ -176,6 +176,15 @@ export default function OwnerCampaignAnalytics({ campaigns = [] }) {
     }))
     .sort((a, b) => b.progress - a.progress || b.pledged - a.pledged)
     .slice(0, 5);
+
+  if (loading) {
+    return (
+      <div role="status" aria-live="polite" className="flex min-h-[360px] items-center justify-center">
+        <span className="sr-only">Loading campaign overview</span>
+        <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-white/15 border-t-[#a78bfa]" />
+      </div>
+    );
+  }
 
   if (campaigns.length === 0) {
     return (
@@ -243,8 +252,8 @@ export default function OwnerCampaignAnalytics({ campaigns = [] }) {
                   <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="ownerPledgedFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#28a745" stopOpacity={0.24} />
-                  <stop offset="95%" stopColor="#28a745" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#c4b5fd" stopOpacity={0.24} />
+                  <stop offset="95%" stopColor="#c4b5fd" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
@@ -253,7 +262,7 @@ export default function OwnerCampaignAnalytics({ campaigns = [] }) {
               <Tooltip content={<CustomTooltip />} />
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, color: "#9ca3af" }} />
               <Area type="monotone" dataKey="goal" name="Goal" stroke="#a78bfa" strokeWidth={2} fill="url(#ownerGoalFill)" dot={false} />
-              <Area type="monotone" dataKey="pledged" name="Pledged" stroke="#28a745" strokeWidth={2} fill="url(#ownerPledgedFill)" dot={false} />
+              <Area type="monotone" dataKey="pledged" name="Pledged" stroke="#c4b5fd" strokeWidth={2} fill="url(#ownerPledgedFill)" dot={false} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -271,7 +280,7 @@ export default function OwnerCampaignAnalytics({ campaigns = [] }) {
               <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(111,66,193,0.08)" }} />
               <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: 12, color: "#9ca3af" }} />
               <Bar dataKey="goal" name="Goal" fill="#a78bfa" radius={[6, 6, 0, 0]} maxBarSize={36} />
-              <Bar dataKey="pledged" name="Pledged" fill="#28a745" radius={[6, 6, 0, 0]} maxBarSize={36} />
+              <Bar dataKey="pledged" name="Pledged" fill="#c4b5fd" radius={[6, 6, 0, 0]} maxBarSize={36} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -279,23 +288,17 @@ export default function OwnerCampaignAnalytics({ campaigns = [] }) {
         <div className="bg-[#1e2530] border border-white/5 rounded-2xl p-6">
           <p className="text-sm font-bold text-white mb-1">Top Campaigns</p>
           <p className="text-xs text-gray-400 mb-4">Your strongest campaigns by funding progress</p>
-          <div className="space-y-4">
+          <div className="space-y-2.5">
             {topCampaigns.map((campaign) => (
-              <div key={campaign.id} className="rounded-xl bg-[#0d1117] border border-white/5 p-4">
-                <div className="flex items-start justify-between gap-3 mb-3">
+              <div key={campaign.id} className="rounded-xl bg-[#252b3d] border border-white/5 p-3">
+                <div className="flex items-center justify-between gap-3 mb-2">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-white truncate">{campaign.title}</p>
                     <p className="text-xs text-gray-400 mt-1 capitalize">{campaign.category || "Uncategorized"}</p>
                   </div>
-                  <span className="text-xs font-semibold text-[#a78bfa] whitespace-nowrap">
+                  <span className="shrink-0 rounded-full bg-[#6f42c1]/20 px-2.5 py-1 text-xs font-semibold text-[#c4b5fd] whitespace-nowrap">
                     {campaign.progress.toFixed(1)}%
                   </span>
-                </div>
-                <div className="w-full bg-white/10 rounded-full h-1.5 mb-3">
-                  <div
-                    className="bg-[#6f42c1] h-1.5 rounded-full"
-                    style={{ width: `${campaign.progress}%` }}
-                  />
                 </div>
                 <div className="flex items-center justify-between text-xs text-gray-400">
                   <span>{formatCompactEth(campaign.pledged)} pledged</span>

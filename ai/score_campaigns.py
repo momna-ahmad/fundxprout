@@ -39,11 +39,16 @@ warnings.filterwarnings("ignore")
 # to this script's location so it always works.
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(SCRIPT_DIR, ".env"))
+# Reuse the backend's existing Supabase/AI configuration when ai/.env is absent.
+load_dotenv(os.path.abspath(os.path.join(SCRIPT_DIR, "..", "backend", ".env")))
 
 GEMINI_API_KEY   = os.getenv("GEMINI_API_KEY", "")
 GROQ_API_KEY     = os.getenv("GROQ_API_KEY", "")
 SUPABASE_URL     = os.getenv("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+SUPABASE_SERVICE_KEY = (
+    os.getenv("SUPABASE_SERVICE_KEY", "")
+    or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+)
 
 # Fall back to anon key if service key not set yet (read-only mode — writes will fail)
 SUPABASE_KEY = SUPABASE_SERVICE_KEY or os.getenv("SUPABASE_ANON_KEY", "")
@@ -307,12 +312,96 @@ def main():
                         help="Re-score ALL campaigns, even those already scored")
     parser.add_argument("--campaign-id", type=str, default=None,
                         help="Score one specific campaign by id")
+    parser.add_argument("--preview", action="store_true",
+                        help="Evaluate a campaign JSON object from stdin without saving it")
     args = parser.parse_args()
+
+    # Preview uses the exact LLM scoring and Random Forest pipeline below, but
+    # deliberately avoids Supabase reads/writes so draft feedback stays private.
+    if args.preview:
+        try:
+            campaign = json.load(sys.stdin)
+            if not isinstance(campaign, dict):
+                raise ValueError("Campaign input must be a JSON object")
+
+            if not os.path.exists(MODEL_PATH):
+                raise FileNotFoundError(f"risk_model.pkl not found at {MODEL_PATH}")
+
+            model = joblib.load(MODEL_PATH)
+            scaler = joblib.load(SCALER_PATH)
+            with open(FEATURES_PATH, "r", encoding="utf-8") as feature_file:
+                feature_cols = json.load(feature_file)
+
+            llm_scores, llm_reasons = get_llm_scores(
+                title=campaign.get("title") or "Untitled",
+                description=campaign.get("description") or "",
+                category=campaign.get("category") or "Other",
+            )
+            features = build_feature_vector(campaign, llm_scores, feature_cols)
+            probability = model.predict_proba(scaler.transform(features))[0][1]
+            risk_score = round((1 - probability) * 10, 4)
+
+            criteria = [
+                ("problem_statement", "Problem Validity"),
+                ("proof_of_capability", "Proof of Capability"),
+                ("idea_clarity", "Idea Clarity"),
+                ("differentiation", "Differentiation"),
+                ("gtm_strategy", "Market Strategy"),
+                ("business_model", "Business Model"),
+                ("credibility", "Credibility"),
+                ("vagueness", "Vagueness"),
+            ]
+            ranked = []
+            for key, label in criteria:
+                value = float(llm_scores[key])
+                comparable = 11 - value if key == "vagueness" else value
+                ranked.append({"key": key, "label": label, "score": value,
+                               "reason": llm_reasons[key], "comparable": comparable})
+
+            strengths = [item for item in sorted(ranked, key=lambda item: item["comparable"], reverse=True)
+                         if item["comparable"] >= 7][:3]
+            weaknesses = [item for item in sorted(ranked, key=lambda item: item["comparable"])
+                          if item["comparable"] < 5][:3]
+            suggestions_by_key = {
+                "problem_statement": "Describe who experiences the problem, how often it occurs, and what evidence shows it matters.",
+                "proof_of_capability": "Add concrete evidence of execution, such as a prototype, milestones, relevant experience, or early results.",
+                "idea_clarity": "Explain what you offer, who it serves, and how it works in plain, specific language.",
+                "differentiation": "Name the alternatives customers use today and show what makes your approach meaningfully different.",
+                "gtm_strategy": "Specify your first customer segment, acquisition channels, and the steps to reach paying customers.",
+                "business_model": "Clarify what customers pay for, your pricing assumptions, and the main costs behind delivery.",
+                "credibility": "Support important claims with verifiable evidence, realistic assumptions, and clear sources.",
+                "vagueness": "Replace broad claims and buzzwords with measurable details, examples, timelines, and named customer groups.",
+            }
+            suggestions = [suggestions_by_key[item["key"]] for item in weaknesses]
+            tier = "Low Risk" if risk_score < 4 else "Medium Risk" if risk_score < 7 else "High Risk"
+            summary = f"The model estimates a {tier.lower()} profile."
+            if strengths:
+                summary += " Strongest areas: " + ", ".join(item["label"] for item in strengths) + "."
+            if weaknesses:
+                summary += " Focus improvement on: " + ", ".join(item["label"] for item in weaknesses) + "."
+            else:
+                summary += " No criterion fell below the model's improvement threshold."
+
+            print("PRELAUNCH_RESULT=" + json.dumps({
+                "risk_score": risk_score,
+                "risk_tier": tier,
+                "scores": llm_scores,
+                "reasons": llm_reasons,
+                "summary": summary,
+                "strengths": [{k: v for k, v in item.items() if k != "comparable"} for item in strengths],
+                "weaknesses": [{k: v for k, v in item.items() if k != "comparable"} for item in weaknesses],
+                "suggestions": suggestions,
+            }))
+            return
+        except Exception as error:
+            print(f"[ERROR] Preview evaluation failed: {error}", file=sys.stderr)
+            sys.exit(1)
 
     # ── Validate env vars ────────────────────────────────────────────────────
     if not SUPABASE_URL or not SUPABASE_KEY:
-        print("❌ ERROR: SUPABASE_URL and SUPABASE_SERVICE_KEY must be set in ai/.env")
-        print("   Get service_role key from: Supabase Dashboard → Settings → API")
+        print("❌ ERROR: SUPABASE_URL and a Supabase service-role key must be configured")
+        print("   Set SUPABASE_SERVICE_KEY or SUPABASE_SERVICE_ROLE_KEY in ai/.env or the backend environment.")
+        print("   Get the service_role key from: Supabase Dashboard → Settings → API")
         sys.exit(1)
 
     if not GEMINI_API_KEY and not GROQ_API_KEY:

@@ -217,7 +217,7 @@ async function getOpenSellOrders(req, res) {
     const [{ data: campaigns, error: campaignError }, { data: sellers, error: sellerError }] = await Promise.all([
       supabaseAdmin
         .from('campaigns')
-        .select('id, title, category, token_contract_address, secondary_trading_enabled')
+        .select('id, title, category, token_symbol, token_contract_address, secondary_trading_enabled')
         .in('id', campaignIds),
       supabaseAdmin
         .from('profiles')

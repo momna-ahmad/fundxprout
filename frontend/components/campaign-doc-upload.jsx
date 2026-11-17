@@ -10,6 +10,7 @@ export default function CampaignDocUpload({
   accept,
   required = false,
   onUploaded,
+  onUploadStateChange,
   formData,
 }) {
   const storedCid = formData?.[docKey] ?? "";
@@ -26,8 +27,10 @@ export default function CampaignDocUpload({
     if (!file) return;
 
     setUploading(true);
+    onUploadStateChange?.(docKey, true);
     setError("");
     setCid("");
+    onUploaded?.(docKey, "");
 
     try {
       const uploadData = new FormData();
@@ -47,6 +50,7 @@ export default function CampaignDocUpload({
       setError(uploadError.message);
     } finally {
       setUploading(false);
+      onUploadStateChange?.(docKey, false);
     }
   };
 

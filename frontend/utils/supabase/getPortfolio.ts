@@ -270,6 +270,42 @@ export async function getUserTokenHoldings() {
   }
 }
 
+// Return the investor's highest-priced active sell listings from the marketplace.
+export async function getTopSellListings(limit = 5) {
+  const supabase = createClient();
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data: listings, error } = await supabase
+      .from("token_orders")
+      .select("id, campaign_id, price, quantity_remaining, status, created_at, campaign:campaigns(id, title, token_symbol)")
+      .eq("investor_id", user.id)
+      .eq("side", "sell")
+      .in("status", ["open", "partially_filled"])
+      .order("price", { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return (listings || []).map((listing) => {
+      const campaign = Array.isArray(listing.campaign) ? listing.campaign[0] : listing.campaign;
+      return {
+        id: listing.id,
+        campaignId: String(listing.campaign_id),
+        name: campaign?.title || "Campaign Token",
+        symbol: campaign?.token_symbol || campaign?.title?.split(/\s+/)[0]?.toUpperCase() || "TOKEN",
+        priceEth: Number(listing.price) || 0,
+        quantityRemaining: Number(listing.quantity_remaining) || 0,
+        status: listing.status,
+      };
+    });
+  } catch (error) {
+    console.error("[getTopSellListings] Supabase error:", error);
+    return [];
+  }
+}
+
 // Generate mock price history for charts (in production, fetch from price oracle)
 function generateMockPriceHistory(): number[] {
   const history = [];

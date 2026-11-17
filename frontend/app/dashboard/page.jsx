@@ -1,8 +1,7 @@
 //frontend/app/dashboard/page.js
 "use client";
 // shafqaat — business dashboard Dashboard: fully dynamic, reads real data from Supabase
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import {
   TrendingUp,
   Users,
@@ -11,14 +10,12 @@ import {
   Plus,
   Eye,
   BarChart3,
-  Search,
   ChevronLeft,
   ChevronRight,
   UserCircle,
   Clock,
   CheckCircle,
   AlertCircle,
-  Edit2,
   FileText,
   Upload,
 } from "lucide-react";
@@ -29,11 +26,11 @@ import { getMyProfile, calcProfileCompletion } from "@/utils/supabase/getProfile
 import Navbar from "@/components/navbar";
 import { ethers } from "ethers";
 import BusinessCampaignJSON from "@/abis/BusinessCampaign.json";
-import CampaignReviewInfo from "@/components/campaign-review-info";
 import DashboardOverviewTab from "@/components/Owner/DashboardOverviewTab";
+import ProfileSettings from "@/components/Owner/ProfileSettings";
 import OwnerCampaignAnalytics from "@/components/owner-campaign-analytics";
 
-const ITEMS_PER_PAGE = 6; // shafqaat — campaigns per page in My Campaigns tab
+const ITEMS_PER_PAGE = 10;
 
 // Function to invoke withdrawFunds on the specific campaign contract
 async function handleWithdrawFunds(contractAddress, setTxPending) {
@@ -89,14 +86,15 @@ function calcDaysLeft(deadlineTimestamp) {
 // shafqaat — Get status styling based on campaign status
 function getStatusStyle(status) {
   const statusMap = {
-    draft: { bg: "bg-yellow-500/20", text: "text-yellow-400", label: "Draft" },
-    in_review: { bg: "bg-blue-500/20", text: "text-blue-400", label: "In Review" },
-    approved: { bg: "bg-green-500/20", text: "text-green-400", label: "Approved" },
-    launched: { bg: "bg-[#28a745]/20", text: "text-[#28a745]", label: "Launched" },
-    ended: { bg: "bg-gray-500/20", text: "text-gray-400", label: "Ended" },
-    rejected: { bg: "bg-red-500/20", text: "text-red-500", label: "Rejected" },
-    // completed: { bg: "bg-blue-500/20", text: "text-blue-400", label: "Completed" },
-    // cancelled: { bg: "bg-red-500/20", text: "text-red-400", label: "Cancelled" },
+    draft: { bg: "bg-[#6f42c1]/15", text: "text-[#c4b5fd]", label: "Draft" },
+    in_review: { bg: "bg-[#6f42c1]/15", text: "text-[#c4b5fd]", label: "In Review" },
+    approved: { bg: "bg-amber-500/15", text: "text-amber-300", label: "Approved" },
+    adjusted: { bg: "bg-amber-500/15", text: "text-amber-300", label: "Adjusted" },
+    launched: { bg: "bg-[#6f42c1]/15", text: "text-[#c4b5fd]", label: "Launched" },
+    successful: { bg: "bg-emerald-500/15", text: "text-emerald-300", label: "Successful" },
+    failed: { bg: "bg-red-500/15", text: "text-red-300", label: "Failed" },
+    ended: { bg: "bg-[#6f42c1]/15", text: "text-[#c4b5fd]", label: "Ended" },
+    rejected: { bg: "bg-[#6f42c1]/15", text: "text-[#c4b5fd]", label: "Rejected" },
   };
   return statusMap[status?.toLowerCase()] || { bg: "bg-white/10", text: "text-gray-400", label: status || "Unknown" };
 }
@@ -106,10 +104,27 @@ function buildDraftEditHref(campaign) {
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
-
   // shafqaat — Active tab state
   const [activeTab, setActiveTab] = useState("overview");
+  const [tabSwitchLoading, setTabSwitchLoading] = useState(false);
+  const tabSwitchTimeout = useRef(null);
+
+  const switchDashboardTab = (tabId) => {
+    if (activeTab === tabId) return;
+    setActiveTab(tabId);
+    setTabSwitchLoading(true);
+    if (tabSwitchTimeout.current) clearTimeout(tabSwitchTimeout.current);
+    tabSwitchTimeout.current = setTimeout(() => setTabSwitchLoading(false), 300);
+
+    const url = new URL(window.location.href);
+    if (tabId === "overview") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", tabId);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  };
+
+  useEffect(() => () => {
+    if (tabSwitchTimeout.current) clearTimeout(tabSwitchTimeout.current);
+  }, []);
 
   // shafqaat — Real data from Supabase
   const [user, setUser] = useState(null);
@@ -117,8 +132,8 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // shafqaat — My Campaigns tab: search + pagination state
-  const [search, setSearch] = useState("");
+  // My Campaigns tab status filter and pagination state
+  const [campaignStatusFilter, setCampaignStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
 
   const [txPending, setTxPending] = useState(null);
@@ -168,12 +183,10 @@ export default function DashboardPage() {
     (campaign) => campaign.status?.toLowerCase() === "successful",
   );
 
-  // shafqaat — Filtered + paginated campaigns for My Campaigns tab
+  // Filtered + paginated campaigns for My Campaigns tab
+  const campaignStatusOptions = [...new Set(campaigns.map((campaign) => campaign.status?.toLowerCase()).filter(Boolean))].sort();
   const filtered = campaigns.filter(
-    (c) =>
-      !search ||
-      c.title?.toLowerCase().includes(search.toLowerCase()) ||
-      c.category?.toLowerCase().includes(search.toLowerCase()),
+    (campaign) => campaignStatusFilter === "all" || campaign.status?.toLowerCase() === campaignStatusFilter,
   );
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
   const paginated = filtered.slice(
@@ -224,29 +237,6 @@ export default function DashboardPage() {
         </div>
         <div className="mb-6">
 
-          {/* shafqaat — Profile completion banner (only if incomplete) */}
-          {!loading && stats.profileCompletion < 100 && (
-            <div className="bg-[#6f42c1]/10 border border-[#6f42c1]/30 rounded-2xl p-4 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <AlertCircle className="h-5 w-5 text-[#a78bfa] shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-white">
-                    Profile {stats.profileCompletion}% complete
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    Complete your KYC/KYB to unlock campaign publishing trust badges
-                  </p>
-                </div>
-              </div>
-              <Link
-                href="/profile"
-                className="shrink-0 text-xs font-semibold text-white bg-[#6f42c1] hover:bg-[#5a3599] px-4 py-2 rounded-full transition"
-              >
-                Complete Profile →
-              </Link>
-            </div>
-          )}
-
         </div>
 
       {/* shafqaat — Tabs + Content */}
@@ -260,11 +250,7 @@ export default function DashboardPage() {
                 <button
                   key={tab.id}
                   onClick={() => {
-                    setActiveTab(tab.id);
-                    const url = new URL(window.location.href);
-                    if (tab.id === "overview") url.searchParams.delete("tab");
-                    else url.searchParams.set("tab", tab.id);
-                    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+                    switchDashboardTab(tab.id);
                   }}
                   className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold rounded-t-xl border-b-2 transition duration-200 whitespace-nowrap ${
                     activeTab === tab.id
@@ -276,10 +262,10 @@ export default function DashboardPage() {
                   {tab.label}
                   {/* shafqaat — Profile tab shows incomplete badge */}
                   {tab.id === "profile" && stats.profileCompletion < 100 && (
-                    <span className="ml-1 w-2 h-2 rounded-full bg-[#f6851b] inline-block" />
+                    <span className="ml-1 w-2 h-2 rounded-full bg-[#a78bfa] inline-block" />
                   )}
                   {tab.id === "financial-documents" && financialUploadCampaigns.length > 0 && (
-                    <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 text-[10px] font-bold text-[#181A2A]">
+                    <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#6f42c1] px-1.5 text-[10px] font-bold text-white">
                       {financialUploadCampaigns.length}
                     </span>
                   )}
@@ -290,6 +276,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="p-8">
+          <div className="relative min-h-[320px]">
           {/* ── Overview Tab ─────────────────────────────────── */}
           {activeTab === "overview" && (
             <OwnerCampaignAnalytics campaigns={campaigns} loading={loading} />
@@ -302,14 +289,14 @@ export default function DashboardPage() {
           {activeTab === "financial-documents" && (
             <section aria-labelledby="financial-documents-title" className="mx-auto max-w-4xl">
               <div className="mb-6 flex items-start gap-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-400/10 text-amber-300">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#6f42c1]/15 text-[#c4b5fd]">
                   <FileText className="h-5 w-5" />
                 </div>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 id="financial-documents-title" className="text-xl font-bold text-white">Financial Documents</h2>
                     {!loading && financialUploadCampaigns.length > 0 && (
-                      <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-xs font-semibold text-amber-200">
+                      <span className="rounded-full border border-[#a78bfa]/20 bg-[#6f42c1]/15 px-2.5 py-1 text-xs font-semibold text-[#c4b5fd]">
                         {financialUploadCampaigns.length} {financialUploadCampaigns.length === 1 ? "upload needed" : "uploads needed"}
                       </span>
                     )}
@@ -319,9 +306,9 @@ export default function DashboardPage() {
               </div>
 
               {loading ? (
-                <div className="rounded-2xl border border-white/10 bg-[#0d1117] p-6 text-sm text-gray-400">Loading campaigns…</div>
+                <div className="rounded-2xl border border-white/5 bg-[#1e2530] p-6 text-sm text-gray-400">Loading campaigns…</div>
               ) : financialUploadCampaigns.length === 0 ? (
-                <div className="rounded-2xl border border-white/10 bg-[#0d1117] px-6 py-12 text-center">
+                <div className="rounded-2xl border border-white/5 bg-[#1e2530] px-6 py-12 text-center">
                   <FileText className="mx-auto mb-3 h-8 w-8 text-gray-500" />
                   <p className="font-semibold text-white">No financial uploads needed</p>
                   <p className="mt-1 text-sm text-gray-400">Successful campaigns that need financial documents will appear here.</p>
@@ -329,12 +316,12 @@ export default function DashboardPage() {
               ) : (
                 <div className="space-y-3">
                   {financialUploadCampaigns.map((campaign) => (
-                    <div key={campaign.id} className="flex flex-col gap-4 rounded-2xl border border-amber-300/20 bg-[#0d1117] p-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div key={campaign.id} className="flex flex-col gap-4 rounded-2xl border border-white/5 bg-[#1e2530] p-4 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex min-w-0 items-start gap-3">
-                        <span className="mt-1 h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-amber-300" />
+                        <span className="mt-1 h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-[#a78bfa]" />
                         <div className="min-w-0">
                           <p className="break-words font-semibold text-white">{campaign.title || "Untitled campaign"}</p>
-                          <p className="mt-1 text-sm text-amber-100/70">Financial documents are needed for this successful campaign.</p>
+                          <p className="mt-1 text-sm text-gray-400">Financial documents are needed for this successful campaign.</p>
                         </div>
                       </div>
                       <Link
@@ -351,27 +338,30 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {/* ── My Campaigns Tab (with search + pagination) ── */}
+          {/* ── My Campaigns Tab ── */}
           {activeTab === "campaigns" && (
             <div>
-              {/* shafqaat — Header + search bar */}
+              {/* Header + status filter */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <h2 className="text-xl font-bold text-white">
                   My Campaigns {!loading && `(${campaigns.length})`}
                 </h2>
-                <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-                  <input
-                    type="text"
-                    placeholder="Search my campaigns…"
-                    value={search}
-                    onChange={(e) => {
-                      setSearch(e.target.value);
+                <label className="sm:ml-auto">
+                  <span className="sr-only">Filter campaigns by status</span>
+                  <select
+                    value={campaignStatusFilter}
+                    onChange={(event) => {
+                      setCampaignStatusFilter(event.target.value);
                       setCurrentPage(1);
                     }}
-                    className="w-full pl-9 pr-4 py-2 bg-[#0d1117] border border-white/10 rounded-full text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#6f42c1] transition"
-                  />
-                </div>
+                    className="w-full sm:w-44 rounded-xl border border-white/10 bg-[#1e2530] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[#a78bfa] focus:ring-2 focus:ring-[#6f42c1]/30"
+                  >
+                    <option value="all">All statuses</option>
+                    {campaignStatusOptions.map((status) => (
+                      <option key={status} value={status}>{getStatusStyle(status).label}</option>
+                    ))}
+                  </select>
+                </label>
               </div>
 
               {/* shafqaat — Loading / empty states */}
@@ -382,9 +372,7 @@ export default function DashboardPage() {
               )}
               {!loading && filtered.length === 0 && (
                 <div className="text-center py-12 text-gray-400 text-sm">
-                  {campaigns.length === 0
-                    ? "No campaigns yet."
-                    : `No campaigns matching "${search}"`}
+                  {campaigns.length === 0 ? "No campaigns yet." : "No campaigns with this status."}
                 </div>
               )}
 
@@ -453,37 +441,29 @@ export default function DashboardPage() {
                                 >
                                   {statusStyle.label}
                                 </span>
-                                   {["draft", "approved", "adjusted"].includes(campaign.status?.toLowerCase()) && (
-                                  <Link
-                                    href={buildDraftEditHref(campaign)}
-                                    className="text-yellow-400 hover:text-yellow-300 text-xs font-medium transition-colors"
-                                  >
-                                    {["approved", "adjusted"].includes(campaign.status?.toLowerCase() ?? "")
-                                      ? "Launch"
-                                      : "Edit"}
-                                  </Link>
-                                )}
                               </div>
                             </td>
                             <td className="py-4 px-4">
-                              <div className="flex gap-2">
-                                {["rejected", "approved", "adjusted"].includes(campaign.status?.toLowerCase()) && (
-                                  <CampaignReviewInfo review={campaign.campaign_review} />
-                                )}
-
-                                {/* Upload Financials for Successful Campaigns */}
-                                {campaign.status?.toLowerCase() === "successful" && (
+                              <div className="flex items-center gap-3">
+                                {campaign.status?.toLowerCase() === "draft" && (
                                   <Link
-                                    href={`/dashboard/financials?campaignId=${campaign.id}`}
-                                    className="inline-flex items-center px-2.5 py-1 bg-[#6f42c1]/20 border border-[#6f42c1]/40 hover:bg-[#6f42c1] text-[#a78bfa] hover:text-white rounded-md text-xs font-medium transition-all"
+                                    href={buildDraftEditHref(campaign)}
+                                    className="inline-flex min-w-14 items-center justify-center rounded-md border border-white/20 px-2 py-1 text-xs font-semibold text-[#a78bfa] transition-colors hover:border-white/40 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa]"
                                   >
-                                    Upload Financials
+                                    Edit
                                   </Link>
                                 )}
-
+                                {["approved", "adjusted"].includes(campaign.status?.toLowerCase()) && (
+                                  <Link
+                                    href={buildDraftEditHref(campaign)}
+                                    className="inline-flex min-w-14 items-center justify-center rounded-md border border-white/20 px-2 py-1 text-xs font-semibold text-[#a78bfa] transition-colors hover:border-white/40 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa]"
+                                  >
+                                    Launch
+                                  </Link>
+                                )}
                                 <Link
                                   href={`/campaigns/${campaign.id}`}
-                                  className="text-[#a78bfa] hover:text-white text-xs font-medium transition-colors"
+                                  className="inline-flex min-w-14 items-center justify-center rounded-md border border-white/20 px-2 py-1 text-xs font-semibold text-[#a78bfa] transition-colors hover:border-white/40 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa]"
                                 >
                                   View
                                 </Link>
@@ -539,124 +519,20 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ── Profile Tab ────────────────────────────────── */}
           {activeTab === "profile" && (
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white">
-                  Creator Profile
-                </h2>
-                <Link
-                  href="/profile"
-                  className="bg-[#6f42c1] hover:bg-[#5a3599] text-white text-sm font-semibold px-5 py-2.5 rounded-full transition"
-                >
-                  {profile ? "Edit Profile" : "Create Profile"}
-                </Link>
-              </div>
-
-              {/* shafqaat — Profile completion bar */}
-              <div className="bg-[#0d1117] rounded-2xl p-6 border border-white/5 mb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-semibold text-white">
-                    Profile Completion
-                  </span>
-                  <span className="text-sm font-bold text-[#a78bfa]">
-                    {stats.profileCompletion}%
-                  </span>
-                </div>
-                <div className="w-full bg-white/10 rounded-full h-2">
-                  <div
-                    className="bg-[#6f42c1] h-2 rounded-full transition-all duration-700"
-                    style={{ width: `${stats.profileCompletion}%` }}
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Complete your profile to earn trust badges visible to
-                  investors
-                </p>
-              </div>
-
-              {/* shafqaat — Profile summary if it exists */}
-              {profile ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    { label: "Full Name", value: profile.full_name },
-                    { label: "Display Name", value: profile.display_name },
-                    { label: "Country", value: profile.country },
-                    { label: "City", value: profile.city },
-                    { label: "Phone", value: profile.phone },
-                    { label: "Website", value: profile.website_url },
-                  ].map(({ label, value }) =>
-                    value ? (
-                      <div
-                        key={label}
-                        className="bg-[#0d1117] rounded-xl p-4 border border-white/5"
-                      >
-                        <p className="text-xs text-gray-500 mb-1">{label}</p>
-                        <p className="text-sm text-white font-medium">
-                          {value}
-                        </p>
-                      </div>
-                    ) : null,
-                  )}
-                  {/* shafqaat — KYC/KYB doc status indicators */}
-                  <div className="md:col-span-2 bg-[#0d1117] rounded-xl p-4 border border-white/5">
-                    <p className="text-xs text-gray-500 mb-3">
-                      Document Verification Status
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {[
-                        {
-                          label: "National ID",
-                          done: !!profile.national_id_cid,
-                        },
-                        { label: "Selfie", done: !!profile.selfie_cid },
-                        {
-                          label: "Proof of Address",
-                          done: !!profile.proof_of_address_cid,
-                        },
-                        {
-                          label: "Business Reg.",
-                          done: !!profile.business_reg_cid,
-                        },
-                        { label: "Tax Cert.", done: !!profile.tax_cert_cid },
-                        {
-                          label: "Bank Statement",
-                          done: !!profile.bank_statement_cid,
-                        },
-                      ].map(({ label, done }) => (
-                        <div key={label} className="flex items-center gap-2">
-                          {done ? (
-                            <CheckCircle className="h-4 w-4 text-[#28a745] shrink-0" />
-                          ) : (
-                            <AlertCircle className="h-4 w-4 text-gray-600 shrink-0" />
-                          )}
-                          <span
-                            className={`text-xs ${done ? "text-gray-300" : "text-gray-600"}`}
-                          >
-                            {label}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <UserCircle className="h-12 w-12 text-[#6f42c1]/30 mx-auto mb-3" />
-                  <p className="text-gray-400 text-sm mb-4">
-                    You haven&apos;t set up your creator profile yet.
-                  </p>
-                  <Link
-                    href="/profile"
-                    className="inline-block bg-[#6f42c1] hover:bg-[#5a3599] text-white text-sm font-semibold px-6 py-3 rounded-full transition"
-                  >
-                    Set Up Profile →
-                  </Link>
-                </div>
-              )}
-            </div>
+            <ProfileSettings
+              embedded
+              onBack={() => switchDashboardTab("overview")}
+            />
           )}
+
+            {tabSwitchLoading && (
+              <div role="status" aria-live="polite" className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-[#1a2030]/90 backdrop-blur-sm">
+                <span className="sr-only">Loading dashboard tab</span>
+                <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-white/15 border-t-[#a78bfa]" />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -2,10 +2,10 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Plus, Target, Eye, Edit2, ChevronLeft, ChevronRight, ChevronDown, Search, SlidersHorizontal } from "lucide-react";
+import { Plus, Target, ChevronLeft, ChevronRight, Users } from "lucide-react";
+import Image from "next/image";
 import { ethers } from "ethers";
 import BusinessCampaignJSON from "@/abis/BusinessCampaign.json";
-import CampaignReviewInfo from "@/components/campaign-review-info";
 import { logTransaction } from "@/utils/investmentUtils";
 import { createClient } from "@/utils/supabase/client";
 import { calcDaysLeft } from "@/components/campaign-card";
@@ -13,6 +13,8 @@ import { calcDaysLeft } from "@/components/campaign-card";
 export interface CampaignItem {
   id: string | number;
   title: string;
+  description?: string | null;
+  image_url?: string | null;
   category?: string | null;
   status: string;
   funding_goal?: string | number | null;
@@ -38,14 +40,14 @@ interface DashboardOverviewTabProps {
 
 function getStatusStyle(status?: string): { bg: string; text: string; label: string } {
   const statusMap: Record<string, { bg: string; text: string; label: string }> = {
-    draft: { bg: "bg-amber-400/10", text: "text-amber-300", label: "Draft" },
-    in_review: { bg: "bg-sky-400/10", text: "text-sky-300", label: "In Review" },
-    approved: { bg: "bg-emerald-400/10", text: "text-emerald-300", label: "Approved" },
-    launched: { bg: "bg-emerald-400/10", text: "text-emerald-300", label: "Launched" },
-    ended: { bg: "bg-slate-400/10", text: "text-slate-300", label: "Ended" },
-    successful: { bg: "bg-teal-400/10", text: "text-teal-300", label: "Successful" },
-    failed: { bg: "bg-rose-400/10", text: "text-rose-300", label: "Failed" },
-    rejected: { bg: "bg-rose-400/10", text: "text-rose-300", label: "Rejected" },
+    draft: { bg: "bg-[#6f42c1]/15", text: "text-[#c4b5fd]", label: "Draft" },
+    in_review: { bg: "bg-[#6f42c1]/15", text: "text-[#c4b5fd]", label: "In Review" },
+    approved: { bg: "bg-[#6f42c1]/15", text: "text-[#c4b5fd]", label: "Approved" },
+    launched: { bg: "bg-[#6f42c1]/15", text: "text-[#c4b5fd]", label: "Launched" },
+    ended: { bg: "bg-[#6f42c1]/15", text: "text-[#c4b5fd]", label: "Ended" },
+    successful: { bg: "bg-emerald-500/15", text: "text-emerald-300", label: "Successful" },
+    failed: { bg: "bg-red-500/15", text: "text-red-300", label: "Failed" },
+    rejected: { bg: "bg-[#6f42c1]/15", text: "text-[#c4b5fd]", label: "Rejected" },
   };
 
   return (
@@ -57,10 +59,6 @@ function getStatusStyle(status?: string): { bg: string; text: string; label: str
   );
 }
 
-function buildDraftEditHref(campaign: CampaignItem): string {
-  return `/create-campaign?campaignId=${encodeURIComponent(String(campaign.id ?? ""))}`;
-}
-
 export default function DashboardOverviewTab({
   campaigns = [],
   loading = false,
@@ -68,36 +66,21 @@ export default function DashboardOverviewTab({
   const [txPending, setTxPending] = useState<string | null>(null);
   const supabase = createClient();
   const [currentPage, setCurrentPage] = useState(1);
-  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set());
+  const ITEMS_PER_PAGE = 10;
 
-  const ITEMS_PER_PAGE = 5;
-
-  const statusOptions = Array.from(new Set(campaigns.map((campaign) => campaign.status?.toLowerCase()).filter(Boolean))).sort();
-  const categoryOptions = Array.from(new Set(campaigns.map((campaign) => campaign.category?.trim()).filter((category): category is string => Boolean(category)))).sort((a, b) => a.localeCompare(b));
-  const filteredCampaigns = campaigns.filter((campaign) => {
-    const matchesSearch = !search || campaign.title.toLowerCase().includes(search.toLowerCase());
+  const overviewCampaigns = campaigns.filter((campaign) =>
+    ["launched", "successful", "failed"].includes(campaign.status?.toLowerCase() ?? ""),
+  );
+  const filteredCampaigns = overviewCampaigns.filter((campaign) => {
     const matchesStatus = statusFilter === "all" || campaign.status?.toLowerCase() === statusFilter;
-    const matchesCategory = categoryFilter === "all" || campaign.category?.toLowerCase() === categoryFilter;
-    return matchesSearch && matchesStatus && matchesCategory;
+    return matchesStatus;
   });
   const totalPages = Math.ceil(filteredCampaigns.length / ITEMS_PER_PAGE);
   const paginated = filteredCampaigns.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE,
   );
-
-  function toggleCampaign(campaignId: string | number) {
-    const key = String(campaignId);
-    setExpandedCampaigns((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
 
   async function handleWithdrawFunds(campaign: CampaignItem) {
   if (!campaign.contract_address) return;
@@ -183,13 +166,30 @@ export default function DashboardOverviewTab({
           <p className="mt-1 text-sm text-gray-400">Review campaign performance and manage active projects.</p>
         </div>
 
-        <Link
-          href="/create-campaign"
-          className="w-full sm:w-fit rounded-xl border border-[#8b6bd1]/40 bg-[#6f42c1] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#5a3599] inline-flex items-center justify-center gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          New Campaign
-        </Link>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          {!loading && overviewCampaigns.length > 0 && (
+            <label>
+              <span className="sr-only">Filter campaigns by status</span>
+              <select
+                value={statusFilter}
+                onChange={(event) => { setStatusFilter(event.target.value); setCurrentPage(1); }}
+                className="w-full rounded-xl border border-white/10 bg-[#1e2530] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[#a78bfa] focus:ring-2 focus:ring-[#6f42c1]/30 sm:w-40"
+              >
+                <option value="all">All statuses</option>
+                <option value="launched">Launched</option>
+                <option value="successful">Successful</option>
+                <option value="failed">Failed</option>
+              </select>
+            </label>
+          )}
+          <Link
+            href="/create-campaign"
+            className="w-full sm:w-fit rounded-xl border border-[#8b6bd1]/40 bg-[#6f42c1] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#5a3599] inline-flex items-center justify-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            New Campaign
+          </Link>
+        </div>
       </div>
 
       {loading && (
@@ -211,249 +211,123 @@ export default function DashboardOverviewTab({
         </div>
       )}
 
-      {!loading && campaigns.length > 0 && (
-        <div className="mb-5 rounded-2xl border border-slate-400/40 bg-[#151c2a] p-4 shadow-sm shadow-black/20 sm:p-5">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-200">
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Filter campaigns
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1.5fr)_minmax(160px,1fr)_minmax(160px,1fr)_auto]">
-            <label className="relative block">
-              <span className="sr-only">Search campaigns</span>
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-              <input
-                value={search}
-                onChange={(event) => { setSearch(event.target.value); setCurrentPage(1); }}
-                placeholder="Search by campaign title"
-                className="w-full rounded-xl border border-slate-400/35 bg-[#0f1725] py-2.5 pl-9 pr-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-[#c4b5fd] focus:ring-2 focus:ring-[#8b6bd1]/30"
-              />
-            </label>
-            <label>
-              <span className="sr-only">Filter by status</span>
-              <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setCurrentPage(1); }} className="w-full rounded-xl border border-slate-400/35 bg-[#0f1725] px-3 py-2.5 text-sm text-white outline-none focus:border-[#c4b5fd] focus:ring-2 focus:ring-[#8b6bd1]/30">
-                <option value="all">All statuses</option>
-                {statusOptions.map((status) => <option key={status} value={status}>{getStatusStyle(status).label}</option>)}
-              </select>
-            </label>
-            <label>
-              <span className="sr-only">Filter by category</span>
-              <select value={categoryFilter} onChange={(event) => { setCategoryFilter(event.target.value); setCurrentPage(1); }} className="w-full rounded-xl border border-slate-400/35 bg-[#0f1725] px-3 py-2.5 text-sm text-white outline-none focus:border-[#c4b5fd] focus:ring-2 focus:ring-[#8b6bd1]/30">
-                <option value="all">All categories</option>
-                {categoryOptions.map((category) => <option key={category} value={category.toLowerCase()}>{category}</option>)}
-              </select>
-            </label>
-            <div className="flex items-center justify-start px-1 text-xs text-gray-500 sm:col-span-2 xl:col-span-1 xl:justify-end">
-              <span className="font-medium text-slate-300">{filteredCampaigns.length} {filteredCampaigns.length === 1 ? "campaign" : "campaigns"}</span>
-            </div>
-          </div>
+      {!loading && campaigns.length > 0 && overviewCampaigns.length === 0 && (
+        <div className="rounded-2xl border border-white/5 bg-[#1e2530] px-5 py-10 text-center">
+          <p className="text-sm font-medium text-gray-300">No launched, successful, or failed campaigns yet.</p>
         </div>
       )}
 
-      {!loading && campaigns.length > 0 && filteredCampaigns.length === 0 && (
-        <div className="rounded-2xl border border-slate-400/40 bg-[#151c2a] px-5 py-10 text-center">
+      {!loading && overviewCampaigns.length > 0 && filteredCampaigns.length === 0 && (
+        <div className="rounded-2xl border border-white/5 bg-[#1e2530] px-5 py-10 text-center">
           <p className="text-sm font-medium text-gray-300">No campaigns match these filters.</p>
-          <button type="button" onClick={() => { setSearch(""); setStatusFilter("all"); setCategoryFilter("all"); setCurrentPage(1); }} className="mt-2 text-sm font-medium text-[#a78bfa] hover:text-white">Clear filters</button>
+          <button type="button" onClick={() => { setStatusFilter("all"); setCurrentPage(1); }} className="mt-2 text-sm font-medium text-[#a78bfa] hover:text-white">Show all campaigns</button>
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {!loading &&
-          paginated.map((campaign) => {
+          paginated.map((campaign, index) => {
             const daysLeft = calcDaysLeft(campaign.deadline);
             const goal = parseFloat(String(campaign.funding_goal ?? "0"));
             const pledged = parseFloat(String(campaign.amount_pledged ?? "0"));
             const statusStyle = getStatusStyle(campaign.status);
-            const isGoalReached = pledged >= goal;
-            const statusLower = campaign.status?.toLowerCase() ?? "";
-            const isExpanded = expandedCampaigns.has(String(campaign.id));
-            const progressPercent = Math.min(100, goal > 0 ? (pledged / goal) * 100 : 0);
-
-            const shouldShowValuationAndEquity = ![
-              "draft",
-              "in_review",
-              "rejected",
-            ].includes(statusLower);
-
-            const offeredPct =
-              campaign.equity_offered !== undefined && campaign.equity_offered !== null
-                ? parseFloat(String(campaign.equity_offered))
-                : 0;
-
-            const retainedPct =
-              campaign.equity_retained !== undefined && campaign.equity_retained !== null
-                ? parseFloat(String(campaign.equity_retained))
-                : 100 - offeredPct;
-
-            const metrics: Array<{
-              label: string;
-              value: string | number;
-              accent: boolean;
-            }> = [
-              {
-                label: "Goal",
-                value: `${goal.toFixed(3)} ETH`,
-                accent: false,
-              },
-              {
-                label: "Amount Pledged",
-                value: `${pledged.toFixed(3)} ETH`,
-                accent: false,
-              },
-              {
-                label: "Investors",
-                value: Number(campaign.investor_count ?? 0),
-                accent: false,
-              },
-              {
-                label: "Category",
-                value: campaign.category ?? "—",
-                accent: false,
-              },
-              {
-                label: "Duration Left",
-                value: daysLeft > 0 ? `${daysLeft}d` : "Ended",
-                accent: false,
-              },
-              {
-                label: "Price/Token",
-                value: `${parseFloat(String(campaign.price_per_token ?? "0")).toFixed(6)} ETH`,
-                accent: true,
-              },
-            ];
-
-            if (shouldShowValuationAndEquity) {
-              const valuationVal = parseFloat(String(campaign.valuation ?? "0"));
-              metrics.push(
-                {
-                  label: "Approved Valuation",
-                  value: `${valuationVal.toFixed(3)} ETH`,
-                  accent: true,
-                },
-                {
-                  label: "Equity Offered / Retained",
-                  value: `${offeredPct.toFixed(4)}% / ${retainedPct.toFixed(2)}%`,
-                  accent: true,
-                }
-              );
-            }
+            const isGoalReached = goal > 0 && pledged >= goal;
+            const fundedPercent = Math.min(100, goal > 0 ? (pledged / goal) * 100 : 0);
 
             return (
               <div
                 key={campaign.id}
-                className="overflow-hidden rounded-2xl border border-slate-400/40 bg-[#151c2a] shadow-lg shadow-black/20 transition-colors hover:border-slate-300/55"
+                className={`flex h-full flex-col rounded-[20px] border bg-[#1e2530] p-3 shadow-sm transition-shadow duration-200 ${
+                  index % 3 === 1
+                    ? "border-2 border-[#a78bfa]/60 shadow-lg shadow-[#6f42c1]/15 hover:shadow-xl hover:shadow-[#6f42c1]/20"
+                    : "border-white/10 hover:border-[#a78bfa]/40 hover:shadow-md"
+                }`}
               >
-                <div className="flex items-center gap-3 px-5 py-4 sm:px-6">
-                  <button
-                    type="button"
-                    aria-expanded={isExpanded}
-                    aria-controls={`campaign-details-${campaign.id}`}
-                    onClick={() => toggleCampaign(campaign.id)}
-                    className="flex min-w-0 flex-1 items-center justify-between gap-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#a78bfa]"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-semibold text-white sm:text-sm">{campaign.title}</span>
-                      <span className="mt-1 block text-xs text-slate-200">{campaign.category || "Uncategorized"}</span>
-                    </span>
-                    <span className="flex shrink-0 items-center gap-3">
-                    <span
-                      className={`rounded-full border border-white/5 px-2.5 py-1 text-[11px] font-semibold ${statusStyle.bg} ${statusStyle.text}`}
-                    >
-                      {statusStyle.label}
-                    </span>
-                      <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform duration-200 ${isExpanded ? "rotate-180 text-gray-300" : ""}`} />
-                    </span>
-                  </button>
-                  {["rejected", "approved", "adjusted"].includes(statusLower) && (
-                    <CampaignReviewInfo review={campaign.campaign_review} />
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 gap-2 px-5 pt-3 sm:grid-cols-3 sm:px-6">
-                  {[
-                    { label: "Funding goal", value: `${goal.toFixed(3)} ETH` },
-                    { label: "Raised", value: `${pledged.toFixed(3)} ETH` },
-                    { label: "Investors", value: Number(campaign.investor_count ?? 0) },
-                  ].map((item) => (
-                    <div key={item.label} className="min-w-0 rounded-lg border border-slate-300/15 bg-[#1c2738] px-3 py-2">
-                      <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-300 sm:text-[11px]">{item.label}</p>
-                      <p className="mt-1 truncate text-sm font-bold text-white">{item.value}</p>
+                <div className="relative mb-3 aspect-[16/9] w-full overflow-hidden rounded-xl bg-[#6f42c1]/10">
+                  {campaign.image_url ? (
+                    <Image
+                      src={campaign.image_url}
+                      alt={campaign.title}
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                      className="object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-3xl font-semibold text-[#a78bfa]">
+                      {(campaign.title || "?").slice(0, 1).toUpperCase()}
                     </div>
-                  ))}
+                  )}
                 </div>
 
-                <div className="px-5 pb-4 pt-3 sm:px-6">
-                  <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium text-slate-200">
-                    <span>Funding progress</span>
-                    <span className="tabular-nums">{progressPercent.toFixed(0)}%</span>
-                  </div>
-                  <div role="progressbar" aria-label={`${campaign.title} funding progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progressPercent)} className="h-2 overflow-hidden rounded-full bg-slate-500/50">
-                    <div className="h-full rounded-full bg-gradient-to-r from-[#6f42c1] to-[#a78bfa] transition-all duration-300" style={{ width: `${progressPercent}%` }} />
-                  </div>
-                </div>
-
-                {isExpanded && (
-                  <div id={`campaign-details-${campaign.id}`} className="border-t border-white/[0.10] px-5 pb-4 pt-3 sm:px-6">
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-                      {metrics.map((item) => (
-                        <div key={item.label} className="min-w-0 rounded-lg border border-slate-400/25 bg-[#202c3f] px-3 py-2">
-                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-200">{item.label}</p>
-                          <p className={`break-words text-xs font-semibold ${item.accent ? "text-[#c4b5fd]" : "text-gray-200"}`}>{item.value}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-white/[0.07] pt-4">
-                  {isGoalReached && campaign.contract_address && !campaign.funds_withdrawn && (
-                    <button
-                      onClick={() => handleWithdrawFunds(campaign)}
-                      disabled={txPending === campaign.contract_address}
-                      className="rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-3.5 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/15 disabled:opacity-50"
-                    >
-                      {txPending === campaign.contract_address
-                        ? "Withdrawing..."
-                        : "Withdraw Funds"}
-                    </button>
-                  )}
-
-                  {["draft", "approved", "adjusted"].includes(statusLower) && (
-                    <Link
-                      href={buildDraftEditHref(campaign)}
-                      className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-300 transition-colors hover:text-white"
-                    >
-                      <Edit2 className="h-3.5 w-3.5" />
-                      {["approved", "adjusted"].includes(statusLower)
-                        ? "Launch"
-                        : "Edit"}
-                    </Link>
-                  )}
-
-                  <Link
-                    href={`/campaigns/${campaign.id}`}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-[#c4b5fd] transition-colors hover:text-white"
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    View Public Page
+                <div className="mb-1 flex items-start justify-between gap-2">
+                  <Link href={`/campaigns/${campaign.id}`} className="line-clamp-1 text-base font-medium leading-tight text-white hover:text-[#c4b5fd]">
+                    {campaign.title}
                   </Link>
-
-                  {campaign.transaction_hash && (
-                    <a
-                      href={`https://sepolia.etherscan.io/tx/${campaign.transaction_hash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 transition-colors hover:text-white"
-                    >
-                      View on Etherscan
-                    </a>
-                  )}
+                  <span className={`shrink-0 rounded-full border border-white/5 px-2 py-0.5 text-[10px] font-semibold ${statusStyle.bg} ${statusStyle.text}`}>
+                    {statusStyle.label}
+                  </span>
                 </div>
+
+                <p className="mb-3 line-clamp-2 min-h-10 text-xs leading-5 text-gray-400">
+                  {campaign.description || "Campaign details are available on the public campaign page."}
+                </p>
+
+                <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-gray-300">
+                    <Users className="h-3.5 w-3.5 text-[#a78bfa]" />
+                    {Number(campaign.investor_count ?? 0)} backers
+                  </span>
+                  <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] capitalize text-gray-300">
+                    {campaign.category || "Uncategorized"}
+                  </span>
+                </div>
+
+                <div className="mt-auto space-y-1.5 border-t border-white/10 pt-3 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-400">Raised</span>
+                    <span className="font-semibold tabular-nums text-white">{pledged.toFixed(3)} ETH</span>
                   </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-400">Funding goal</span>
+                    <span className="font-medium tabular-nums text-gray-200">{goal.toFixed(3)} ETH</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-400">Backers</span>
+                    <span className="font-medium tabular-nums text-gray-200">{Number(campaign.investor_count ?? 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 pt-0.5">
+                    <span className="text-gray-400">Funding</span>
+                    <span className="font-semibold tabular-nums text-white">{fundedPercent.toFixed(0)}% <span className="font-normal text-gray-400">· {daysLeft > 0 ? `${daysLeft}d left` : "Closed"}</span></span>
+                  </div>
+                  <div
+                    className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10"
+                    role="progressbar"
+                    aria-label={`${campaign.title} funding progress`}
+                    aria-valuenow={Math.round(fundedPercent)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  >
+                    <div className="h-full rounded-full bg-gradient-to-r from-[#6f42c1] to-[#a78bfa]" style={{ width: `${fundedPercent}%` }} />
+                  </div>
+                </div>
+
+                {isGoalReached && campaign.contract_address && !campaign.funds_withdrawn && (
+                  <button
+                    onClick={() => handleWithdrawFunds(campaign)}
+                    disabled={txPending === String(campaign.id)}
+                    className="mt-3 self-start rounded-lg border border-[#a78bfa]/20 bg-[#6f42c1]/15 px-3 py-1.5 text-xs font-semibold text-[#c4b5fd] transition hover:bg-[#6f42c1]/25 disabled:opacity-50"
+                  >
+                    {txPending === String(campaign.id) ? "Withdrawing..." : "Withdraw Funds"}
+                  </button>
                 )}
               </div>
             );
           })}
+      </div>
 
           {!loading && totalPages > 1 && (
-                <div className="flex items-center justify-center gap-3">
+                <div className="mt-6 flex items-center justify-center gap-3">
                   <button
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
@@ -491,7 +365,6 @@ export default function DashboardOverviewTab({
                 </div>
               )}
               
-      </div>
     </div>
   );
 }

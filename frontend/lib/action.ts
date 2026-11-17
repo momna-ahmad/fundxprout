@@ -455,6 +455,33 @@ export async function saveDraftCampaign(draftData: any) {
   return { success: true, campaignId: data?.id };
 }
 
+export async function evaluatePrelaunchCampaign(campaignData: any) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!user || !session?.access_token) return { error: "Sign in to evaluate your campaign." };
+
+  try {
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/campaigns/prelaunch-evaluate`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(campaignData),
+        cache: "no-store",
+      },
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return { error: payload.error || "Campaign evaluation failed." };
+    return { evaluation: payload.evaluation };
+  } catch (error: any) {
+    return { error: error.message || "Could not connect to the AI evaluation service." };
+  }
+}
+
 export async function submitCampaignForReview(campaignId: string) {
   const supabase = await createClient();
   const {

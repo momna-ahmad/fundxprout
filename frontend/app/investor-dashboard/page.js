@@ -1,6 +1,6 @@
 "use client";
 // Investor Dashboard: Browse campaigns, track investments, view portfolio
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   TrendingUp,
@@ -59,6 +59,20 @@ export default function InvestorDashboardPage() {
   const router = useRouter();
   // Active tab state
   const [activeTab, setActiveTab] = useState("browse");
+  const [tabSwitchLoading, setTabSwitchLoading] = useState(false);
+  const tabSwitchTimeout = useRef(null);
+
+  const switchInvestorTab = (tabId) => {
+    if (activeTab === tabId) return;
+    setActiveTab(tabId);
+    setTabSwitchLoading(true);
+    if (tabSwitchTimeout.current) clearTimeout(tabSwitchTimeout.current);
+    tabSwitchTimeout.current = setTimeout(() => setTabSwitchLoading(false), 300);
+  };
+
+  useEffect(() => () => {
+    if (tabSwitchTimeout.current) clearTimeout(tabSwitchTimeout.current);
+  }, []);
 
   // Real data from Supabase
   const [user, setUser] = useState(null);
@@ -507,7 +521,7 @@ export default function InvestorDashboardPage() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => switchInvestorTab(tab.id)}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab.id
                     ? "bg-[#6f42c1] text-white shadow-lg"
                     : "text-gray-400 hover:text-white hover:bg-white/5"
@@ -521,6 +535,7 @@ export default function InvestorDashboardPage() {
         </div>
 
         {/* Tab Content */}
+        <div className="relative min-h-[320px]">
         {activeTab === "browse" && (
           <div className="space-y-6">
             {/* Stats Cards */}
@@ -858,7 +873,7 @@ export default function InvestorDashboardPage() {
                   Start investing in campaigns to build your portfolio
                 </p>
                 <button
-                  onClick={() => setActiveTab("browse")}
+                  onClick={() => switchInvestorTab("browse")}
                   className="bg-[#6f42c1] hover:bg-[#5a3599] text-white font-medium py-2 px-6 rounded-lg transition-colors"
                 >
                   Browse Campaigns
@@ -928,6 +943,13 @@ export default function InvestorDashboardPage() {
             </div>
           </div>
         )}
+          {tabSwitchLoading && (
+            <div role="status" aria-live="polite" className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-[#181A2A]/85 backdrop-blur-sm">
+              <span className="sr-only">Loading dashboard tab</span>
+              <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-white/15 border-t-[#a78bfa]" />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Investment Modal */}

@@ -25,6 +25,7 @@ export default function FinancialReportUploadForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const searchParams = useSearchParams();
   const campaignId = searchParams.get("campaignId");
 
@@ -59,20 +60,25 @@ export default function FinancialReportUploadForm({
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const selected = e.target.files[0];
-      if (selected.type !== "application/pdf") {
-        setError("Please upload a valid PDF document.");
-        return;
-      }
-      if (selected.size > 25 * 1024 * 1024) {
-        setError("File size must not exceed 25MB.");
-        return;
-      }
-      setError(null);
-      setFile(selected);
+  const selectFile = (selected?: File) => {
+    if (!selected) return;
+    if (selected.type !== "application/pdf" && !selected.name.toLowerCase().endsWith(".pdf")) {
+      setFile(null);
+      setError("Please upload a valid PDF document.");
+      return;
     }
+    if (selected.size > 25 * 1024 * 1024) {
+      setFile(null);
+      setError("File size must not exceed 25MB.");
+      return;
+    }
+    setError(null);
+    setFile(selected);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    selectFile(e.target.files?.[0]);
+    e.target.value = "";
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -130,10 +136,12 @@ export default function FinancialReportUploadForm({
 
   if (success) {
     return (
-      <div className="min-h-screen bg-[#181A2A] py-8 pt-24">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-[#1a2030] rounded-3xl border border-white/5 p-8 text-center space-y-4">
-            <CheckCircle className="h-12 w-12 text-green-400 mx-auto" />
+      <div className="min-h-screen bg-[#181A2A] px-4 py-8 pt-24 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-3xl">
+          <div className="space-y-5 rounded-3xl border border-white/10 bg-[#1a2030] p-6 text-center shadow-xl shadow-black/10 sm:p-10">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-400/10">
+              <CheckCircle className="h-8 w-8 text-emerald-300" />
+            </div>
             <h2 className="text-2xl font-black text-white">
               Financial Report Submitted
             </h2>
@@ -162,18 +170,28 @@ export default function FinancialReportUploadForm({
   }
 
   return (
-    <div className="min-h-screen bg-[#181A2A] py-8 pt-24">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-[#1a2030] rounded-3xl border border-white/5 p-8 space-y-8">
+      <div className="min-h-screen bg-[#181A2A] px-4 py-8 pt-24 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl">
+        <div className="space-y-7 rounded-3xl border border-white/10 bg-[#1a2030] p-5 shadow-xl shadow-black/10 sm:p-8">
           {/* Header */}
-          <div>
-            <h1 className="text-3xl font-black text-white mb-1">
-              Periodic Financial Disclosure
-            </h1>
-            <p className="text-gray-400 text-sm">
-              Upload compliance statements and headline metrics for{" "}
-              <span className="text-white font-medium">{companyName}</span> (ID: #{campaignId}).
-            </p>
+          <div className="flex items-start gap-4 border-b border-white/10 pb-6">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#a78bfa]/20 bg-[#6f42c1]/15">
+              <FileText className="h-6 w-6 text-[#c4b5fd]" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                  Financial Disclosure
+                </h1>
+                <span className="rounded-full border border-[#a78bfa]/20 bg-[#6f42c1]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#c4b5fd]">
+                  Secure submission
+                </span>
+              </div>
+              <p className="text-sm leading-6 text-gray-400">
+                Submit a reporting period and financial statement for <span className="font-medium text-gray-200">{companyName}</span>
+                {campaignId && <span className="text-gray-500"> · Campaign #{campaignId}</span>}.
+              </p>
+            </div>
           </div>
 
           {/* Feedback error message */}
@@ -191,6 +209,11 @@ export default function FinancialReportUploadForm({
             )}
 
             {/* Filing Scope & Period */}
+            <section className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.025] p-4 sm:p-5">
+              <div>
+                <h2 className="text-sm font-semibold text-white">Reporting period</h2>
+                <p className="mt-1 text-xs text-gray-500">Choose the period covered by this financial report.</p>
+              </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-300 mb-2 uppercase tracking-wider">
@@ -244,12 +267,13 @@ export default function FinancialReportUploadForm({
                 />
               </div>
             </div>
+            </section>
 
             {/* Headline Metrics Grid */}
-            <div className="bg-[#0d1117] border border-white/10 rounded-2xl p-6 space-y-5">
+            <section className="space-y-5 rounded-2xl border border-white/10 bg-white/[0.025] p-4 sm:p-5">
               <div>
-                <h2 className="text-base font-bold text-white mb-1">
-                  Headline Financial Metrics (USD)
+                <h2 className="text-sm font-semibold text-white mb-1">
+                  Headline financial metrics <span className="text-xs font-normal text-gray-400">(USD)</span>
                 </h2>
                 <p className="text-xs text-gray-500">
                   These metrics populate secondary market diligence overviews for token buyers.
@@ -373,51 +397,64 @@ export default function FinancialReportUploadForm({
                   </div>
                 </div>
               </div>
-            </div>
+            </section>
 
             {/* Document Upload Area */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-2 uppercase tracking-wider">
-                Financial Report Package (PDF) *
-              </label>
-              <div className="border-2 border-dashed border-white/10 hover:border-[#6f42c1] rounded-2xl p-6 text-center bg-[#0d1117] transition cursor-pointer relative">
+            <section className="space-y-3">
+              <div>
+                <h2 className="text-sm font-semibold text-white">Financial report document <span className="text-[#c4b5fd]">*</span></h2>
+                <p className="mt-1 text-xs text-gray-500">Attach one PDF containing your balance sheet, income statement, and cash flow statement.</p>
+              </div>
+              <div
+                onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }}
+                onDragOver={(event) => event.preventDefault()}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDragging(false);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setIsDragging(false);
+                  selectFile(event.dataTransfer.files?.[0]);
+                }}
+                className={`relative cursor-pointer rounded-2xl border-2 border-dashed p-6 text-center transition sm:p-8 ${isDragging ? "border-[#a78bfa] bg-[#6f42c1]/15" : file ? "border-emerald-400/30 bg-emerald-400/[0.04]" : "border-white/15 bg-[#0d1117] hover:border-[#a78bfa]/60 hover:bg-white/[0.02]"}`}
+              >
                 <input
                   type="file"
                   accept=".pdf"
                   onChange={handleFileChange}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  aria-label="Upload financial report PDF"
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                 />
                 {file ? (
                   <div className="flex flex-col items-center gap-1">
-                    <CheckCircle className="h-6 w-6 text-green-400" />
-                    <div className="flex items-center gap-2 text-white font-medium text-sm mt-1">
-                      <FileText className="h-4 w-4 text-[#a78bfa]" />
-                      <span>{file.name}</span>
+                    <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-400/10">
+                      <CheckCircle className="h-6 w-6 text-emerald-300" />
                     </div>
-                    <p className="text-xs text-gray-400">
-                      {(file.size / (1024 * 1024)).toFixed(2)} MB • Ready to submit
-                    </p>
-                    <span className="text-xs text-[#a78bfa] hover:underline cursor-pointer mt-1">
-                      Replace document
-                    </span>
+                    <div className="flex max-w-full items-center gap-2 text-sm font-medium text-white">
+                      <FileText className="h-4 w-4 shrink-0 text-[#c4b5fd]" />
+                      <span className="truncate">{file.name}</span>
+                    </div>
+                    <p className="text-xs text-gray-400">{(file.size / (1024 * 1024)).toFixed(2)} MB · Ready to submit</p>
+                    <span className="mt-2 text-xs font-medium text-[#c4b5fd]">Choose another PDF to replace</span>
                   </div>
                 ) : (
                   <div>
-                    <Upload className="h-8 w-8 text-gray-600 mx-auto mb-2" />
-                    <span className="text-[#a78bfa] text-sm font-semibold">
-                      Click to upload
-                    </span>{" "}
-                    <span className="text-gray-400 text-sm">or drag and drop</span>
-                    <p className="text-xs text-gray-600 mt-1">
-                      Balance Sheet, Income Statement, & Cash Flows (PDF up to 25 MB)
-                    </p>
+                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
+                      <Upload className="h-5 w-5 text-[#c4b5fd]" />
+                    </div>
+                    <p className="text-sm"><span className="font-semibold text-[#c4b5fd]">Click to choose a file</span><span className="text-gray-400"> or drag it here</span></p>
+                    <p className="mt-1 text-xs text-gray-500">PDF only · Maximum file size 25 MB</p>
                   </div>
                 )}
               </div>
-            </div>
+            </section>
 
             {/* Verification and Attestation */}
-            <div className="space-y-4 pt-1">
+            <section className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.025] p-4 sm:p-5">
+              <div>
+                <h2 className="text-sm font-semibold text-white">Certification</h2>
+                <p className="mt-1 text-xs text-gray-500">Confirm the reporting details and identify the responsible officer.</p>
+              </div>
               <label className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer">
                 <input
                   type="checkbox"
@@ -476,14 +513,15 @@ export default function FinancialReportUploadForm({
                   I declare under penalty of platform suspension that the disclosures provided are accurate, reflect authentic business ledgers, and comply with platform issuer covenants.
                 </span>
               </label>
-            </div>
+            </section>
 
             {/* Actions */}
-            <div className="flex items-center gap-3 pt-4 border-t border-white/5">
+            <div className="flex flex-col-reverse items-stretch justify-between gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center">
+              <p className="text-xs text-gray-500">Your report will be securely submitted for validation.</p>
               <button
                 type="submit"
                 disabled={loading}
-                className="bg-[#6f42c1] hover:bg-[#5a3599] disabled:opacity-50 text-white font-semibold px-8 py-3 rounded-full transition duration-200 text-sm flex items-center gap-2"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#a78bfa]/30 bg-[#6f42c1] px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-[#6f42c1]/10 transition duration-200 hover:bg-[#5a3599] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? (
                   <>

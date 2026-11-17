@@ -4,14 +4,14 @@ import { Suspense, useEffect, useState, useMemo } from "react";
 import { useActionState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { handleLaunchSubmit } from "@/lib/owner/launchCampaign";
-import { saveDraftCampaign } from "@/lib/action";
+import { evaluatePrelaunchCampaign, saveDraftCampaign } from "@/lib/action";
 import CampaignStatusButton from "@/components/campaign-status-button";
 import CampaignDocUpload from "@/components/campaign-doc-upload";
 import { getMyProfile } from "@/utils/supabase/getProfile";
 import { getCampaignById } from "@/utils/supabase/getCampaigns";
 import {
   Upload, Calendar, DollarSign,
-  Loader2, CheckCircle, Coins, Lock, Info
+  Loader2, CheckCircle, Coins, Lock, Info, Sparkles, AlertTriangle
 } from "lucide-react";
 import Image from "next/image";
 import { updateApprovedCampaign } from "@/lib/owner/campaignActions";
@@ -89,6 +89,87 @@ const CAMPAIGN_DOCS = [
 ];
 
 export { default as DocUpload } from "@/components/campaign-doc-upload";
+
+const EVALUATION_CRITERIA = [
+  ["idea_clarity", "Idea Clarity"],
+  ["business_model", "Business Model"],
+  ["gtm_strategy", "Market Strategy"],
+  ["proof_of_capability", "Proof of Capability"],
+  ["credibility", "Credibility"],
+  ["differentiation", "Differentiation"],
+  ["problem_statement", "Problem Validity"],
+  ["vagueness", "Vagueness"],
+];
+
+function PrelaunchEvaluation({ evaluation }) {
+  if (!evaluation) return null;
+  const riskColor = evaluation.risk_score >= 7
+    ? "text-rose-300 border-rose-400/30 bg-rose-500/10"
+    : evaluation.risk_score >= 4
+      ? "text-amber-300 border-amber-400/30 bg-amber-500/10"
+      : "text-emerald-300 border-emerald-400/30 bg-emerald-500/10";
+
+  return (
+    <section aria-live="polite" className="mt-4 rounded-2xl border border-[#a78bfa]/25 bg-[#111522] p-5 space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] uppercase tracking-wider text-[#a78bfa] font-bold">Pre-launch evaluation</p>
+          <h3 className="text-lg text-white font-bold mt-1">AI campaign assessment</h3>
+        </div>
+        <div className={`rounded-xl border px-4 py-2 text-center ${riskColor}`}>
+          <p className="text-[10px] uppercase tracking-wide">Risk score</p>
+          <p className="font-black text-xl">{Number(evaluation.risk_score).toFixed(1)}<span className="text-xs font-medium"> / 10</span></p>
+          <p className="text-xs font-semibold">{evaluation.risk_tier}</p>
+        </div>
+      </div>
+
+      <p className="text-sm text-gray-300 leading-relaxed">{evaluation.summary}</p>
+
+      <div className="grid sm:grid-cols-2 gap-2">
+        {EVALUATION_CRITERIA.map(([key, label]) => {
+          const score = Number(evaluation.scores?.[key] ?? 0);
+          const good = key === "vagueness" ? score <= 4 : score >= 7;
+          const poor = key === "vagueness" ? score >= 7 : score < 4;
+          const color = good ? "text-emerald-300" : poor ? "text-rose-300" : "text-amber-200";
+          return (
+            <details key={key} className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+              <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-sm text-gray-200">
+                <span>{label}{key === "vagueness" && <span className="ml-1 text-[10px] text-gray-500">(higher is worse)</span>}</span>
+                <span className={`font-bold ${color}`}>{score.toFixed(1)} / 10</span>
+              </summary>
+              <p className="text-xs text-gray-400 mt-2 leading-relaxed">{evaluation.reasons?.[key]}</p>
+            </details>
+          );
+        })}
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-wide text-emerald-300 mb-2">Strengths</h4>
+          {evaluation.strengths?.length ? evaluation.strengths.map((item) => (
+            <p key={item.key} className="text-xs text-gray-300 mb-2"><strong>{item.label}:</strong> {item.reason}</p>
+          )) : <p className="text-xs text-gray-500">The assessment did not find a standout strength yet.</p>}
+        </div>
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-wide text-amber-200 mb-2">Areas to improve</h4>
+          {evaluation.weaknesses?.length ? evaluation.weaknesses.map((item) => (
+            <p key={item.key} className="text-xs text-gray-300 mb-2"><strong>{item.label}:</strong> {item.reason}</p>
+          )) : <p className="text-xs text-gray-500">No criterion fell below the improvement threshold.</p>}
+        </div>
+      </div>
+
+      {evaluation.suggestions?.length > 0 && (
+        <div className="rounded-xl border border-[#a78bfa]/15 bg-[#6f42c1]/5 p-4">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-[#c4b5fd] mb-2">Suggestions</h4>
+          <ul className="space-y-1.5">{evaluation.suggestions.map((suggestion) => (
+            <li key={suggestion} className="text-xs text-gray-300 flex gap-2"><span className="text-[#a78bfa]">•</span>{suggestion}</li>
+          ))}</ul>
+        </div>
+      )}
+      <p className="text-[10px] text-gray-500">Preliminary guidance based on the current draft. Editing your campaign requires a new evaluation.</p>
+    </section>
+  );
+}
 
 function getDeadlineTimestamp(deadline) {
   if (!deadline) return "";
@@ -172,6 +253,10 @@ export function CreateCampaignForm() {
   const [imageUploadError, setImageUploadError] = useState("");
   const [draftSaving, setDraftSaving] = useState(false);
   const [draftMessage, setDraftMessage] = useState("");
+  const [prelaunchEvaluation, setPrelaunchEvaluation] = useState(null);
+  const [evaluationError, setEvaluationError] = useState("");
+  const [evaluating, setEvaluating] = useState(false);
+  const [uploadingDocs, setUploadingDocs] = useState({});
   // ── Compute Real-Time Dilution Math ───────────────────────────────────────
   const [equityCalculation, setEquityCalculation] = useState({
     offered: 0,
@@ -254,12 +339,48 @@ export function CreateCampaignForm() {
   const campaignStatusLower = draftCampaign?.status?.toLowerCase() ?? "";
   const isApprovedOrAdjusted = ["approved", "adjusted"].includes(campaignStatusLower);
 
-  const handleDocUploaded = (key, cid) =>
-    setDocCids((prev) => ({ ...prev, [key]: cid }));
-
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setPrelaunchEvaluation(null);
+    setEvaluationError("");
+  };
+
+  const handleDocUploaded = (key, cid) => {
+    setDocCids((prev) => ({ ...prev, [key]: cid }));
+    setPrelaunchEvaluation(null);
+    setEvaluationError("");
+  };
+
+  const handleDocUploadStateChange = (key, isUploading) => {
+    setUploadingDocs((previous) => ({ ...previous, [key]: isUploading }));
+    if (isUploading) {
+      setPrelaunchEvaluation(null);
+      setEvaluationError("");
+    }
+  };
+
+  const handleEvaluateCampaign = async () => {
+    if (!isCampaignComplete || formData.description.trim().length < 30) return;
+    setEvaluating(true);
+    setEvaluationError("");
+    setPrelaunchEvaluation(null);
+    try {
+      const result = await evaluatePrelaunchCampaign({
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        goal: formData.goal,
+        duration: Math.max(1, Math.ceil((getDeadlineTimestamp(formData.deadline) - Math.floor(Date.now() / 1000)) / 86400)),
+        hasDemo: Boolean(docCids.product_demo_cid),
+      });
+      if (result.error) throw new Error(result.error);
+      setPrelaunchEvaluation(result.evaluation);
+    } catch (error) {
+      setEvaluationError(error.message || "Could not evaluate this campaign.");
+    } finally {
+      setEvaluating(false);
+    }
   };
 
   const handleImageUpload = async (e) => {
@@ -268,6 +389,8 @@ export function CreateCampaignForm() {
     setImageUploading(true);
     setImageUploadError("");
     setImageUrl("");
+    setPrelaunchEvaluation(null);
+    setEvaluationError("");
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -381,7 +504,7 @@ export function CreateCampaignForm() {
   const campaignCompletion = Math.round(
     (completedFields / requiredCampaignFields.length) * 100,
   );
-  const isCampaignComplete = campaignCompletion === 100;
+  const isCampaignComplete = campaignCompletion === 100 && !Object.values(uploadingDocs).some(Boolean);
 
   const categories = [
     "Technology", "Art", "Music", "Film", "Games",
@@ -468,6 +591,26 @@ export function CreateCampaignForm() {
                 className={inputClass + " resize-none"}
                 placeholder="Brief summary shown to investors on the campaign card"
                 required />
+            </div>
+
+            <div className="-mt-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleEvaluateCampaign}
+                  disabled={evaluating || imageUploading || !isCampaignComplete || formData.description.trim().length < 30}
+                  className="inline-flex items-center gap-2 rounded-xl border border-[#a78bfa]/40 bg-[#6f42c1]/15 px-4 py-2.5 text-sm font-semibold text-[#c4b5fd] hover:bg-[#6f42c1]/25 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  {evaluating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  {evaluating ? "Evaluating draft…" : "Evaluate Campaign"}
+                </button>
+                <span className="text-xs text-gray-500">Get private AI feedback once all required campaign details and documents are complete.</span>
+              </div>
+              {(!isCampaignComplete || formData.description.trim().length < 30) ? (
+                <p className="text-[11px] text-gray-500 mt-2">Complete all required campaign fields and documents, and enter at least 30 description characters.</p>
+              ) : null}
+              {evaluationError && <p role="alert" className="text-xs text-rose-300 mt-2 flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" />{evaluationError}</p>}
+              <PrelaunchEvaluation evaluation={prelaunchEvaluation} />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -651,6 +794,7 @@ export function CreateCampaignForm() {
                     accept={doc.accept}
                     required={doc.required}
                     onUploaded={handleDocUploaded}
+                    onUploadStateChange={handleDocUploadStateChange}
                     formData={docCids}
                   />
                 ))}
@@ -671,7 +815,7 @@ export function CreateCampaignForm() {
                   <span>{campaignCompletion}%</span>
                 </div>
                 <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                  <div className="h-full bg-[#037dd6] transition-all" style={{ width: `${campaignCompletion}%` }} />
+                  <div className="h-full bg-[#6f42c1] transition-all" style={{ width: `${campaignCompletion}%` }} />
                 </div>
               </div>
             )}
