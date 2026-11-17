@@ -98,32 +98,36 @@ export function useNotifications() {
 
       socketRef.current = socket;
 
-      // 2. Supabase Realtime DB Trigger subscription
-      channel = supabase.channel(
-        `user_notifications_${userId}_${crypto.randomUUID()}`,
-      );
-      channel.on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          const newNotif = payload.new as AppNotification;
-          setNotifications((prev) => {
-            if (prev.some((n) => n.id === newNotif.id)) return prev;
-            return [newNotif, ...prev];
-          });
-          setUnreadCount((prev) => prev + 1);
-        },
-      );
-      channel.subscribe((status) => {
-        if (status === 'CHANNEL_ERROR') {
-          console.error('[useNotifications] Realtime subscription failed');
-        }
-      });
+      // 2. Supabase Realtime DB Trigger subscription (fallback/redundancy)
+      try {
+        channel = supabase.channel(
+          `user_notifications_${userId}`,
+        );
+        channel.on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            const newNotif = payload.new as AppNotification;
+            setNotifications((prev) => {
+              if (prev.some((n) => n.id === newNotif.id)) return prev;
+              return [newNotif, ...prev];
+            });
+            setUnreadCount((prev) => prev + 1);
+          },
+        );
+        channel.subscribe((status, err) => {
+          if (status === 'CHANNEL_ERROR') {
+            console.warn('[useNotifications] Supabase Realtime channel unavailable, falling back to Socket.IO/REST:', err?.message || status);
+          }
+        });
+      } catch (err) {
+        console.warn('[useNotifications] Failed to initialize Supabase Realtime channel:', err);
+      }
     };
 
     void connect();
