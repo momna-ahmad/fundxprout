@@ -2,7 +2,7 @@
 'use client';
 import { usePathname } from 'next/navigation';
 import { Bell, Fuel, ChevronRight, Copy, Sun, Moon, Home } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme-provider';
 import { useWallet } from '@/context/WalletContext';
@@ -38,6 +38,11 @@ export default function Navbar() {
   const { notifications, unreadCount, markAllRead, markOneRead } = useNotifications();
 
   const [copied, setCopied] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const copyAddress = () => {
     if (!walletAddress) return;
@@ -152,7 +157,18 @@ export default function Navbar() {
 
 
         {/* ── Wallet pill / Connect button ── */}
-        {walletAddress ? (
+        {!mounted ? (
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border"
+            style={{
+              background:  'color-mix(in srgb, var(--chart-5) 12%, transparent)',
+              borderColor: 'color-mix(in srgb, var(--chart-5) 35%, transparent)',
+              color:       'var(--chart-5)',
+            }}
+          >
+            Connect Wallet
+          </div>
+        ) : walletAddress ? (
           <button
             onClick={copyAddress}
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono font-medium border transition-all duration-200 cursor-pointer"

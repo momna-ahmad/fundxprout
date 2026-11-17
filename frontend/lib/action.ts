@@ -206,10 +206,23 @@ export async function signup(
   const supabase = await createClient();
 
   // 1. Get form data
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
+  const email = (formData.get("email") as string || "").trim();
+  const password = (formData.get("password") as string || "");
   const fullName = formData.get("fullName") as string;
-  //const userRole = formData.get("userRole") as string;
+
+  // Validate strong password condition
+  if (!password || password.length < 8) {
+    return { error: "Password must be at least 8 characters long", success: "" };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return { error: "Password must contain at least one uppercase letter (A-Z)", success: "" };
+  }
+  if (!/[0-9]/.test(password)) {
+    return { error: "Password must contain at least one number (0-9)", success: "" };
+  }
+  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) {
+    return { error: "Password must contain at least one special character", success: "" };
+  }
 
   // 2. Validate role
   // const normalizedRole = normalizeRole(userRole);

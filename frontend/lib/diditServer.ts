@@ -84,7 +84,7 @@ export async function fetchAndStoreDiditDecision(sessionId: string) {
   if (!apiKey || !sessionId) return null;
 
   try {
-    // In Didit v3, the complete session and decision payload is returned from /decision/
+    // In Didit v3, query /decision/ first, fallback to /session/
     let d: Record<string, any> = {};
     try {
       const dRes = await fetch(`https://verification.didit.me/v3/session/${sessionId}/decision/`, {
@@ -98,6 +98,21 @@ export async function fetchAndStoreDiditDecision(sessionId: string) {
       }
     } catch (e) {
       console.warn('[Didit] Error fetching session decision:', e);
+    }
+
+    if (!d || Object.keys(d).length === 0 || !d.status) {
+      try {
+        const sRes = await fetch(`https://verification.didit.me/v3/session/${sessionId}/`, {
+          headers: { 'x-api-key': apiKey },
+          cache: 'no-store',
+        });
+        if (sRes.ok) {
+          const sData = await sRes.json();
+          d = { ...sData, ...d };
+        }
+      } catch (e) {
+        console.warn('[Didit] Error fetching session root:', e);
+      }
     }
 
     if (Object.keys(d).length === 0) {
@@ -205,10 +220,13 @@ export async function fetchAndStoreDiditDecision(sessionId: string) {
     // Resolve warnings (e.g. "MRZ is not valid", "Face not matched")
     const warnings = d.warnings || [];
 
+    const rawDecisionVal = d.decision_trace?.status || d.decision || (warnings.length > 0 ? (typeof warnings[0] === 'string' ? warnings[0] : warnings[0].message || warnings[0].code) : null);
+    const textDecision = typeof rawDecisionVal === 'string' ? rawDecisionVal : (rawDecisionVal ? JSON.stringify(rawDecisionVal) : null);
+
     const enrichment = {
       didit_decision_payload: d,
       status: d.status || undefined,
-      decision: d.decision_trace || (d.decision ? { status: d.decision } : (warnings.length > 0 ? { warning: typeof warnings[0] === 'string' ? warnings[0] : warnings[0].message || warnings[0].code } : null)),
+      decision: textDecision,
       updated_at: new Date().toISOString(),
       first_name: kyc.first_name || kyc.firstName || d.first_name || null,
       last_name: kyc.last_name || kyc.lastName || d.last_name || null,
@@ -331,14 +349,33 @@ export async function syncDiditStatus(userId: string) {
   // ── Sync KYC Session ──
   if (kycSession) {
     try {
-      const diditRes = await fetch(`https://verification.didit.me/v3/session/${kycSession.didit_session_id}/decision/`, {
-        headers: { 'x-api-key': apiKey },
-      });
-      if (diditRes.ok) {
-        const diditData = await diditRes.json();
+      let diditData: Record<string, any> | null = null;
+      try {
+        const diditRes = await fetch(`https://verification.didit.me/v3/session/${kycSession.didit_session_id}/decision/`, {
+          headers: { 'x-api-key': apiKey },
+          cache: 'no-store',
+        });
+        if (diditRes.ok) diditData = await diditRes.json();
+      } catch (e) { }
+
+      if (!diditData || !diditData.status) {
+        try {
+          const sRes = await fetch(`https://verification.didit.me/v3/session/${kycSession.didit_session_id}/`, {
+            headers: { 'x-api-key': apiKey },
+            cache: 'no-store',
+          });
+          if (sRes.ok) {
+            const sData = await sRes.json();
+            diditData = { ...sData, ...(diditData || {}) };
+          }
+        } catch (e) { }
+      }
+
+      if (diditData) {
         kycStatus = diditData.status || kycSession.status;
         const syncStatus = (diditData.status || '').toLowerCase().trim();
-        const syncDecision = (diditData.decision_trace?.status || diditData.decision || '').toLowerCase().trim();
+        const rawDec = diditData.decision_trace?.status || diditData.decision || '';
+        const syncDecision = (typeof rawDec === 'string' ? rawDec : (rawDec?.status || JSON.stringify(rawDec))).toLowerCase().trim();
 
         const isApproved =
           ['approved', 'completed', 'success', 'accepted'].includes(syncStatus) ||
@@ -349,11 +386,14 @@ export async function syncDiditStatus(userId: string) {
         const isInReview =
           syncStatus.includes('review') || syncStatus.includes('progress') || syncStatus.includes('needs');
 
+        const rawDecisionVal = diditData.decision_trace?.status || diditData.decision || null;
+        const textDecision = typeof rawDecisionVal === 'string' ? rawDecisionVal : (rawDecisionVal ? JSON.stringify(rawDecisionVal) : null);
+
         await supabaseAdmin
           .from('verification_sessions')
           .update({
             status: diditData.status || kycSession.status,
-            decision: diditData.decision_trace || (diditData.decision ? { status: diditData.decision } : null),
+            decision: textDecision,
             updated_at: new Date().toISOString(),
           })
           .eq('didit_session_id', kycSession.didit_session_id);
@@ -374,7 +414,7 @@ export async function syncDiditStatus(userId: string) {
           await supabaseAdmin.from('profiles').update({ identity_verified: false }).eq('user_id', userId);
           await notifyUser(
             'KYC Verification Declined',
-            `Your KYC verification was not approved. Reason: ${diditData.decision || 'Verification requirements not met'}. Please retry from your profile.`
+            `Your KYC verification was not approved. Reason: ${typeof diditData.decision === 'string' ? diditData.decision : 'Verification requirements not met'}. Please retry from your profile.`
           );
         } else if (isInReview) {
           await notifyUser(
@@ -391,14 +431,33 @@ export async function syncDiditStatus(userId: string) {
   // ── Sync KYB Session ──
   if (kybSession) {
     try {
-      const diditRes = await fetch(`https://verification.didit.me/v3/session/${kybSession.didit_session_id}/decision/`, {
-        headers: { 'x-api-key': apiKey },
-      });
-      if (diditRes.ok) {
-        const diditData = await diditRes.json();
+      let diditData: Record<string, any> | null = null;
+      try {
+        const diditRes = await fetch(`https://verification.didit.me/v3/session/${kybSession.didit_session_id}/decision/`, {
+          headers: { 'x-api-key': apiKey },
+          cache: 'no-store',
+        });
+        if (diditRes.ok) diditData = await diditRes.json();
+      } catch (e) { }
+
+      if (!diditData || !diditData.status) {
+        try {
+          const sRes = await fetch(`https://verification.didit.me/v3/session/${kybSession.didit_session_id}/`, {
+            headers: { 'x-api-key': apiKey },
+            cache: 'no-store',
+          });
+          if (sRes.ok) {
+            const sData = await sRes.json();
+            diditData = { ...sData, ...(diditData || {}) };
+          }
+        } catch (e) { }
+      }
+
+      if (diditData) {
         kybStatus = diditData.status || kybSession.status;
         const syncStatus = (diditData.status || '').toLowerCase().trim();
-        const syncDecision = (diditData.decision_trace?.status || diditData.decision || '').toLowerCase().trim();
+        const rawDec = diditData.decision_trace?.status || diditData.decision || '';
+        const syncDecision = (typeof rawDec === 'string' ? rawDec : (rawDec?.status || JSON.stringify(rawDec))).toLowerCase().trim();
 
         const isApproved =
           ['approved', 'completed', 'success', 'accepted'].includes(syncStatus) ||
@@ -409,11 +468,14 @@ export async function syncDiditStatus(userId: string) {
         const isInReview =
           syncStatus.includes('review') || syncStatus.includes('progress') || syncStatus.includes('needs');
 
+        const rawDecisionVal = diditData.decision_trace?.status || diditData.decision || null;
+        const textDecision = typeof rawDecisionVal === 'string' ? rawDecisionVal : (rawDecisionVal ? JSON.stringify(rawDecisionVal) : null);
+
         await supabaseAdmin
           .from('verification_sessions')
           .update({
             status: diditData.status || kybSession.status,
-            decision: diditData.decision_trace || (diditData.decision ? { status: diditData.decision } : null),
+            decision: textDecision,
             updated_at: new Date().toISOString(),
           })
           .eq('didit_session_id', kybSession.didit_session_id);
