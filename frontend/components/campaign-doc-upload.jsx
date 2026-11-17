@@ -46,6 +46,8 @@ export default function CampaignDocUpload({
         body: uploadData,
       });
       const result = await response.json();
+
+      console.log("IPFS RESPONSE:", response.status, result);
       if (!response.ok) throw new Error(result.error ?? "Upload failed");
 
       setCid(result.cid);
@@ -74,7 +76,9 @@ export default function CampaignDocUpload({
           <div className="flex flex-col items-center gap-1">
             <CheckCircle className="h-6 w-6 text-green-400" />
             <p className="text-xs text-green-400 font-medium">Stored on IPFS</p>
-            <p className="text-[10px] text-gray-600 font-mono break-all">{cid}</p>
+            <p className="text-[10px] text-gray-600 font-mono break-all">
+              {cid}
+            </p>
             <label
               htmlFor={`doc-${docKey}`}
               className="text-xs text-[#a78bfa] cursor-pointer mt-1"
