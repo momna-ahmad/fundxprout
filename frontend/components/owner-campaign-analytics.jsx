@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -154,6 +155,36 @@ function CustomTooltip({ active, payload, label }) {
 }
 
 export default function OwnerCampaignAnalytics({ campaigns = [], loading = false }) {
+  const [topInvestors, setTopInvestors] = useState([]);
+  const [investorsLoading, setInvestorsLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTopInvestors() {
+      if (!campaigns.length) {
+        setTopInvestors([]);
+        return;
+      }
+
+      setInvestorsLoading(true);
+      try {
+        const response = await fetch("/api/owner/top-investors", { cache: "no-store" });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Failed to load top investors.");
+        if (!cancelled) setTopInvestors(result.investors || []);
+      } catch (error) {
+        console.error("[Owner overview] Failed to load top investors:", error);
+        if (!cancelled) setTopInvestors([]);
+      } finally {
+        if (!cancelled) setInvestorsLoading(false);
+      }
+    }
+
+    loadTopInvestors();
+    return () => { cancelled = true; };
+  }, [campaigns]);
+
   const totalGoal = campaigns.reduce((sum, campaign) => sum + toNumber(campaign.funding_goal), 0);
   const totalPledged = campaigns.reduce((sum, campaign) => sum + toNumber(campaign.amount_pledged), 0);
   const activeCampaigns = campaigns.filter((campaign) => normalizeStatus(campaign.status) === "launched").length;
@@ -175,7 +206,7 @@ export default function OwnerCampaignAnalytics({ campaigns = [], loading = false
       goal: toNumber(campaign.funding_goal),
     }))
     .sort((a, b) => b.progress - a.progress || b.pledged - a.pledged)
-    .slice(0, 5);
+    .slice(0, 4);
 
   if (loading) {
     return (
@@ -218,11 +249,11 @@ export default function OwnerCampaignAnalytics({ campaigns = [], loading = false
         ))}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="bg-[#1e2530] border border-white/5 rounded-2xl p-6">
+      <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-3">
+        <div className="min-w-0 rounded-2xl border border-white/5 bg-[#1e2530] p-5">
           <p className="text-sm font-bold text-white mb-1">Campaign Status Distribution</p>
           <p className="text-xs text-gray-400 mb-4">How your campaigns are currently distributed</p>
-          <ResponsiveContainer width="100%" height={280}>
+          <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie data={statusData} dataKey="value" nameKey="status" cx="50%" cy="50%" innerRadius={72} outerRadius={108} paddingAngle={3}>
                 {statusData.map((entry, index) => (
@@ -241,10 +272,10 @@ export default function OwnerCampaignAnalytics({ campaigns = [], loading = false
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-[#1e2530] border border-white/5 rounded-2xl p-6">
+        <div className="min-w-0 rounded-2xl border border-white/5 bg-[#1e2530] p-5">
           <p className="text-sm font-bold text-white mb-1">Funding Over Time</p>
           <p className="text-xs text-gray-400 mb-4">Pledged ETH and goal size grouped by creation month</p>
-          <ResponsiveContainer width="100%" height={280}>
+          <ResponsiveContainer width="100%" height={260}>
             <AreaChart data={monthlyData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="ownerGoalFill" x1="0" y1="0" x2="0" y2="1">
@@ -266,13 +297,11 @@ export default function OwnerCampaignAnalytics({ campaigns = [], loading = false
             </AreaChart>
           </ResponsiveContainer>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1.4fr_0.9fr] gap-6">
-        <div className="bg-[#1e2530] border border-white/5 rounded-2xl p-6">
+        <div className="min-w-0 rounded-2xl border border-white/5 bg-[#1e2530] p-5">
           <p className="text-sm font-bold text-white mb-1">Funding by Category</p>
           <p className="text-xs text-gray-400 mb-4">Goal versus pledged ETH across your campaign categories</p>
-          <ResponsiveContainer width="100%" height={280}>
+          <ResponsiveContainer width="100%" height={260}>
             <BarChart data={categoryData} barGap={4} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
               <XAxis dataKey="category" tick={{ fill: AXIS_COLOR, fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -284,8 +313,10 @@ export default function OwnerCampaignAnalytics({ campaigns = [], loading = false
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </div>
 
-        <div className="bg-[#1e2530] border border-white/5 rounded-2xl p-6">
+      <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-2">
+        <div className="h-full rounded-2xl border border-white/5 bg-[#1e2530] p-6">
           <p className="text-sm font-bold text-white mb-1">Top Campaigns</p>
           <p className="text-xs text-gray-400 mb-4">Your strongest campaigns by funding progress</p>
           <div className="space-y-2.5">
@@ -307,6 +338,48 @@ export default function OwnerCampaignAnalytics({ campaigns = [], loading = false
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="h-full rounded-2xl border border-white/5 bg-[#1e2530] p-6">
+          <p className="mb-1 text-sm font-bold text-white">Top Investors</p>
+          <p className="mb-4 text-xs text-gray-400">Highest total investment across your campaigns</p>
+          {investorsLoading ? (
+            <div className="flex h-[280px] items-center justify-center" aria-label="Loading top investors">
+              <span className="h-8 w-8 animate-spin rounded-full border-[3px] border-white/10 border-t-[#a78bfa]" />
+            </div>
+          ) : topInvestors.length ? (
+            <div className="space-y-4">
+              {topInvestors.map((investor, index) => {
+                const share = topInvestors[0].total > 0 ? (investor.total / topInvestors[0].total) * 100 : 0;
+                return (
+                  <div key={investor.id} className="flex items-center gap-3">
+                    <span className="w-4 shrink-0 text-xs font-semibold tabular-nums text-gray-500">{index + 1}</span>
+                    {investor.avatarUrl ? (
+                      <img src={investor.avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+                    ) : (
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#6f42c1]/20 text-sm font-semibold text-[#c4b5fd]">
+                        {investor.name.slice(0, 1).toUpperCase()}
+                      </span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="line-clamp-2 break-words text-sm font-medium text-white" title={investor.name}>{investor.name}</p>
+                        <span className="shrink-0 text-xs font-semibold tabular-nums text-white">{investor.total.toFixed(3)} ETH</span>
+                      </div>
+                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/5">
+                        <div className="h-full rounded-full bg-gradient-to-r from-[#6f42c1] to-[#a78bfa]" style={{ width: `${share}%` }} />
+                      </div>
+                      <p className="mt-1 text-[10px] text-gray-500">Invested in {investor.campaignCount} {investor.campaignCount === 1 ? "campaign" : "campaigns"}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex h-[280px] items-center justify-center text-center text-sm text-gray-400">
+              No investor contributions yet.
+            </div>
+          )}
         </div>
       </div>
     </section>

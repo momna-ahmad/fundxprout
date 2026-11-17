@@ -212,11 +212,11 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#181A2A] ">
       <Navbar />
-      <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pt-7">
+      <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-4 pt-4">
         {/* shafqaat — Dashboard header with real user name */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="mb-5 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-black text-white">
+            <h1 className="text-2xl font-semibold tracking-tight text-white">
               {loading ? "Dashboard" : `Welcome, ${displayName}`}
             </h1>
             <p className="text-gray-400 mt-1 text-sm">
@@ -235,10 +235,6 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-        <div className="mb-6">
-
-        </div>
-
       {/* shafqaat — Tabs + Content */}
       <div className="bg-[#1a2030] rounded-3xl border border-white/5 overflow-hidden">
         {/* Tab Nav */}
