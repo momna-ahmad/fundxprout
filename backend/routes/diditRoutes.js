@@ -333,32 +333,40 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     if (isApproved && entityId) {
       // shafqaat implemented — Only set verified for genuine Approved status
       if (sessionKind === 'KYC') {
+        const { data: currProfile } = await supabaseAdmin.from('profiles').select('identity_verified').eq('user_id', entityId).maybeSingle();
+        const wasAlreadyKyc = !!currProfile?.identity_verified;
+
         console.log(`[Didit Webhook] ✓ Marking identity_verified = true for user: ${entityId}`);
         await supabaseAdmin.from('profiles').update({ identity_verified: true }).eq('user_id', entityId);
 
-        await createNotification({
-          userId: entityId,
-          type: 'kyc_status',
-          title: 'Identity Verified ✓',
-          message: 'Your KYC identity verification has been approved by Didit! You can now invest in campaigns and trade tokens on the secondary market.',
-          link: '/profile',
-        });
+        if (!wasAlreadyKyc) {
+          await createNotification({
+            userId: entityId,
+            type: 'kyc_status',
+            title: 'Identity Verified ✓',
+            message: 'Your KYC identity verification has been approved by Didit! You can now invest in campaigns and trade tokens on the secondary market.',
+            link: '/profile',
+          });
+        }
       } else if (sessionKind === 'KYB') {
+        let targetOwnerId = entityId;
+        const { data: b } = await supabaseAdmin.from('businesses').select('owner_id, kyb_verified').or(`id.eq.${entityId},owner_id.eq.${entityId}`).maybeSingle();
+        if (b?.owner_id) targetOwnerId = b.owner_id;
+        const wasAlreadyKyb = !!b?.kyb_verified;
+
         console.log(`[Didit Webhook] ✓ Marking kyb_verified = true for business/owner: ${entityId}`);
         await supabaseAdmin.from('businesses').update({ kyb_verified: true }).eq('id', entityId);
         await supabaseAdmin.from('businesses').update({ kyb_verified: true }).eq('owner_id', entityId);
 
-        let targetOwnerId = entityId;
-        const { data: b } = await supabaseAdmin.from('businesses').select('owner_id').or(`id.eq.${entityId},owner_id.eq.${entityId}`).maybeSingle();
-        if (b?.owner_id) targetOwnerId = b.owner_id;
-
-        await createNotification({
-          userId: targetOwnerId,
-          type: 'kyb_status',
-          title: 'Business Verified ✓',
-          message: 'Your KYB business verification has been approved by Didit! You can now launch fundraising campaigns.',
-          link: '/profile',
-        });
+        if (!wasAlreadyKyb) {
+          await createNotification({
+            userId: targetOwnerId,
+            type: 'kyb_status',
+            title: 'Business Verified ✓',
+            message: 'Your KYB business verification has been approved by Didit! You can now launch fundraising campaigns.',
+            link: '/profile',
+          });
+        }
       }
     } else if (isInReview && entityId) {
       // shafqaat implemented — In Review: notify user that their submission is being reviewed by admin

@@ -349,6 +349,14 @@ export async function syncDiditStatus(userId: string) {
   // ── Sync KYC Session ──
   if (kycSession) {
     try {
+      // Check if user is already verified to prevent duplicate notifications
+      const { data: currentProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('identity_verified')
+        .eq('user_id', userId)
+        .maybeSingle();
+      const wasAlreadyKycVerified = !!currentProfile?.identity_verified;
+
       let diditData: Record<string, any> | null = null;
       try {
         const diditRes = await fetch(`https://verification.didit.me/v3/session/${kycSession.didit_session_id}/decision/`, {
@@ -405,22 +413,28 @@ export async function syncDiditStatus(userId: string) {
           // Keep user's manually entered name & country in profiles.
           // Vendor-extracted document data (e.g. sandbox simulated data) is preserved in verification_sessions.
           await supabaseAdmin.from('profiles').update({ identity_verified: true }).eq('user_id', userId);
-          await notifyUser(
-            'Identity Verified ✓',
-            'Your KYC identity verification has been approved by Didit! You can now invest and trade on FundXprout.'
-          );
+          if (!wasAlreadyKycVerified) {
+            await notifyUser(
+              'Identity Verified ✓',
+              'Your KYC identity verification has been approved by Didit! You can now invest and trade on FundXprout.'
+            );
+          }
           kycUpdated = true;
         } else if (isDeclined) {
           await supabaseAdmin.from('profiles').update({ identity_verified: false }).eq('user_id', userId);
-          await notifyUser(
-            'KYC Verification Declined',
-            `Your KYC verification was not approved. Reason: ${typeof diditData.decision === 'string' ? diditData.decision : 'Verification requirements not met'}. Please retry from your profile.`
-          );
+          if (wasAlreadyKycVerified) {
+            await notifyUser(
+              'KYC Verification Declined',
+              `Your KYC verification was not approved. Reason: ${typeof diditData.decision === 'string' ? diditData.decision : 'Verification requirements not met'}. Please retry from your profile.`
+            );
+          }
         } else if (isInReview) {
-          await notifyUser(
-            'KYC Submission Under Review',
-            'Your identity documents have been submitted and are currently awaiting review.'
-          );
+          if (!wasAlreadyKycVerified) {
+            await notifyUser(
+              'KYC Submission Under Review',
+              'Your identity documents have been submitted and are currently awaiting review.'
+            );
+          }
         }
       }
     } catch (e) {
@@ -431,6 +445,15 @@ export async function syncDiditStatus(userId: string) {
   // ── Sync KYB Session ──
   if (kybSession) {
     try {
+      // Check if business is already verified to avoid duplicate notifications
+      const { data: currentBiz } = await supabaseAdmin
+        .from('businesses')
+        .select('kyb_verified')
+        .in('id', candidateIds)
+        .eq('kyb_verified', true)
+        .limit(1);
+      const wasAlreadyKybVerified = (currentBiz && currentBiz.length > 0) || false;
+
       let diditData: Record<string, any> | null = null;
       try {
         const diditRes = await fetch(`https://verification.didit.me/v3/session/${kybSession.didit_session_id}/decision/`, {
@@ -499,11 +522,13 @@ export async function syncDiditStatus(userId: string) {
               kyb_verified: true,
             });
           }
-          await notifyUser(
-            'Business Verified ✓',
-            'Your KYB business verification has been approved by Didit! You can now launch fundraising campaigns.',
-            'kyb_status'
-          );
+          if (!wasAlreadyKybVerified) {
+            await notifyUser(
+              'Business Verified ✓',
+              'Your KYB business verification has been approved by Didit! You can now launch fundraising campaigns.',
+              'kyb_status'
+            );
+          }
           kybUpdated = true;
         } else if (isDeclined) {
           if (businessIds.length > 0) {
