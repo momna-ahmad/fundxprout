@@ -564,7 +564,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── My Invested Campaigns ── */}
-        <div>
+        {/* <div>
           <div className="flex items-center justify-between mb-3.5">
             <div className="text-[11px] text-gray-500 uppercase tracking-[0.05em]">
               My Invested Campaigns
@@ -635,10 +635,10 @@ export default function DashboardPage() {
               </a>
             </div>
           )}
-        </div>
+        </div> */}
 
         {/* ── Recommended Campaigns ── */}
-        <div className="mt-8">
+        {/* <div className="mt-8">
           <div className="flex items-center justify-between mb-3.5">
             <div className="text-[11px] text-gray-500 uppercase tracking-[0.05em]">
               Recommended Campaigns
@@ -654,7 +654,7 @@ export default function DashboardPage() {
             categoryDistribution={categoryDistribution}
             userBackedCampaignIds={userBackedCampaignIds}
           />
-        </div>
+        </div> */}
       </div>
     </div>
   );
