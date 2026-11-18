@@ -1,18 +1,18 @@
-import { defineConfig } from 'vitest/config'
-import path from 'path'
+import { defineConfig } from "vitest/config";
+import path from "path";
 
 export default defineConfig({
   esbuild: {
-    jsx: 'automatic',
+    jsx: "automatic",
   },
   test: {
-    environment: 'happy-dom',
+    environment: "happy-dom",
     globals: true,
-    pool: 'threads',
+    pool: "threads",
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './'),
+      "@": path.resolve(__dirname, "./"),
     },
   },
-})
+});

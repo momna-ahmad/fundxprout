@@ -206,10 +206,23 @@ export async function signup(
   const supabase = await createClient();
 
   // 1. Get form data
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
+  const email = (formData.get("email") as string || "").trim();
+  const password = (formData.get("password") as string || "");
   const fullName = formData.get("fullName") as string;
-  //const userRole = formData.get("userRole") as string;
+
+  // Validate strong password condition
+  if (!password || password.length < 8) {
+    return { error: "Password must be at least 8 characters long", success: "" };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return { error: "Password must contain at least one uppercase letter (A-Z)", success: "" };
+  }
+  if (!/[0-9]/.test(password)) {
+    return { error: "Password must contain at least one number (0-9)", success: "" };
+  }
+  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) {
+    return { error: "Password must contain at least one special character", success: "" };
+  }
 
   // 2. Validate role
   // const normalizedRole = normalizeRole(userRole);
@@ -365,6 +378,12 @@ export async function saveCampaignToDb(formData: any) {
   }
 
   console.log("[saveCampaignToDb] Saved campaign id:", data?.id);
+  if (data?.id) {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    fetch(`${apiBase}/api/campaigns/${data.id}/analyze`, { method: "POST" }).catch((e) =>
+      console.warn("[saveCampaignToDb] Auto-analyze trigger error:", e.message)
+    );
+  }
   return { success: true, campaignId: data?.id };
 }
 
@@ -452,6 +471,12 @@ export async function saveDraftCampaign(draftData: any) {
   }
 
   console.log("[saveDraftCampaign] Saved draft campaign id:", data?.id);
+  if (data?.id) {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    fetch(`${apiBase}/api/campaigns/${data.id}/analyze`, { method: "POST" }).catch((e) =>
+      console.warn("[saveDraftCampaign] Auto-analyze trigger error:", e.message)
+    );
+  }
   return { success: true, campaignId: data?.id };
 }
 
@@ -502,6 +527,13 @@ export async function submitCampaignForReview(campaignId: string) {
 
   if (error) return { error: error.message };
   if (!data) return { error: "Only an owned draft campaign can be submitted for review." };
+
+  if (campaignId) {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    fetch(`${apiBase}/api/campaigns/${campaignId}/analyze`, { method: "POST" }).catch((e) =>
+      console.warn("[submitCampaignForReview] Auto-analyze trigger error:", e.message)
+    );
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/create-campaign");

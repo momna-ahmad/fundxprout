@@ -19,7 +19,8 @@ export async function POST(
       return NextResponse.json({ error: `Invalid verification type: "${type}". Use "kyc" or "kyb".` }, { status: 400 });
     }
 
-    const session = await createDiditSession(type, userId);
+    const origin = body.origin || request.nextUrl.origin;
+    const session = await createDiditSession(type, userId, origin);
     return NextResponse.json(session);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Failed to create Didit session';
@@ -27,3 +28,4 @@ export async function POST(
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+

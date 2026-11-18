@@ -2,40 +2,63 @@
 "use client";
 import { useState, useEffect } from "react";
 import {
-  TrendingUp, Coins, Briefcase, Gavel, ArrowUpRight,
-  ArrowDownRight, ExternalLink, Wallet,
+  TrendingUp,
+  Coins,
+  Briefcase,
+  Gavel,
+  ArrowUpRight,
+  ArrowDownRight,
+  ExternalLink,
+  Wallet,
 } from "lucide-react";
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { getUserPortfolioData, getUserTokenHoldings, getTopSellListings, generatePortfolioTimeSeries } from "@/utils/supabase/getPortfolio";
+import {
+  getUserPortfolioData,
+  getUserTokenHoldings,
+  getTopSellListings,
+  generatePortfolioTimeSeries,
+} from "@/utils/supabase/getPortfolio";
 import { getMyBids } from "@/lib/bidding-api";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 const formatCurrency = (v) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(v);
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(v);
 const formatPercent = (v) => `${v >= 0 ? "+" : ""}${Number(v).toFixed(1)}%`;
-const truncateHash  = (h) => `${h.slice(0, 8)}…${h.slice(-6)}`;
-const formatDate    = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-const formatChartDate = (timestamp, range) => new Date(Number(timestamp)).toLocaleDateString(
-  "en-US",
-  range === "1M" || range === "3M"
-    ? { month: "short", day: "numeric" }
-    : { month: "short", year: "2-digit" },
-);
-
+const truncateHash = (h) => `${h.slice(0, 8)}…${h.slice(-6)}`;
+const formatDate = (d) =>
+  new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const formatChartDate = (timestamp, range) =>
+  new Date(Number(timestamp)).toLocaleDateString(
+    "en-US",
+    range === "1M" || range === "3M"
+      ? { month: "short", day: "numeric" }
+      : { month: "short", year: "2-digit" },
+  );
 
 // ── Sub-components ───────────────────────────────────────────────────
 function Badge({ children, color = "purple" }) {
   const cls = {
-    green:  "bg-green-500/10  text-green-400  border-green-500/20",
-    red:    "bg-red-500/10    text-red-400    border-red-500/20",
-    amber:  "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+    green: "bg-green-500/10  text-green-400  border-green-500/20",
+    red: "bg-red-500/10    text-red-400    border-red-500/20",
+    amber: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
     purple: "bg-[#6f42c1]/15  text-[#a78bfa]  border-[#6f42c1]/25",
   };
   return (
-    <span className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${cls[color] ?? cls.purple}`}>
+    <span
+      className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${cls[color] ?? cls.purple}`}
+    >
       {children}
     </span>
   );
@@ -45,8 +68,12 @@ function CustomTooltip({ active, payload, label, range }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-[#6f42c1]/30 rounded-xl px-3.5 py-2.5">
-      <div className="text-[11px] text-gray-400 mb-1">{formatChartDate(label, range)}</div>
-      <div className="text-[15px] font-bold text-[#a78bfa]">{formatCurrency(payload[0].value)}</div>
+      <div className="text-[11px] text-gray-400 mb-1">
+        {formatChartDate(label, range)}
+      </div>
+      <div className="text-[15px] font-bold text-[#a78bfa]">
+        {formatCurrency(payload[0].value)}
+      </div>
     </div>
   );
 }
@@ -67,11 +94,14 @@ export default function DashboardPage() {
         getUserTokenHoldings(),
         getTopSellListings(5),
         getMyBids().catch((error) => {
-          console.error("[Investor overview] Failed to load recent bids:", error);
+          console.error(
+            "[Investor overview] Failed to load recent bids:",
+            error,
+          );
           return { bids: [] };
         }),
       ]);
-      
+
       setPortfolioData(data);
       setTokenHoldings(holdings);
       setTopSellListings(sellListings);
@@ -84,25 +114,39 @@ export default function DashboardPage() {
   }, []);
 
   // Derive values
-  const totalInvested      = portfolioData?.totalNetWorthUsd   ?? portfolioData?.totalInvested ?? 0;
-  const totalInvestedEth   = portfolioData?.totalEthInvested   ?? 0;
-  const portfolioValue = tokenHoldings.reduce((sum, token) => sum + (Number(token.value) || 0), 0);
-  const portfolioCostBasis = tokenHoldings.reduce((sum, token) => sum + (Number(token.totalInvested) || 0), 0);
+  const totalInvested =
+    portfolioData?.totalNetWorthUsd ?? portfolioData?.totalInvested ?? 0;
+  const totalInvestedEth = portfolioData?.totalEthInvested ?? 0;
+  const portfolioValue = tokenHoldings.reduce(
+    (sum, token) => sum + (Number(token.value) || 0),
+    0,
+  );
+  const portfolioCostBasis = tokenHoldings.reduce(
+    (sum, token) => sum + (Number(token.totalInvested) || 0),
+    0,
+  );
   const portfolioProfit = portfolioValue - portfolioCostBasis;
-  const portfolioChangePct = portfolioCostBasis > 0 ? (portfolioProfit / portfolioCostBasis) * 100 : 0;
-  const investmentCount    = portfolioData?.investments?.length ?? 0;
-  const walletAddress      = portfolioData?.walletAddress      ?? null;
-  const investments        = portfolioData?.investments        ?? [];
+  const portfolioChangePct =
+    portfolioCostBasis > 0 ? (portfolioProfit / portfolioCostBasis) * 100 : 0;
+  const investmentCount = portfolioData?.investments?.length ?? 0;
+  const walletAddress = portfolioData?.walletAddress ?? null;
+  const investments = portfolioData?.investments ?? [];
   const campaignsHeldCount = tokenHoldings.length;
 
   // Derive live ETH→USD rate from the two values already in portfolio data
-  const ethPrice = totalInvestedEth > 0 ? totalInvested / totalInvestedEth : 3000;
+  const ethPrice =
+    totalInvestedEth > 0 ? totalInvested / totalInvestedEth : 3000;
 
   // Portfolio history from real investments
-  const portfolioHistory = generatePortfolioTimeSeries(investments, portfolioRange, ethPrice);
-  const chartValue = portfolioHistory.length > 0
-    ? portfolioHistory[portfolioHistory.length - 1].value
-    : 0;
+  const portfolioHistory = generatePortfolioTimeSeries(
+    investments,
+    portfolioRange,
+    ethPrice,
+  );
+  const chartValue =
+    portfolioHistory.length > 0
+      ? portfolioHistory[portfolioHistory.length - 1].value
+      : 0;
 
   // Recent transactions built from investments
   const recentTxs = investments.slice(0, 5).map((inv, i) => {
@@ -119,10 +163,38 @@ export default function DashboardPage() {
   });
 
   const statCards = [
-    { label: "Portfolio Value",   value: formatCurrency(portfolioValue),  change: formatPercent(portfolioChangePct), up: portfolioChangePct >= 0, icon: TrendingUp, sub: `${portfolioProfit >= 0 ? "+" : "−"}${formatCurrency(Math.abs(portfolioProfit))} profit` },
-    { label: "Total ETH Invested", value: `${Number(totalInvestedEth).toFixed(4)} ETH`, change: `${investmentCount} inv.`, up: true, icon: Coins, sub: "across campaigns" },
-    { label: "Campaigns Held", value: String(campaignsHeldCount), change: `${campaignsHeldCount} total`, up: true, icon: Briefcase, sub: "with token holdings" },
-    { label: "Profit Margin", value: formatPercent(portfolioChangePct), change: formatCurrency(portfolioProfit), up: portfolioProfit >= 0, icon: TrendingUp, sub: "current holdings vs. cost" },
+    {
+      label: "Portfolio Value",
+      value: formatCurrency(portfolioValue),
+      change: formatPercent(portfolioChangePct),
+      up: portfolioChangePct >= 0,
+      icon: TrendingUp,
+      sub: `${portfolioProfit >= 0 ? "+" : "−"}${formatCurrency(Math.abs(portfolioProfit))} profit`,
+    },
+    {
+      label: "Total ETH Invested",
+      value: `${Number(totalInvestedEth).toFixed(4)} ETH`,
+      change: `${investmentCount} inv.`,
+      up: true,
+      icon: Coins,
+      sub: "across campaigns",
+    },
+    {
+      label: "Campaigns Held",
+      value: String(campaignsHeldCount),
+      change: `${campaignsHeldCount} total`,
+      up: true,
+      icon: Briefcase,
+      sub: "with token holdings",
+    },
+    {
+      label: "Profit Margin",
+      value: formatPercent(portfolioChangePct),
+      change: formatCurrency(portfolioProfit),
+      up: portfolioProfit >= 0,
+      icon: TrendingUp,
+      sub: "current holdings vs. cost",
+    },
   ];
 
   if (loading) {
@@ -136,9 +208,8 @@ export default function DashboardPage() {
   return (
     <div className="text-white">
       <div className="max-w-[1280px] mx-auto">
-
         {/* ── Page Header ── */}
-        <div className="flex items-end justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
           <div>
             <div className="text-[12px] text-[#a78bfa] font-semibold tracking-[0.08em] uppercase mb-1.5">
               Investor Dashboard
@@ -185,7 +256,11 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Badge color={s.up ? "green" : "red"}>
-                    {s.up ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+                    {s.up ? (
+                      <ArrowUpRight size={10} />
+                    ) : (
+                      <ArrowDownRight size={10} />
+                    )}
                     {s.change}
                   </Badge>
                   <span className="text-[11px] text-gray-500">{s.sub}</span>
@@ -197,7 +272,6 @@ export default function DashboardPage() {
 
         {/* ── Main grid: chart + recent bids ── */}
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-4 mb-5">
-
           {/* Portfolio Chart */}
           <div className="bg-card border border-white/5 rounded-2xl px-6 py-[22px]">
             <div className="flex justify-between items-start mb-5">
@@ -231,14 +305,30 @@ export default function DashboardPage() {
             </div>
             {portfolioHistory.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={portfolioHistory} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <AreaChart
+                  data={portfolioHistory}
+                  margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+                >
                   <defs>
-                    <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6f42c1" stopOpacity={0.35} />
+                    <linearGradient
+                      id="portfolioGrad"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop
+                        offset="5%"
+                        stopColor="#6f42c1"
+                        stopOpacity={0.35}
+                      />
                       <stop offset="95%" stopColor="#6f42c1" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(255,255,255,0.04)"
+                  />
                   <XAxis
                     dataKey="timestamp"
                     type="number"
@@ -247,7 +337,9 @@ export default function DashboardPage() {
                     tick={{ fill: "#6b7280", fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
-                    tickFormatter={(timestamp) => formatChartDate(timestamp, portfolioRange)}
+                    tickFormatter={(timestamp) =>
+                      formatChartDate(timestamp, portfolioRange)
+                    }
                   />
                   <YAxis
                     tick={{ fill: "#6b7280", fontSize: 10 }}
@@ -263,7 +355,12 @@ export default function DashboardPage() {
                     strokeWidth={2.5}
                     fill="url(#portfolioGrad)"
                     dot={false}
-                    activeDot={{ r: 5, fill: "#a78bfa", stroke: "#ffffff", strokeWidth: 2 }}
+                    activeDot={{
+                      r: 5,
+                      fill: "#a78bfa",
+                      stroke: "#ffffff",
+                      strokeWidth: 2,
+                    }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -278,30 +375,56 @@ export default function DashboardPage() {
           <div className="bg-card border border-white/5 rounded-2xl px-5 py-[22px]">
             <div className="mb-4 flex items-center justify-between gap-2">
               <div>
-                <div className="text-[11px] text-gray-500 uppercase tracking-[0.05em]">Latest Bids</div>
-                <p className="mt-1 text-xs text-gray-500">Your most recent token offers</p>
+                <div className="text-[11px] text-gray-500 uppercase tracking-[0.05em]">
+                  Latest Bids
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  Your most recent token offers
+                </p>
               </div>
-              <a href="/investor-dashboard/my-bids" className="flex shrink-0 items-center gap-1 text-xs text-[#a78bfa] hover:underline">
+              <a
+                href="/investor-dashboard/my-bids"
+                className="flex shrink-0 items-center gap-1 text-xs text-[#a78bfa] hover:underline"
+              >
                 View all <ExternalLink size={11} />
               </a>
             </div>
             {recentBids.length > 0 ? (
               <div className="divide-y divide-white/[0.05]">
                 {recentBids.map((bid) => {
-                  const listing = Array.isArray(bid.token_orders) ? bid.token_orders[0] : bid.token_orders;
-                  const campaign = Array.isArray(listing?.campaigns) ? listing.campaigns[0] : listing?.campaigns;
+                  const listing = Array.isArray(bid.token_orders)
+                    ? bid.token_orders[0]
+                    : bid.token_orders;
+                  const campaign = Array.isArray(listing?.campaigns)
+                    ? listing.campaigns[0]
+                    : listing?.campaigns;
                   return (
-                    <div key={bid.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                    <div
+                      key={bid.id}
+                      className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
+                    >
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#a78bfa]/15 bg-[#6f42c1]/15">
                         <Gavel size={15} className="text-[#c4b5fd]" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-white">{campaign?.token_symbol || campaign?.title || `Campaign #${bid.campaign_id}`}</p>
-                        <p className="truncate text-[11px] text-gray-500">{Number(bid.quantity).toLocaleString()} tokens · {formatDate(bid.created_at)}</p>
+                        <p className="truncate text-sm font-semibold text-white">
+                          {campaign?.token_symbol ||
+                            campaign?.title ||
+                            `Campaign #${bid.campaign_id}`}
+                        </p>
+                        <p className="truncate text-[11px] text-gray-500">
+                          {Number(bid.quantity).toLocaleString()} tokens ·{" "}
+                          {formatDate(bid.created_at)}
+                        </p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="text-xs font-semibold tabular-nums text-white">{Number(bid.bid_price_per_token).toFixed(3)} ETH / token</p>
-                        <p className="text-[10px] capitalize text-gray-500">{String(bid.status).replaceAll("_", " ")}</p>
+                        <p className="text-xs font-semibold tabular-nums text-white">
+                          {Number(bid.bid_price_per_token).toFixed(3)} ETH /
+                          token
+                        </p>
+                        <p className="text-[10px] capitalize text-gray-500">
+                          {String(bid.status).replaceAll("_", " ")}
+                        </p>
                       </div>
                     </div>
                   );
@@ -318,30 +441,54 @@ export default function DashboardPage() {
 
         {/* ── Bottom grid: donut + transactions + quick stats ── */}
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] gap-4 mb-5">
-
           {/* Investor's highest-priced active marketplace sell listings */}
           <div className="bg-card border border-white/5 rounded-2xl px-5 py-[22px]">
             <div className="mb-4">
-              <div className="text-[11px] text-gray-500 uppercase tracking-[0.05em]">Top 5 Sell Listings</div>
-              <p className="mt-1 text-xs text-gray-500">Your active marketplace listings, highest price first</p>
+              <div className="text-[11px] text-gray-500 uppercase tracking-[0.05em]">
+                Top 5 Sell Listings
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Your active marketplace listings, highest price first
+              </p>
             </div>
             {topSellListings.length > 0 ? (
               <div className="divide-y divide-white/[0.05]">
                 {topSellListings.map((listing, index) => (
-                  <div key={listing.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                    <span className="w-5 text-xs font-bold text-gray-500">{index + 1}</span>
+                  <div
+                    key={listing.id}
+                    className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
+                  >
+                    <span className="w-5 text-xs font-bold text-gray-500">
+                      {index + 1}
+                    </span>
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#a78bfa]/15 bg-[#6f42c1]/15 text-[10px] font-bold text-[#c4b5fd]">
                       {listing.symbol.slice(0, 4)}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-white">{listing.symbol}</p>
-                      <p className="truncate text-[11px] text-gray-500">{listing.name}</p>
+                      <p className="truncate text-sm font-semibold text-white">
+                        {listing.symbol}
+                      </p>
+                      <p className="truncate text-[11px] text-gray-500">
+                        {listing.name}
+                      </p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-xs font-semibold tabular-nums text-white">{Number(listing.priceEth).toFixed(3)} ETH / token</p>
-                      <p className="text-[10px] text-gray-500">{Number(listing.quantityRemaining).toLocaleString(undefined, { maximumFractionDigits: 2 })} available</p>
+                      <p className="text-xs font-semibold tabular-nums text-white">
+                        {Number(listing.priceEth).toFixed(3)} ETH / token
+                      </p>
+                      <p className="text-[10px] text-gray-500">
+                        {Number(listing.quantityRemaining).toLocaleString(
+                          undefined,
+                          { maximumFractionDigits: 2 },
+                        )}{" "}
+                        available
+                      </p>
                     </div>
-                    <Badge color="green">{listing.status === "partially_filled" ? "Partial" : "Open"}</Badge>
+                    <Badge color="green">
+                      {listing.status === "partially_filled"
+                        ? "Partial"
+                        : "Open"}
+                    </Badge>
                   </div>
                 ))}
               </div>
@@ -358,34 +505,57 @@ export default function DashboardPage() {
               <div className="text-[11px] text-gray-500 uppercase tracking-[0.05em]">
                 Recent Investments
               </div>
-              <a href="/investor-dashboard/transactions" className="text-[11px] text-[#a78bfa] flex items-center gap-1 no-underline hover:underline">
+              <a
+                href="/investor-dashboard/transactions"
+                className="text-[11px] text-[#a78bfa] flex items-center gap-1 no-underline hover:underline"
+              >
                 View all <ExternalLink size={10} />
               </a>
             </div>
-            {recentTxs.length > 0 ? recentTxs.map((tx, i) => {
-              const iconCls = "bg-green-500/10 text-green-400";
-              return (
-                <div
-                  key={tx.id}
-                  className={`flex items-center gap-3 px-[22px] py-[11px] ${i !== 0 ? "border-t border-white/[0.04]" : ""}`}
-                >
-                  <div className={`w-[34px] h-[34px] rounded-[10px] flex-shrink-0 flex items-center justify-center text-[11px] font-bold ${iconCls}`}>
-                    B
+            {recentTxs.length > 0 ? (
+              recentTxs.map((tx, i) => {
+                const iconCls = "bg-green-500/10 text-green-400";
+                return (
+                  <div
+                    key={tx.id}
+                    className={`flex items-center gap-3 px-[22px] py-[11px] ${i !== 0 ? "border-t border-white/[0.04]" : ""}`}
+                  >
+                    <div
+                      className={`w-[34px] h-[34px] rounded-[10px] flex-shrink-0 flex items-center justify-center text-[11px] font-bold ${iconCls}`}
+                    >
+                      B
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-semibold text-white">
+                        {tx.type} {tx.tokenSymbol}
+                      </div>
+                      <div className="text-[11px] text-gray-500 font-mono">
+                        {truncateHash(tx.hash)}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[13px] font-semibold text-white">
+                        {tx.valueETH.toFixed(4)} ETH
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        {formatDate(tx.date)}
+                      </div>
+                    </div>
+                    <Badge
+                      color={
+                        tx.status === "Confirmed"
+                          ? "green"
+                          : tx.status === "Pending"
+                            ? "amber"
+                            : "red"
+                      }
+                    >
+                      {tx.status}
+                    </Badge>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold text-white">{tx.type} {tx.tokenSymbol}</div>
-                    <div className="text-[11px] text-gray-500 font-mono">{truncateHash(tx.hash)}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[13px] font-semibold text-white">{tx.valueETH.toFixed(4)} ETH</div>
-                    <div className="text-[11px] text-gray-500">{formatDate(tx.date)}</div>
-                  </div>
-                  <Badge color={tx.status === "Confirmed" ? "green" : tx.status === "Pending" ? "amber" : "red"}>
-                    {tx.status}
-                  </Badge>
-                </div>
-              );
-            }) : (
+                );
+              })
+            ) : (
               <div className="px-[22px] py-8 text-center text-muted-foreground text-sm">
                 No transactions yet
               </div>
@@ -393,7 +563,98 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* ── My Invested Campaigns ── */}
+        <div>
+          <div className="flex items-center justify-between mb-3.5">
+            <div className="text-[11px] text-gray-500 uppercase tracking-[0.05em]">
+              My Invested Campaigns
+            </div>
+            <a
+              href="/investor-dashboard/campaigns"
+              className="text-[11px] text-[#a78bfa] flex items-center gap-1 no-underline hover:underline"
+            >
+              Browse all <ExternalLink size={10} />
+            </a>
+          </div>
 
+          {investedCampaigns.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {investedCampaigns.map((camp) => (
+                <div
+                  key={camp.id}
+                  className="bg-card border border-white/5 rounded-2xl px-5 py-[18px] cursor-pointer hover:border-[#6f42c1]/40 hover:-translate-y-0.5 transition-all duration-200"
+                >
+                  <div className="flex items-center gap-2.5 mb-3.5">
+                    <div className="w-[38px] h-[38px] rounded-[10px] flex-shrink-0 bg-gradient-to-br from-[#6f42c1] to-[#3d1f8a] flex items-center justify-center text-xs font-black text-white">
+                      {(camp.industry || "?")[0].toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-bold text-white truncate">
+                        {camp.name}
+                      </div>
+                      <Badge color="purple">{camp.industry}</Badge>
+                    </div>
+                    <Badge color={camp.roi >= 0 ? "green" : "red"}>
+                      {formatPercent(camp.roi)}
+                    </Badge>
+                  </div>
+                  {camp.fundedPercent > 0 && (
+                    <div className="mb-2.5">
+                      <div className="flex justify-between text-[11px] text-gray-500 mb-1.5">
+                        <span>Funded</span>
+                        <span className="text-white font-semibold">
+                          {camp.fundedPercent.toFixed(0)}%
+                        </span>
+                      </div>
+                      <Progress value={camp.fundedPercent} />
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">My Investment</span>
+                    <span className="text-white font-semibold">
+                      {formatCurrency(camp.investedAmount)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-card border border-white/5 rounded-2xl px-8 py-12 text-center">
+              <Briefcase size={40} className="text-gray-600 mx-auto mb-3" />
+              <p className="text-white font-semibold mb-1">
+                No investments yet
+              </p>
+              <p className="text-gray-500 text-sm mb-4">
+                Browse campaigns and make your first investment
+              </p>
+              <a
+                href="/investor-dashboard/campaigns"
+                className="inline-block bg-[#6f42c1] hover:bg-[#5a3599] text-white text-sm font-semibold px-5 py-2 rounded-xl transition-all"
+              >
+                Browse Campaigns
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* ── Recommended Campaigns ── */}
+        <div className="mt-8">
+          <div className="flex items-center justify-between mb-3.5">
+            <div className="text-[11px] text-gray-500 uppercase tracking-[0.05em]">
+              Recommended Campaigns
+            </div>
+            <a
+              href="/investor-dashboard/campaigns"
+              className="text-[11px] text-[#a78bfa] flex items-center gap-1 no-underline hover:underline"
+            >
+              Browse all <ExternalLink size={10} />
+            </a>
+          </div>
+          <RecommnendationCampaigns
+            categoryDistribution={categoryDistribution}
+            userBackedCampaignIds={userBackedCampaignIds}
+          />
+        </div>
       </div>
     </div>
   );

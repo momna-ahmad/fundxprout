@@ -78,8 +78,8 @@ export default function CampaignList({ filterCategory = "all" }) {
   };
 
   return (
-    <section className="bg-[#181A2A] py-12 px-4">
-      <div className="max-w-7xl mx-auto">
+    <section className="bg-[#181A2A] py-12 px-4 sm:px-6 lg:px-8">
+      <div className="w-full">
 
         {/* shafqaat — Header row: title + search bar */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">

@@ -1,46 +1,118 @@
-//frontend/app/api/ipfs-upload/route.ts
-//purpose of this file is to handle the POST request to upload a file to IPFS using Pinata's API. It receives a file and an optional name from the request, uploads the file to Pinata, and returns the CID and URL of the uploaded file. If any errors occur during the process, it returns an appropriate error message.
 import { NextRequest, NextResponse } from "next/server";
 
+import {
+  validateServerFileSignature,
+  isServerDocumentKind,
+} from "@/utils/serverDocumentValidation";
+
+export const runtime = "nodejs";
+
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+
 export async function POST(request: NextRequest) {
-    try {
-        const formData = await request.formData();
-        const file = formData.get("file") as File | null;
-        const fileName = (formData.get("name") as string) ?? "document";
+  try {
+    const formData = await request.formData();
 
-        if (!file) {
-            return NextResponse.json({ error: "No file provided" }, { status: 400 });
-        }
+    const file = formData.get("file");
+    const fileName = formData.get("name");
+    const docKey = formData.get("docKey");
 
-        const bytes = await file.arrayBuffer();
-        const blob = new Blob([bytes], { type: file.type });
-
-        const pinataForm = new FormData();
-        pinataForm.append("file", blob, fileName);
-        pinataForm.append(
-            "pinataMetadata",
-            JSON.stringify({ name: `fundxprout-${fileName}` })
-        );
-
-        const res = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${process.env.PINATA_JWT}`,
-            },
-            body: pinataForm,
-        });
-
-        if (!res.ok) {
-            const err = await res.text();
-            throw new Error(`Pinata error: ${err}`);
-        }
-
-        const data = await res.json();
-        return NextResponse.json({
-            cid: data.IpfsHash,
-            url: `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`,
-        });
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!(file instanceof File)) {
+      return NextResponse.json(
+        { error: "No valid file provided." },
+        { status: 400 },
+      );
     }
+
+    if (file.size === 0) {
+      return NextResponse.json(
+        { error: "The uploaded file is empty." },
+        { status: 400 },
+      );
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: "File exceeds the 20 MB limit." },
+        { status: 413 },
+      );
+    }
+
+    if (typeof docKey !== "string" || !isServerDocumentKind(docKey)) {
+      return NextResponse.json(
+        { error: "Invalid document type." },
+        { status: 400 },
+      );
+    }
+
+    const signatureValidation = await validateServerFileSignature(file);
+
+    if (!signatureValidation.valid) {
+      return NextResponse.json(
+        { error: signatureValidation.error },
+        { status: 400 },
+      );
+    }
+
+    const safeFileName =
+      typeof fileName === "string" && fileName.trim()
+        ? fileName
+        : `${docKey}-${file.name}`;
+
+    const pinataJwt = process.env.PINATA_JWT;
+
+    if (!pinataJwt) {
+      throw new Error("Pinata credentials are not configured.");
+    }
+
+    const pinataForm = new FormData();
+
+    pinataForm.append("file", file, safeFileName);
+
+    pinataForm.append(
+      "pinataMetadata",
+      JSON.stringify({
+        name: `fundxprout-${safeFileName}`,
+      }),
+    );
+
+    const response = await fetch(
+      "https://api.pinata.cloud/pinning/pinFileToIPFS",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${pinataJwt}`,
+        },
+        body: pinataForm,
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+
+      console.error("Pinata upload failed:", {
+        status: response.status,
+        response: errorText,
+      });
+
+      return NextResponse.json(
+        { error: "IPFS provider rejected the upload." },
+        { status: 502 },
+      );
+    }
+
+    const data = await response.json();
+
+    return NextResponse.json({
+      cid: data.IpfsHash,
+      url: `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`,
+    });
+  } catch (error) {
+    console.error("IPFS upload error:", error);
+
+    return NextResponse.json(
+      { error: "An internal error occurred during IPFS upload." },
+      { status: 500 },
+    );
+  }
 }

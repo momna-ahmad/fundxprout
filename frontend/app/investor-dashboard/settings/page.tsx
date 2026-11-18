@@ -239,6 +239,9 @@ export default function SettingsPage() {
   const changePassword = async () => {
     setPwError('');
     if (pwFields.next.length < 8) { setPwError('New password must be at least 8 characters'); return; }
+    if (!/[A-Z]/.test(pwFields.next)) { setPwError('New password must contain at least one uppercase letter (A-Z)'); return; }
+    if (!/[0-9]/.test(pwFields.next)) { setPwError('New password must contain at least one number (0-9)'); return; }
+    if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(pwFields.next)) { setPwError('New password must contain at least one special character'); return; }
     if (pwFields.next !== pwFields.confirm) { setPwError('Passwords do not match'); return; }
     setPwSaving(true);
     const supabase = createClient();
@@ -557,7 +560,7 @@ export default function SettingsPage() {
                         type="password"
                         value={pwFields[field]}
                         onChange={(e) => setPwFields((p) => ({ ...p, [field]: e.target.value }))}
-                        placeholder={field === 'next' ? 'Min. 8 characters' : ''}
+                        placeholder={field === 'next' ? 'Min. 8 chars (Uppercase, Number, Special)' : ''}
                         className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-[#6f42c1]"
                       />
                     </div>

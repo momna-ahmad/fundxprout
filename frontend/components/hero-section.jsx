@@ -5,8 +5,8 @@ export default function HeroSection() {
 		<div className="bg-[#181A2A] w-full">
 
 			{/* Hero card only — categories and featured campaign are in their own components */}
-			<section className="flex justify-center items-center px-12 py2">
-				<div className="relative w-full max-w-8xl p-16  rounded-3xl overflow-hidden" style={{ minHeight: "240px" }}>
+			<section className="flex justify-center items-center px-4 sm:px-6 lg:px-8 py-4">
+				<div className="relative w-full p-8 md:p-14 rounded-3xl overflow-hidden" style={{ minHeight: "240px" }}>
 					<Image
 						src="/bg-hero-section.png"
 						alt="Colorful background"

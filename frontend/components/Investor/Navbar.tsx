@@ -1,22 +1,40 @@
 // components/Investor/Navbar.tsx
-'use client';
-import { usePathname } from 'next/navigation';
-import { Bell, ChevronRight, Copy, Sun, Moon, Home } from 'lucide-react';
-import { useState } from 'react';
-import Link from 'next/link';
-import { useTheme } from '@/components/theme-provider';
-import { useWallet } from '@/context/WalletContext';
-import { useNotifications } from '@/hooks/useNotifications';
-import NotificationDrawer from '@/components/NotificationDrawer';
+"use client";
+import { usePathname } from "next/navigation";
+import { Bell, ChevronRight, Copy, Sun, Moon, Home } from "lucide-react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useTheme } from "@/components/theme-provider";
+import { useWallet } from "@/context/WalletContext";
+import { useNotifications } from "@/hooks/useNotifications";
+import NotificationDrawer from "@/components/NotificationDrawer";
 
 // ── Page title map ───────────────────────────────────────────────────
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
-  '/investor-dashboard/overview':      { title: 'Overview',      subtitle: 'Your investment snapshot'          },
-  '/investor-dashboard/portfolio':     { title: 'Portfolio',     subtitle: 'Token holdings & performance'      },
-  '/investor-dashboard/campaigns':     { title: 'Campaigns',     subtitle: 'Investment campaigns'              },
-  '/investor-dashboard/tokens':        { title: 'My Tokens',     subtitle: 'Equity token management'           },
-  '/investor-dashboard/transactions':  { title: 'Transactions',  subtitle: 'Blockchain transaction history'    },
-  '/investor-dashboard/settings':      { title: 'Settings',      subtitle: 'Account & preferences'            },
+  "/investor-dashboard/overview": {
+    title: "Overview",
+    subtitle: "Your investment snapshot",
+  },
+  "/investor-dashboard/portfolio": {
+    title: "Portfolio",
+    subtitle: "Token holdings & performance",
+  },
+  "/investor-dashboard/campaigns": {
+    title: "Campaigns",
+    subtitle: "Investment campaigns",
+  },
+  "/investor-dashboard/tokens": {
+    title: "My Tokens",
+    subtitle: "Equity token management",
+  },
+  "/investor-dashboard/transactions": {
+    title: "Transactions",
+    subtitle: "Blockchain transaction history",
+  },
+  "/investor-dashboard/settings": {
+    title: "Settings",
+    subtitle: "Account & preferences",
+  },
 };
 
 function truncateAddress(addr: string) {
@@ -25,7 +43,7 @@ function truncateAddress(addr: string) {
 
 export default function Navbar() {
   const pathname = usePathname();
-  const page     = pageTitles[pathname] ?? { title: 'Dashboard', subtitle: '' };
+  const page = pageTitles[pathname] ?? { title: "Dashboard", subtitle: "" };
 
   // ── Theme (from the provider that IS in the component tree) ──
   const { theme, toggleTheme } = useTheme();
@@ -35,9 +53,15 @@ export default function Navbar() {
 
   // ── Real-Time Notifications ──
   const [notifOpen, setNotifOpen] = useState(false);
-  const { notifications, unreadCount, markAllRead, markOneRead } = useNotifications();
+  const { notifications, unreadCount, markAllRead, markOneRead } =
+    useNotifications();
 
   const [copied, setCopied] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const copyAddress = () => {
     if (!walletAddress) return;
@@ -48,13 +72,16 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-40 flex items-center gap-3 px-7 h-16 border-b border-border bg-background/90 backdrop-blur-xl">
-
       {/* ── Breadcrumb + page title ── */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 mb-0.5">
-          <span className="text-[11px] tracking-wide text-muted-foreground">FundXProut</span>
+          <span className="text-[11px] tracking-wide text-muted-foreground">
+            FundXProut
+          </span>
           <ChevronRight size={11} className="text-muted-foreground" />
-          <span className="text-[11px] font-semibold text-ring">{page.title}</span>
+          <span className="text-[11px] font-semibold text-ring">
+            {page.title}
+          </span>
         </div>
         <h1 className="text-[17px] font-bold leading-none tracking-tight text-foreground">
           {page.title}
@@ -63,7 +90,6 @@ export default function Navbar() {
 
       {/* ── Right controls ── */}
       <div className="flex items-center gap-2">
-
         {/* Home link */}
         <Link
           href="/homepage"
@@ -77,18 +103,32 @@ export default function Navbar() {
         <button
           onClick={toggleTheme}
           aria-label="Toggle theme"
-          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={
+            theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+          }
           className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-muted border border-border text-muted-foreground hover:bg-card hover:text-foreground hover:border-ring transition-all duration-200 cursor-pointer"
         >
           <span
             className="absolute transition-all duration-300"
-            style={{ opacity: theme === 'dark' ? 1 : 0, transform: theme === 'dark' ? 'scale(1) rotate(0deg)' : 'scale(0) rotate(90deg)' }}
+            style={{
+              opacity: theme === "dark" ? 1 : 0,
+              transform:
+                theme === "dark"
+                  ? "scale(1) rotate(0deg)"
+                  : "scale(0) rotate(90deg)",
+            }}
           >
             <Sun size={15} />
           </span>
           <span
             className="absolute transition-all duration-300"
-            style={{ opacity: theme === 'light' ? 1 : 0, transform: theme === 'light' ? 'scale(1) rotate(0deg)' : 'scale(0) rotate(-90deg)' }}
+            style={{
+              opacity: theme === "light" ? 1 : 0,
+              transform:
+                theme === "light"
+                  ? "scale(1) rotate(0deg)"
+                  : "scale(0) rotate(-90deg)",
+            }}
           >
             <Moon size={15} />
           </span>
@@ -105,7 +145,7 @@ export default function Navbar() {
             <Bell size={15} />
             {unreadCount > 0 && (
               <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-violet-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
-                {unreadCount > 9 ? '9+' : unreadCount}
+                {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
           </button>
@@ -121,34 +161,55 @@ export default function Navbar() {
           )}
         </div>
 
-
         {/* ── Wallet pill / Connect button ── */}
-        {walletAddress ? (
+        {!mounted ? (
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border"
+            style={{
+              background: "color-mix(in srgb, var(--chart-5) 12%, transparent)",
+              borderColor:
+                "color-mix(in srgb, var(--chart-5) 35%, transparent)",
+              color: "var(--chart-5)",
+            }}
+          >
+            Connect Wallet
+          </div>
+        ) : walletAddress ? (
           <button
             onClick={copyAddress}
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono font-medium border transition-all duration-200 cursor-pointer"
             style={{
-              background:  'color-mix(in srgb, var(--ring) 10%, transparent)',
-              borderColor: 'color-mix(in srgb, var(--ring) 30%, transparent)',
-              color:       'var(--ring)',
+              background: "color-mix(in srgb, var(--ring) 10%, transparent)",
+              borderColor: "color-mix(in srgb, var(--ring) 30%, transparent)",
+              color: "var(--ring)",
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background   = 'color-mix(in srgb, var(--ring) 18%, transparent)';
-              (e.currentTarget as HTMLButtonElement).style.borderColor  = 'color-mix(in srgb, var(--ring) 50%, transparent)';
+              (e.currentTarget as HTMLButtonElement).style.background =
+                "color-mix(in srgb, var(--ring) 18%, transparent)";
+              (e.currentTarget as HTMLButtonElement).style.borderColor =
+                "color-mix(in srgb, var(--ring) 50%, transparent)";
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background   = 'color-mix(in srgb, var(--ring) 10%, transparent)';
-              (e.currentTarget as HTMLButtonElement).style.borderColor  = 'color-mix(in srgb, var(--ring) 30%, transparent)';
+              (e.currentTarget as HTMLButtonElement).style.background =
+                "color-mix(in srgb, var(--ring) 10%, transparent)";
+              (e.currentTarget as HTMLButtonElement).style.borderColor =
+                "color-mix(in srgb, var(--ring) 30%, transparent)";
             }}
           >
             <span
               className="w-4 h-4 rounded-full flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, var(--ring), var(--chart-5))' }}
+              style={{
+                background:
+                  "linear-gradient(135deg, var(--ring), var(--chart-5))",
+              }}
             />
             {truncateAddress(walletAddress)}
             <Copy size={11} />
             {copied && (
-              <span className="font-sans font-semibold text-[10px]" style={{ color: 'var(--chart-3)' }}>
+              <span
+                className="font-sans font-semibold text-[10px]"
+                style={{ color: "var(--chart-3)" }}
+              >
                 Copied!
               </span>
             )}
@@ -159,15 +220,15 @@ export default function Navbar() {
             disabled={isConnecting}
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-200 cursor-pointer disabled:opacity-60"
             style={{
-              background:  'color-mix(in srgb, var(--chart-5) 12%, transparent)',
-              borderColor: 'color-mix(in srgb, var(--chart-5) 35%, transparent)',
-              color:       'var(--chart-5)',
+              background: "color-mix(in srgb, var(--chart-5) 12%, transparent)",
+              borderColor:
+                "color-mix(in srgb, var(--chart-5) 35%, transparent)",
+              color: "var(--chart-5)",
             }}
           >
-            {isConnecting ? 'Connecting…' : 'Connect Wallet'}
+            {isConnecting ? "Connecting…" : "Connect Wallet"}
           </button>
         )}
-
       </div>
     </header>
   );

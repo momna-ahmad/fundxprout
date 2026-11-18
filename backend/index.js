@@ -75,6 +75,8 @@ setInterval(async () => {
 }, 5 * 60 * 1000); // every 5 minutes
 
 
+const activeScoringJobs = new Set();
+
 function runRiskAssessmentForCampaign(campaignId) {
   return new Promise((resolve, reject) => {
     const scriptPath = path.resolve(__dirname, '..', 'ai', 'score_campaigns.py');
@@ -87,7 +89,7 @@ function runRiskAssessmentForCampaign(campaignId) {
 
     const child = spawn(
       pythonBin,
-      [scriptPath, '--campaign-id', String(campaignId)],
+      [scriptPath, '--campaign-id', String(campaignId), '--all'],
       {
         cwd: path.dirname(scriptPath),
         env: process.env,
@@ -116,6 +118,61 @@ function runRiskAssessmentForCampaign(campaignId) {
       resolve(stdout.trim());
     });
   });
+}
+
+function initCampaignRiskListener() {
+  const client = supabaseAdmin || supabase;
+  if (!client) {
+    console.warn('[risk listener] Supabase client not available, skipping realtime listener');
+    return;
+  }
+
+  client
+    .channel('campaign_risk_assessment_listener')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'campaigns' }, async (payload) => {
+      const campaign = payload.new;
+      if (campaign?.id && (campaign.risk_score === null || campaign.risk_score === undefined)) {
+        if (activeScoringJobs.has(String(campaign.id))) return;
+        activeScoringJobs.add(String(campaign.id));
+        console.log(`[risk listener] New campaign #${campaign.id} (${campaign.title || 'Untitled'}). Running AI risk assessment...`);
+        try {
+          await runRiskAssessmentForCampaign(campaign.id);
+          console.log(`[risk listener] AI risk assessment completed for campaign #${campaign.id}`);
+        } catch (err) {
+          console.error(`[risk listener] Failed to assess campaign #${campaign.id}:`, err.message);
+        } finally {
+          activeScoringJobs.delete(String(campaign.id));
+        }
+      }
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'campaigns' }, async (payload) => {
+      const campaign = payload.new;
+      const old = payload.old;
+      if (campaign?.id && (campaign.risk_score === null || campaign.risk_score === undefined)) {
+        const statusChanged = old && old.status !== campaign.status;
+        const docsChanged = old && (
+          old.pitch_deck_cid !== campaign.pitch_deck_cid ||
+          old.business_plan_cid !== campaign.business_plan_cid ||
+          old.financials_cid !== campaign.financials_cid
+        );
+        if (statusChanged || docsChanged) {
+          if (activeScoringJobs.has(String(campaign.id))) return;
+          activeScoringJobs.add(String(campaign.id));
+          console.log(`[risk listener] Campaign #${campaign.id} updated. Running AI risk assessment...`);
+          try {
+            await runRiskAssessmentForCampaign(campaign.id);
+            console.log(`[risk listener] AI risk assessment completed for campaign #${campaign.id}`);
+          } catch (err) {
+            console.error(`[risk listener] Failed to assess campaign #${campaign.id}:`, err.message);
+          } finally {
+            activeScoringJobs.delete(String(campaign.id));
+          }
+        }
+      }
+    })
+    .subscribe();
+
+  console.log('[risk listener] Realtime listener active on campaigns table.');
 }
 
 async function scorePendingCampaignsOnStartup() {
@@ -160,12 +217,18 @@ async function scorePendingCampaignsOnStartup() {
 }
 
 app.post('/api/campaigns/:id/analyze', async (req, res) => {
+  const campaignId = String(req.params.id);
+  if (activeScoringJobs.has(campaignId)) {
+    return res.json({ success: true, message: 'Analysis already in progress' });
+  }
+
+  activeScoringJobs.add(campaignId);
   try {
-    const campaignId = req.params.id;
     console.log(`[risk API] Triggering manual AI risk analysis for campaign ${campaignId}...`);
     await runRiskAssessmentForCampaign(campaignId);
 
-    const { data: updatedCampaign, error } = await supabase
+    const client = supabaseAdmin || supabase;
+    const { data: updatedCampaign, error } = await client
       .from('campaigns')
       .select('*')
       .eq('id', campaignId)
@@ -176,6 +239,8 @@ app.post('/api/campaigns/:id/analyze', async (req, res) => {
   } catch (err) {
     console.error('[risk API] Error analyzing campaign:', err);
     return res.status(500).json({ error: err.message || 'Failed to run AI risk assessment' });
+  } finally {
+    activeScoringJobs.delete(campaignId);
   }
 });
 
@@ -197,6 +262,9 @@ initMarketplaceSocket(server);
 // Fires whenever a token_trade is settled or a new bid is placed.
 const { initRealtimeListeners } = require('./services/fairPriceService');
 initRealtimeListeners();
+
+// Initialize realtime listener for new/updated campaigns to auto-run AI risk assessment
+initCampaignRiskListener();
 
 // ── Auction Deadline Fallback Cron ──────────────────────────────────────────
 // Calls fn_process_auction_deadlines() every 60 seconds as a safety net in case

@@ -1,7 +1,5 @@
 "use client";
 import { useEffect, useState } from "react";
-import { rankCampaignsForUser } from "@/utils/recommendations"; // 1. Import utility
-
 import { getRecommendedCampaigns } from "@/utils/supabase/getCampaigns"; 
 import { Campaign } from "@/types";
 
@@ -21,24 +19,16 @@ export default function RecommendationCampaigns({
     async function loadAndRank() {
       setLoading(true);
 
-      // 1. Fetch raw active campaigns from Supabase
-      const rawCampaigns: Campaign[] = await getRecommendedCampaigns();
+      const ranked: (Campaign & { matchScore: number })[] =
+        await getRecommendedCampaigns(4, categoryDistribution, userBackedCampaignIds);
 
-      if (!rawCampaigns || rawCampaigns.length === 0) {
+      if (!ranked || ranked.length === 0) {
         setRecommendations([]);
         setLoading(false);
         return;
       }
 
-      // 2. Convert backed IDs array into a Set for fast lookup
-      const backedSet = new Set(userBackedCampaignIds);
-
-      // 3. Execute your ranking function
-      const ranked = rankCampaignsForUser(rawCampaigns, categoryDistribution, backedSet);
-      console.log(ranked)
-
-      // 4. Take the top 3 recommendations
-      setRecommendations(ranked.slice(0, 3));
+      setRecommendations(ranked);
       setLoading(false);
     }
 
@@ -69,16 +59,9 @@ export default function RecommendationCampaigns({
     );
   }
 
-  // ── Fallback Message (No Active / Matching Campaigns) ──
+  // Hide the recommendation area when no personalized campaign meets the threshold.
   if (recommendations.length === 0) {
-    return (
-      <div className="w-full rounded-2xl border border-dashed border-white/10 bg-card/40 p-8 text-center">
-        <h3 className="text-sm font-semibold text-white">No recommended campaigns available</h3>
-        <p className="mt-1 text-xs text-gray-500 max-w-sm mx-auto">
-          You've backed all matching campaigns, or no new business opportunities match your portfolio preferences right now.
-        </p>
-      </div>
-    );
+    return null;
   }
 
   return (

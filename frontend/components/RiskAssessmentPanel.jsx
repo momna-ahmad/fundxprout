@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { AlertTriangle, CheckCircle2, ShieldAlert, Info, Activity, Clock, FileCheck2, ChevronDown, ChevronUp, Loader2, Sparkles, RefreshCw } from "lucide-react";
+import { createClient } from "@/utils/supabase/client";
 
 // Helper for the animated SVG Gauge
 const CircularGauge = ({ score }) => {
@@ -53,12 +54,93 @@ export default function RiskAssessmentPanel({ campaign: initialCampaign }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState("");
 
+  // Sync state if parent props change
+  useEffect(() => {
+    if (initialCampaign) {
+      setCampaign(initialCampaign);
+    }
+  }, [initialCampaign]);
+
+  // Auto-trigger assessment and poll/listen when risk_score is missing
+  useEffect(() => {
+    if (!campaign?.id || (campaign.risk_score !== null && campaign.risk_score !== undefined)) {
+      return;
+    }
+
+    let isMounted = true;
+    let pollCount = 0;
+    const maxPolls = 25; // 25 * 3000ms = 75 seconds
+    setAnalyzing(true);
+    setAnalyzeError("");
+
+    // 1. Kick off analysis on backend if not already running
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    fetch(`${apiBase}/api/campaigns/${campaign.id}/analyze`, { method: "POST" })
+      .catch((err) => console.warn("[RiskPanel] Auto-analyze trigger:", err.message));
+
+    // 2. Realtime listener via Supabase
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`campaign-risk-panel-${campaign.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "campaigns", filter: `id=eq.${campaign.id}` },
+        (payload) => {
+          if (payload.new && payload.new.risk_score !== null && payload.new.risk_score !== undefined) {
+            if (isMounted) {
+              setCampaign(payload.new);
+              setAnalyzing(false);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // 3. Polling interval fallback in case Realtime WS is slow or blocked
+    const interval = setInterval(async () => {
+      pollCount++;
+      try {
+        const { data } = await supabase
+          .from("campaigns")
+          .select("*")
+          .eq("id", campaign.id)
+          .single();
+
+        if (data && data.risk_score !== null && data.risk_score !== undefined) {
+          if (isMounted) {
+            setCampaign(data);
+            setAnalyzing(false);
+            clearInterval(interval);
+          }
+          return;
+        }
+
+        if (pollCount >= maxPolls) {
+          if (isMounted) {
+            setAnalyzing(false);
+            setAnalyzeError("Analysis is taking longer than usual. You can retry below.");
+            clearInterval(interval);
+          }
+        }
+      } catch (err) {
+        console.error("[RiskPanel] Poll error:", err);
+      }
+    }, 3000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [campaign?.id, campaign?.risk_score]);
+
   const handleAnalyze = async () => {
     if (!campaign?.id) return;
     setAnalyzing(true);
     setAnalyzeError("");
     try {
-      const res = await fetch(`http://localhost:5000/api/campaigns/${campaign.id}/analyze`, {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const res = await fetch(`${apiBase}/api/campaigns/${campaign.id}/analyze`, {
         method: "POST",
       });
       const data = await res.json();
@@ -76,24 +158,61 @@ export default function RiskAssessmentPanel({ campaign: initialCampaign }) {
 
   if (!campaign || campaign.risk_score === null || campaign.risk_score === undefined) {
     return (
-      <div className="bg-[#1a2030] rounded-2xl border border-white/5 p-6">
-        <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
-          <Activity className="w-5 h-5 text-[#a78bfa]" />
-          AI Risk Assessment
+      <div className="bg-[#1a2030] rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden">
+        {/* Glow effect */}
+        <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#6f42c1]/20 rounded-full blur-3xl pointer-events-none" />
+
+        <h2 className="text-lg font-bold text-white mb-2 flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <Activity className="w-5 h-5 text-[#a78bfa]" />
+            AI Risk Assessment
+          </span>
+          {analyzing && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[11px] font-medium animate-pulse">
+              <Sparkles className="w-3.5 h-3.5" /> Calculating…
+            </span>
+          )}
         </h2>
-        <div className="flex flex-col items-center justify-center py-10 bg-[#121622] rounded-xl border border-white/5 p-6">
+
+        <div className="flex flex-col items-center justify-center py-10 bg-[#121622] rounded-xl border border-white/5 p-6 text-center">
           {analyzing ? (
-            <>
-              <Loader2 className="w-10 h-10 text-[#a78bfa] mb-3 animate-spin" />
-              <p className="text-white font-bold text-sm">Evaluating Pitch &amp; Financials with AI…</p>
-              <p className="text-xs text-gray-400 mt-1">Calling Gemini LLM &amp; Random Forest model</p>
-            </>
+            <div className="flex flex-col items-center max-w-sm space-y-4">
+              <div className="relative flex items-center justify-center">
+                <div className="w-16 h-16 rounded-full border-4 border-[#6f42c1]/20 border-t-[#a78bfa] animate-spin" />
+                <Sparkles className="w-6 h-6 text-[#a78bfa] absolute animate-pulse" />
+              </div>
+              <div>
+                <p className="text-white font-bold text-base">Evaluating Campaign with AI</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Our dual-tier AI engine is analyzing the pitch deck, business model, and risk factors.
+                </p>
+              </div>
+
+              {/* Step progression pill indicators */}
+              <div className="w-full space-y-2 pt-2 text-left text-xs text-gray-400">
+                <div className="flex items-center gap-2 text-emerald-400">
+                  <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>Extracting pitch clarity &amp; financial targets</span>
+                </div>
+                <div className="flex items-center gap-2 text-purple-300 animate-pulse">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+                  <span>Scoring credibility &amp; market strategy (Gemini LLM)</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-500">
+                  <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>Computing Random Forest multi-factor risk score</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-500 pt-1">
+                This usually takes 5–15 seconds. This page will update automatically.
+              </p>
+            </div>
           ) : (
             <>
               <Clock className="w-10 h-10 text-gray-400 mb-3 animate-pulse" />
-              <p className="text-gray-300 font-medium">Analysis Pending</p>
-              <p className="text-xs text-gray-500 mt-2 text-center max-w-xs mb-4">
-                Our AI model evaluates this campaign's pitch clarity, financials, and risk profile.
+              <p className="text-gray-200 font-bold text-sm">Risk Assessment Pending</p>
+              <p className="text-xs text-gray-400 mt-1.5 text-center max-w-xs mb-4">
+                The AI risk model evaluates this campaign's pitch clarity, financial credibility, and risk profile.
               </p>
               <button
                 onClick={handleAnalyze}

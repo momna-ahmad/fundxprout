@@ -1,31 +1,60 @@
 // components/Investor/Sidebar.tsx
-'use client';
-import Link from 'next/link';
-import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+"use client";
+import Link from "next/link";
+import Image from "next/image";
+import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Wallet, Briefcase, Coins,
-  ArrowLeftRight, Settings, LogOut, Sprout, UserCircle, Store,
-  Gavel, ClipboardList,
-} from 'lucide-react';
-import { useWallet } from '@/context/WalletContext';
-import { createClient } from '@/utils/supabase/client';
-import { useRouter } from 'next/navigation';
+  LayoutDashboard,
+  Wallet,
+  Briefcase,
+  Coins,
+  ArrowLeftRight,
+  Settings,
+  LogOut,
+  Sprout,
+  UserCircle,
+  Store,
+  Gavel,
+  ClipboardList,
+} from "lucide-react";
+import { useWallet } from "@/context/WalletContext";
+import { createClient } from "@/utils/supabase/client";
+import { useRouter } from "next/navigation";
 
-import UserAvatar from '@/components/UserAvatar';
-import { getMyProfile } from '@/utils/supabase/getProfile';
-import { useEffect, useState } from 'react';
+import UserAvatar from "@/components/UserAvatar";
+import { getMyProfile } from "@/utils/supabase/getProfile";
+import { useEffect, useState } from "react";
 
 const navItems = [
-  { href: '/investor-dashboard/overview',      label: 'Overview',      icon: LayoutDashboard },
-  { href: '/investor-dashboard/portfolio',     label: 'Portfolio',     icon: Wallet          },
-  { href: '/investor-dashboard/campaigns',     label: 'Investments',   icon: Briefcase       },
-  { href: '/investor-dashboard/tokens',        label: 'My Tokens',     icon: Coins           },
-  { href: '/investor-dashboard/marketplace',   label: 'Marketplace',   icon: Store           },
-  { href: '/investor-dashboard/my-bids',       label: 'My Bids',       icon: Gavel           },
-  { href: '/investor-dashboard/my-listings',   label: 'My Listings',   icon: ClipboardList   },
-  { href: '/investor-dashboard/transactions',  label: 'Transactions',  icon: ArrowLeftRight  },
-  { href: '/investor-dashboard/settings',      label: 'Settings',      icon: Settings        },
+  {
+    href: "/investor-dashboard/overview",
+    label: "Overview",
+    icon: LayoutDashboard,
+  },
+  { href: "/investor-dashboard/portfolio", label: "Portfolio", icon: Wallet },
+  {
+    href: "/investor-dashboard/campaigns",
+    label: "Investments",
+    icon: Briefcase,
+  },
+  { href: "/investor-dashboard/tokens", label: "My Tokens", icon: Coins },
+  {
+    href: "/investor-dashboard/marketplace",
+    label: "Marketplace",
+    icon: Store,
+  },
+  { href: "/investor-dashboard/my-bids", label: "My Bids", icon: Gavel },
+  {
+    href: "/investor-dashboard/my-listings",
+    label: "My Listings",
+    icon: ClipboardList,
+  },
+  {
+    href: "/investor-dashboard/transactions",
+    label: "Transactions",
+    icon: ArrowLeftRight,
+  },
+  { href: "/investor-dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 function truncateAddress(addr: string) {
@@ -34,11 +63,13 @@ function truncateAddress(addr: string) {
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const router   = useRouter();
+  const router = useRouter();
   const { walletAddress, connectWallet, isConnecting } = useWallet();
   const [profile, setProfile] = useState<any>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     getMyProfile().then((p) => {
       if (p) setProfile(p);
     });
@@ -47,12 +78,11 @@ export default function Sidebar() {
   const handleSignOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push('/');
+    router.push("/");
   };
 
   return (
     <aside className="fixed top-0 left-0 bottom-0 z-50 w-[220px] flex flex-col bg-sidebar border-r border-sidebar-border">
-
       {/* ── Logo ── */}
       <div className="px-[18px] pt-5 pb-4 border-b border-sidebar-border">
         <div className="flex items-center gap-2.5">
@@ -83,7 +113,7 @@ export default function Sidebar() {
         </p>
         <div className="flex flex-col gap-0.5">
           {navItems.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href || pathname.startsWith(href + '/');
+            const active = pathname === href || pathname.startsWith(href + "/");
             return (
               <Link
                 key={href}
@@ -91,24 +121,34 @@ export default function Sidebar() {
                 className={`
                   group flex items-center gap-2.5 px-3 py-2.5 rounded-[10px]
                   text-[13px] font-medium transition-all duration-150
-                  ${active
-                    ? 'text-sidebar-primary-foreground'
-                    : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent'
+                  ${
+                    active
+                      ? "text-sidebar-primary-foreground"
+                      : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent"
                   }
                 `}
-                style={active ? {
-                  background: 'color-mix(in srgb, var(--ring) 18%, transparent)',
-                  border:     '1px solid color-mix(in srgb, var(--ring) 28%, transparent)',
-                  color:      'var(--ring)',
-                  fontWeight: 600,
-                } : { border: '1px solid transparent' }}
+                style={
+                  active
+                    ? {
+                        background:
+                          "color-mix(in srgb, var(--ring) 18%, transparent)",
+                        border:
+                          "1px solid color-mix(in srgb, var(--ring) 28%, transparent)",
+                        color: "var(--ring)",
+                        fontWeight: 600,
+                      }
+                    : { border: "1px solid transparent" }
+                }
               >
                 <Icon size={16} className="flex-shrink-0" />
                 <span className="flex-1">{label}</span>
                 {active && (
                   <span
                     className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                    style={{ background: 'var(--ring)', boxShadow: '0 0 7px var(--ring)' }}
+                    style={{
+                      background: "var(--ring)",
+                      boxShadow: "0 0 7px var(--ring)",
+                    }}
                   />
                 )}
               </Link>
@@ -119,7 +159,6 @@ export default function Sidebar() {
 
       {/* ── Wallet / Profile section ── */}
       <div className="px-2.5 pb-4 pt-3 border-t border-sidebar-border flex flex-col gap-2">
-
         {/* Wallet status */}
         {!walletAddress && (
           <button
@@ -127,18 +166,22 @@ export default function Sidebar() {
             disabled={isConnecting}
             className="flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-[10px] text-[12px] font-semibold border transition-all duration-150 cursor-pointer disabled:opacity-60"
             style={{
-              background:  'color-mix(in srgb, var(--chart-5) 10%, transparent)',
-              borderColor: 'color-mix(in srgb, var(--chart-5) 28%, transparent)',
-              color:       'var(--chart-5)',
+              background: "color-mix(in srgb, var(--chart-5) 10%, transparent)",
+              borderColor:
+                "color-mix(in srgb, var(--chart-5) 28%, transparent)",
+              color: "var(--chart-5)",
             }}
           >
             <Wallet size={13} />
-            {isConnecting ? 'Connecting…' : 'Connect Wallet'}
+            {isConnecting ? "Connecting…" : "Connect Wallet"}
           </button>
         )}
 
         {/* Profile card */}
-        <Link href="/profile" className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-sidebar-accent border border-sidebar-border hover:border-sidebar-ring transition">
+        <Link
+          href="/profile"
+          className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-sidebar-accent border border-sidebar-border hover:border-sidebar-ring transition"
+        >
           <UserAvatar
             src={profile?.avatar_url}
             name={profile?.display_name || profile?.full_name}
@@ -146,10 +189,18 @@ export default function Sidebar() {
           />
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-bold leading-tight text-sidebar-foreground truncate">
-              {profile?.display_name || profile?.full_name || (walletAddress ? truncateAddress(walletAddress) : 'My Profile')}
+              {profile?.display_name ||
+                profile?.full_name ||
+                (walletAddress ? truncateAddress(walletAddress) : "My Profile")}
             </div>
             <div className="text-[10px] text-muted-foreground truncate">
-              {profile?.role === 'owner' ? 'Business Owner' : profile?.role === 'admin' ? 'Administrator' : walletAddress ? truncateAddress(walletAddress) : 'Investor'}
+              {profile?.role === "owner"
+                ? "Business Owner"
+                : profile?.role === "admin"
+                  ? "Administrator"
+                  : walletAddress
+                    ? truncateAddress(walletAddress)
+                    : "Investor"}
             </div>
           </div>
         </Link>
@@ -158,12 +209,19 @@ export default function Sidebar() {
         <button
           onClick={handleSignOut}
           className="group flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-[10px] text-[12px] font-medium text-muted-foreground bg-transparent border border-sidebar-border hover:text-destructive hover:border-destructive transition-all duration-150 cursor-pointer"
-          style={{ '--hover-bg': 'color-mix(in srgb, var(--destructive) 8%, transparent)' } as React.CSSProperties}
+          style={
+            {
+              "--hover-bg":
+                "color-mix(in srgb, var(--destructive) 8%, transparent)",
+            } as React.CSSProperties
+          }
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'color-mix(in srgb, var(--destructive) 8%, transparent)';
+            (e.currentTarget as HTMLButtonElement).style.background =
+              "color-mix(in srgb, var(--destructive) 8%, transparent)";
           }}
           onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+            (e.currentTarget as HTMLButtonElement).style.background =
+              "transparent";
           }}
         >
           <LogOut size={13} />
